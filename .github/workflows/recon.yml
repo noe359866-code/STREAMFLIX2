@@ -8,6 +8,7 @@ on:
       - scripts/site-recon.cjs
       - scripts/browser-recon.cjs
       - scripts/player-recon.cjs
+      - scripts/host-recon.cjs
   workflow_dispatch:
 
 permissions:
@@ -24,19 +25,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install a temporary browser
-        run: |
-          {
-            npm install --no-save --package-lock=false playwright@1.56.1 &&
-            npx playwright install chromium
-          } > recon-install.txt 2>&1
-      - name: Inspect public pages in a browser
-        run: xvfb-run -a node scripts/player-recon.cjs > recon-player.txt 2>&1
+      - name: Inspect the Voe host response
+        run: node scripts/host-recon.cjs > recon-host.txt 2>&1
       - name: Return diagnostic text to the working branch
         if: always()
         run: |
-          cat recon-install.txt || true
-          cat recon-player.txt || true
+          cat recon-host.txt || true
           git config user.name "arena-recon[bot]"
           git config user.email "arena-recon[bot]@users.noreply.github.com"
           git add -A
