@@ -96,13 +96,20 @@ async function main() {
       if (embeds[0]) {
         const host = await context.newPage();
         await capture(host, embeds[0].url, 'vpo-voe', movie.finalUrl);
+        try {
+          const response = await context.request.get(embeds[0].url, { headers: { referer: movie.finalUrl }, timeout: 45000 });
+          const text = await response.text();
+          report.redirects.push({ provider: 'vpo-voe-http', inputUrl: embeds[0].url, finalUrl: response.url(), status: response.status(), bytes: text.length });
+          fs.writeFileSync(path.join(root, 'vpo-voe-http.html'), text);
+          console.log('VOE HTTP', response.status(), response.url(), text.length);
+        } catch (error) { report.redirects.push({ provider: 'vpo-voe-http', error: error.message }); }
         await host.close();
       }
     }
     await vpo.close();
 
     const seriesPage = await context.newPage();
-    const series = await capture(seriesPage, 'https://www2.pelisforte.se/serie/the-last-of-us-2023-1746483016', 'pf-series');
+    const series = await capture(seriesPage, 'https://www2.pelisforte.se/serie/el-eternauta-2025-1746286683', 'pf-series');
     const episodeLinks = series.details?.links?.filter((link) => /\/(episodio|episodios|capitulo)\//i.test(link.href)) || [];
     const selected = episodeLinks.find((link) => /(?:1\s*[x×-]\s*0?1|temporada-1[^\d]+episodio-0?1|season-1[^\d]+episode-0?1)/i.test(`${link.href} ${link.text}`)) || episodeLinks[0];
     console.log('EPISODE LINKS', episodeLinks.map((link) => `${link.text} ${link.href}`));
@@ -137,6 +144,22 @@ async function main() {
       }
     }
     await byse.close();
+
+    const nestedUrl = 'https://n1mwq.org/6vd4p/0albi51inneu';
+    const nested = await context.newPage();
+    await capture(nested, nestedUrl, 'pf-byse-nested', byseUrl);
+    await nested.close();
+    for (const asset of [nestedUrl, 'https://n1mwq.org/assets/videoPagesBundle-Bgi0QmPo.js', 'https://n1mwq.org/assets/pow-DEJGtdh2.js']) {
+      try {
+        const response = await context.request.get(asset, { headers: { referer: byseUrl }, timeout: 45000 });
+        const text = await response.text();
+        const name = asset === nestedUrl ? 'pf-byse-nested-http.html' : asset.split('/').pop();
+        fs.writeFileSync(path.join(root, name), text);
+        report.redirects.push({ provider: 'pf-byse-asset', inputUrl: asset, finalUrl: response.url(), status: response.status(), bytes: text.length, file: `recon-player/${name}` });
+        console.log('BYSE HTTP', response.status(), response.url(), text.length);
+      } catch (error) { report.redirects.push({ provider: 'pf-byse-asset', inputUrl: asset, error: error.message }); }
+      save();
+    }
   } finally { await browser.close(); save(); }
 }
 
