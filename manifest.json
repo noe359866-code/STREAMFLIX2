@@ -128,6 +128,26 @@
       ]
     },
     {
+      "id": "danimados",
+      "name": "Danimados",
+      "description": "Solo series animadas: episodio exacto, DooPlayer por admin-ajax y latino/castellano/subtitulado.",
+      "version": "1.0.0",
+      "filename": "providers/danimados.js",
+      "supportedTypes": [
+        "tv"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "es"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4",
+        "mkv",
+        "webm"
+      ]
+    },
+    {
       "id": "doramasflix",
       "name": "Doramasflix",
       "description": "Doramas y películas asiáticas con audio o subtítulos en español.",
@@ -188,6 +208,23 @@
         "mp4",
         "mkv",
         "webm"
+      ]
+    },
+    {
+      "id": "hdfull",
+      "name": "HDFull",
+      "description": "Solo películas: search-route y contentUrl específico de la ficha; TV y clip publicitario excluidos.",
+      "version": "1.0.0",
+      "filename": "providers/hdfull.js",
+      "supportedTypes": [
+        "movie"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "es"
+      ],
+      "supportedFormats": [
+        "mp4"
       ]
     },
     {
@@ -258,6 +295,27 @@
       "description": "Películas y series ToroFilm; episodios exactos. Byse/n1mwq con attestation no resuelto.",
       "version": "1.0.0",
       "filename": "providers/pelisforte.js",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "es"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4",
+        "mkv",
+        "webm"
+      ]
+    },
+    {
+      "id": "pelisgo",
+      "name": "PelisGo",
+      "description": "Películas y TV: episodio exacto y servidores HTML/RSC; descargas y Pixeldrain excluidos.",
+      "version": "1.0.0",
+      "filename": "providers/pelisgo.js",
       "supportedTypes": [
         "movie",
         "tv"

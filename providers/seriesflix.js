@@ -365,6 +365,7 @@ function mediaKind(url, explicit) {
 function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ""))) return false;
   if (/^https?:\/\/(?:[^/@]+\.)?test-videos\.co\.uk(?::\d+)?\//i.test(url)) return false;
+  if (/^https?:\/\/cdn\.zss90\.pl\/vod-video\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\.mpd(?:$|[?#])/i.test(url)) return false;
   return /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i.test(url) || /\/m3u8\/|\/get_video\?|\/videoplayback(?:\?|$)|\/manifest\.m3u8/i.test(url);
@@ -382,9 +383,9 @@ function qualityOf(...values) {
 function languageOf(value, fallback = "es") {
   const text = String(value || "").toLowerCase();
   if (/\b(lat|latino|dub|doblaje|es-mx|es-la)\b/.test(text)) return "es-LAT";
-  if (/\b(cast|castellano|esp|spanish|es-es)\b/.test(text)) return "es-ES";
-  if (/\b(sub|subtitulado|vose|sub espanol)\b/.test(text)) return "es-SUB";
-  if (/\b(eng|english|en)\b/.test(text)) return "en";
+  if (/\b(cast|castellano|esp|spanish|español|espanol|es-es)\b/.test(text)) return "es-ES";
+  if (/\b(sub|subtitulad[oa]|subt[ií]tulos?|vose|sub espanol)\b/.test(text)) return "es-SUB";
+  if (/\b(eng|english|ingl[eé]s|ingles|en)\b/.test(text)) return "en";
   return fallback;
 }
 function makeStream(provider, url, options = {}) {

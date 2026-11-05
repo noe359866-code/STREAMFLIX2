@@ -30,10 +30,11 @@ test('decodifica Base64URL y el payload de enlaces tipo JWT', () => {
   assert.equal(base64.decodeTokenLink('eyJhbGciOiJub25lIn0.eyJsaW5rIjoiaHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbyJ9.signature'), 'https://sw.example/e/demo');
 });
 
-test('extrae HLS y descarta páginas embed, DASH y javascript:', () => {
+test('extrae HLS y descarta páginas embed, DASH, clip genérico y javascript:', () => {
   const found = extractors.directMediaInHtml(fixture('player-hls.html'), 'https://player.example/e/demo');
   assert.deepEqual(found, ['https://cdn.example/video/playlist.m3u8']);
   assert.equal(streams.isPlayableUrl('https://sw.example/e/demo'), false);
+  assert.equal(streams.isPlayableUrl('https://cdn.zss90.pl/vod-video.mp4'), false);
   assert.equal(streams.isPlayableUrl('https://cdn.example/video/manifest.mpd'), false);
   assert.equal(streams.isPlayableUrl('javascript:alert(1)'), false);
   assert.equal(streams.mediaKind('https://cdn.example/video.m3u8'), 'hls');

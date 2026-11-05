@@ -13,6 +13,8 @@ export function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ''))) return false;
   // Voe puede incrustar Big Buck Bunny de test-videos.co.uk como señuelo, nunca es el título pedido.
   if (/^https?:\/\/(?:[^/@]+\.)?test-videos\.co\.uk(?::\d+)?\//i.test(url)) return false;
+  // ModernPlayer de VODCMS usa este clip genérico con publicidad, no la película/episodio pedido.
+  if (/^https?:\/\/cdn\.zss90\.pl\/vod-video\.mp4(?:$|[?#])/i.test(url)) return false;
   // Byse y algunos mirrors usan /e/<id>/<nombre>.mp4 para una página HTML, no para el medio.
   if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\.mpd(?:$|[?#])/i.test(url)) return false; // Se evita entregar DASH/DRM sin licencia.
@@ -34,9 +36,9 @@ export function qualityOf(...values) {
 export function languageOf(value, fallback = 'es') {
   const text = String(value || '').toLowerCase();
   if (/\b(lat|latino|dub|doblaje|es-mx|es-la)\b/.test(text)) return 'es-LAT';
-  if (/\b(cast|castellano|esp|spanish|es-es)\b/.test(text)) return 'es-ES';
-  if (/\b(sub|subtitulado|vose|sub espanol)\b/.test(text)) return 'es-SUB';
-  if (/\b(eng|english|en)\b/.test(text)) return 'en';
+  if (/\b(cast|castellano|esp|spanish|español|espanol|es-es)\b/.test(text)) return 'es-ES';
+  if (/\b(sub|subtitulad[oa]|subt[ií]tulos?|vose|sub espanol)\b/.test(text)) return 'es-SUB';
+  if (/\b(eng|english|ingl[eé]s|ingles|en)\b/.test(text)) return 'en';
   return fallback;
 }
 
