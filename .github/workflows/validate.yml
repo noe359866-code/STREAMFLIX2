@@ -82,7 +82,7 @@ jobs:
 
   live:
     name: Prueba real desde GitHub Actions
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[live]'))
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -96,12 +96,12 @@ jobs:
       - name: Descubrir y comprobar streams reales
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          PROVIDER: ${{ inputs.provider }}
-          TMDB_ID: ${{ inputs.tmdb }}
-          MEDIA_TYPE: ${{ inputs.media_type }}
-          SEASON: ${{ inputs.season }}
-          EPISODE: ${{ inputs.episode }}
-          PLAYBACK: ${{ inputs.playback }}
+          PROVIDER: ${{ inputs.provider || 'cinehax' }}
+          TMDB_ID: ${{ inputs.tmdb || '550' }}
+          MEDIA_TYPE: ${{ inputs.media_type || 'movie' }}
+          SEASON: ${{ inputs.season || '1' }}
+          EPISODE: ${{ inputs.episode || '1' }}
+          PLAYBACK: ${{ github.event_name == 'push' && 'true' || inputs.playback }}
         run: |
           args=(--provider "$PROVIDER" --tmdb "$TMDB_ID" --type "$MEDIA_TYPE" --season "$SEASON" --episode "$EPISODE" --output live-result.json)
           if [[ "$PLAYBACK" == "true" ]]; then args+=(--playback); fi
@@ -110,6 +110,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: live-${{ inputs.provider }}-${{ inputs.tmdb }}
+          name: live-${{ inputs.provider || 'cinehax' }}-${{ inputs.tmdb || '550' }}
           path: live-result.json
           if-no-files-found: warn
