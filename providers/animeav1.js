@@ -7,11 +7,11 @@ const REQUEST_TIMEOUT_MS = 20000;
 
 function absoluteUrl(value, base) {
   if (!value || typeof value !== "string") return "";
-  try {
-    return new URL(value, base || BASE_URL).toString();
-  } catch (_) {
-    return "";
-  }
+  const origin = base || BASE_URL;
+  if (/^https:\/\//i.test(value)) return value;
+  if (value.startsWith("//")) return "https:" + value;
+  if (value.startsWith("/")) return origin + value;
+  return origin.replace(/\/+$/, "") + "/" + value;
 }
 
 function cleanText(value) {
@@ -19,21 +19,11 @@ function cleanText(value) {
 }
 
 function isDirectHls(value) {
-  if (!value || typeof value !== "string") return false;
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "https:" &&
-      /\.m3u8?$/i.test(parsed.pathname);
-  } catch (_) {
-    return false;
-  }
+  return typeof value === "string" &&
+    /^https:\/\/[^?#]+\.m3u8?(?:[?#].*)?$/i.test(value);
 }
 
 async function request(url) {
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  let timer = null;
-  if (controller) timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
   try {
     const response = await fetch(url, {
       method: "GET",
@@ -41,16 +31,12 @@ async function request(url) {
         "User-Agent": USER_AGENT,
         "Referer": BASE_URL + "/",
         "Accept": "text/html,application/json,application/xhtml+xml"
-      },
-      signal: controller ? controller.signal : undefined
+      }
     });
-    if (!response.ok) return null;
-    return response;
+    return response && response.ok ? response : null;
   } catch (error) {
     console.warn("[AnimeAV1] Request failed:", error && error.message ? error.message : error);
     return null;
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }
 
