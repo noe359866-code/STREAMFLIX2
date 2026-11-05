@@ -35,6 +35,9 @@ if command -v node >/dev/null 2>&1; then
   DNS_RESOLVER="$DNS_RESOLVER" \
   node "${SCRIPT_DIR}/render-config.cjs" --output "$CONF_DEST"
 else
+  if ! command -v envsubst >/dev/null 2>&1; then
+    apt-get update -y && apt-get install -y gettext-base
+  fi
   export NGINX_PORT SERVER_NAME BEAMUP_SCHEME BEAMUP_HOST NGINX_PROXY_TOKEN DNS_RESOLVER
   envsubst '${NGINX_PORT} ${SERVER_NAME} ${BEAMUP_SCHEME} ${BEAMUP_HOST} ${NGINX_PROXY_TOKEN} ${DNS_RESOLVER}' \
     < "$TEMPLATE_FILE" > "$CONF_DEST"

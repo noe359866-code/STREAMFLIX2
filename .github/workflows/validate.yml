@@ -79,17 +79,25 @@ jobs:
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/package.json)" = 404
       - name: Prueba E2E real con Nginx (caché, HLS sub_filter, Range 206, token y SSRF)
         run: |
-          echo "127.0.0.1 cdn.streamflix2.test" | sudo tee -a /etc/hosts
-          sudo apt-get update -y && sudo apt-get install -y nginx-full
-          sudo rm -f /etc/nginx/sites-enabled/default
-          sudo NGINX_PORT=8088 \
-            SERVER_NAME=_ \
-            BEAMUP_SCHEME=http \
-            BEAMUP_HOST=127.0.0.1:7001 \
-            NGINX_PROXY_TOKEN=ci_tok_2026 \
-            DNS_RESOLVER=127.0.0.53 \
-            bash nginx/install-nginx.sh
-          ADDON_PORT=7001 CDN_PORT=8080 NGINX_URL=http://127.0.0.1:8088 NGINX_PROXY_TOKEN=ci_tok_2026 npm run nginx:e2e
+          set -o pipefail
+          {
+            echo "127.0.0.1 cdn.streamflix2.test" | sudo tee -a /etc/hosts
+            sudo apt-get update -y && sudo apt-get install -y nginx-core gettext-base
+            sudo rm -f /etc/nginx/sites-enabled/default
+            sudo env "PATH=$PATH" \
+              NGINX_PORT=8088 \
+              SERVER_NAME=_ \
+              BEAMUP_SCHEME=http \
+              BEAMUP_HOST=127.0.0.1:7001 \
+              NGINX_PROXY_TOKEN=ci_tok_2026 \
+              DNS_RESOLVER=127.0.0.53 \
+              bash nginx/install-nginx.sh
+            ADDON_PORT=7001 CDN_PORT=8080 NGINX_URL=http://127.0.0.1:8088 NGINX_PROXY_TOKEN=ci_tok_2026 npm run nginx:e2e
+          } 2>&1 | tee /tmp/nginx-e2e.log || {
+            MSG="$(tail -n 25 /tmp/nginx-e2e.log | tr '\n' ' ' | cut -c1-800)"
+            echo "::error title=NginxE2E::${MSG}"
+            exit 1
+          }
       - name: Publicar paquete instalable Nuvio
         uses: actions/upload-artifact@v4
         with:

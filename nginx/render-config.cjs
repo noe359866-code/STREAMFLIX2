@@ -45,9 +45,9 @@ function renderNginxConfig(overrides = {}) {
 }
 
 function validateRenderedNginxConfig(confText) {
-  const unresolved = confText.match(/\$\{[A-Z0-9_]+\}/g);
+  const unresolved = confText.match(/\$\{[^}]+\}/g);
   if (unresolved) {
-    throw new Error(`Quedaron variables sin sustituir: ${unresolved.join(', ')}`);
+    throw new Error(`Sintaxis \${...} inválida en Nginx o variables sin sustituir: ${unresolved.join(', ')}`);
   }
 
   // Verificar balance de llaves fuera de comillas y comentarios

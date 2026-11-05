@@ -140,13 +140,13 @@ server {
         # Reescritura al vuelo de URLs absolutas y relativas a raíz dentro de playlists .m3u8
         sub_filter_types application/vnd.apple.mpegurl application/x-mpegurl audio/mpegurl audio/x-mpegurl text/plain;
         sub_filter_once off;
-        sub_filter 'https://' '/hlsp/${hlsp_token_prefix}${hlsp_ref_scheme}/${hlsp_ref_host}/https/';
-        sub_filter 'http://' '/hlsp/${hlsp_token_prefix}${hlsp_ref_scheme}/${hlsp_ref_host}/http/';
-        sub_filter 'URI="/' 'URI="/hlsp/${hlsp_token_prefix}${hlsp_ref_scheme}/${hlsp_ref_host}/${hlsp_target_scheme}/${hlsp_target_host}/';
-        sub_filter "\n/" "\n/hlsp/${hlsp_token_prefix}${hlsp_ref_scheme}/${hlsp_ref_host}/${hlsp_target_scheme}/${hlsp_target_host}/";
+        sub_filter 'https://' '/hlsp/$hlsp_token_prefix$hlsp_ref_scheme/$hlsp_ref_host/https/';
+        sub_filter 'http://' '/hlsp/$hlsp_token_prefix$hlsp_ref_scheme/$hlsp_ref_host/http/';
+        sub_filter 'URI="/' 'URI="/hlsp/$hlsp_token_prefix$hlsp_ref_scheme/$hlsp_ref_host/$hlsp_target_scheme/$hlsp_target_host/';
+        sub_filter "\n/" "\n/hlsp/$hlsp_token_prefix$hlsp_ref_scheme/$hlsp_ref_host/$hlsp_target_scheme/$hlsp_target_host/";
 
         # Si el CDN responde 301/302/307/308 hacia otro nodo edge, mantenerlo dentro del proxy
-        proxy_redirect ~^(https?)://([^/]+)(/.*)$ /hlsp/${hlsp_token_prefix}${hlsp_ref_scheme}/${hlsp_ref_host}/$1/$2$3;
+        proxy_redirect ~^(https?)://([^/]+)(/.*)$ /hlsp/$hlsp_token_prefix$hlsp_ref_scheme/$hlsp_ref_host/$1/$2$3;
 
         # Normalizar CORS hacia Stremio Web / Smart TV / iOS
         proxy_hide_header Access-Control-Allow-Origin;
