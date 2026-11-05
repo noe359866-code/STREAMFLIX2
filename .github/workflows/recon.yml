@@ -6,6 +6,8 @@ on:
     paths:
       - .github/workflows/recon.yml
       - scripts/catalog-recon.cjs
+      - scripts/danimados-player-recon.cjs
+      - scripts/player-browser-recon.cjs
   workflow_dispatch:
 
 permissions:
@@ -22,12 +24,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Inspect catalog responses
-        run: node scripts/catalog-recon.cjs > recon-catalog.txt 2>&1
+      - name: Inspect Danimados player AJAX
+        run: node scripts/danimados-player-recon.cjs > recon-danimados-player.txt 2>&1
+      - name: Install a temporary browser
+        run: |
+          {
+            npm install --no-save --package-lock=false playwright@1.56.1 &&
+            npx playwright install chromium
+          } > recon-install.txt 2>&1
+      - name: Inspect public players in a browser
+        run: xvfb-run -a node scripts/player-browser-recon.cjs > recon-player-browser.txt 2>&1
       - name: Return diagnostics to the working branch
         if: always()
         run: |
-          cat recon-catalog.txt || true
+          cat recon-danimados-player.txt || true
+          cat recon-install.txt || true
+          cat recon-player-browser.txt || true
           git config user.name "arena-recon[bot]"
           git config user.email "arena-recon[bot]@users.noreply.github.com"
           git add -A
