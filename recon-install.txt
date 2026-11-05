@@ -1,0 +1,7 @@
+npm warn deprecated crypto-js@4.2.0: Active development of CryptoJS has been discontinued. This library is no longer maintained.
+
+added 5 packages, and audited 6 packages in 2s
+
+found 0 vulnerabilities
+Failed to install browsers
+Error: ERROR: Playwright does not support chromium on ubuntu26.04-x64
