@@ -1,0 +1,19 @@
+{
+  "type": "data",
+  "nodes": [
+    null,
+    null,
+    {
+      "data": [
+        { "media": 0, "episode": 1, "embeds": 2 },
+        null,
+        { "SUB": 3, "DUB": 5 },
+        [4],
+        { "server": 6, "url": 7 },
+        [],
+        "StreamWish",
+        "https://sw.example/e/demo"
+      ]
+    }
+  ]
+}

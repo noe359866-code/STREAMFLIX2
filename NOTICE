@@ -1,0 +1,23 @@
+STREAMFLIX2 — Nuvio Español/Latino
+Copyright 2026 STREAMFLIX2 contributors
+
+Este producto adapta lógica de Streamflix Reborn 2:
+  Fuente canónica:
+  https://git.gay/streamflix-reborn2/streamflix
+
+  Snapshot Apache-2.0 consultado para el porte:
+  https://github.com/theonlyhausofai-design/streamflix-reborn
+  Commit: ff970d39374acc6cbd5b482a50f5ff2867e60bf4
+
+La implementación JavaScript, los adaptadores del runtime y las pruebas son una
+conversión independiente para Nuvio. No se incluye código Android/Kotlin compilado,
+contenido multimedia, cuentas, credenciales ni claves TMDB.
+
+La referencia de compatibilidad QuickJS/CommonJS se comprobó en el proyecto Nuvio:
+  https://github.com/MMUU6699/nuvio
+
+Nuvio proporciona crypto-js en su runtime para los conectores que necesitan
+SHA-256/AES. crypto-js se declara como dependencia de desarrollo únicamente para
+reproducir esas pruebas en Node.js; se mantiene externo en los bundles.
+
+El texto completo de la licencia Apache 2.0 se encuentra en LICENSE.

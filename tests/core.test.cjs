@@ -1,0 +1,99 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { fixture, loadSource, mockFetch } = require('./helpers.cjs');
+
+const text = loadSource('src/core/text.js');
+const html = loadSource('src/core/html.js');
+const base64 = loadSource('src/core/base64.js');
+const extractors = loadSource('src/core/extractors.js');
+const streams = loadSource('src/core/streams.js');
+
+test('normaliza títulos y penaliza un año/tipo incorrecto', () => {
+  const metadata = { titles: ['Contenido Demo', 'Contenido Demo'], year: '2024' };
+  assert.equal(text.normalizeTitle('Ver Contenido Demo (2024) Latino'), 'contenido demo');
+  const valid = { title: 'Contenido Demo', year: '2024', type: 'tv' };
+  const wrong = { title: 'Contenido Demo', year: '2020', type: 'movie' };
+  assert.equal(text.bestTitleMatch([wrong, valid], metadata, 'tv'), valid);
+  assert.equal(text.bestTitleMatch([wrong], metadata, 'tv'), null);
+});
+
+test('extrae exactamente temporada 2 episodio 3 y no otro par', () => {
+  const source = '<a href="/episodio/demo-1x3">1x3</a><a href="/episodio/demo-2x3"><span>2-3</span></a><a href="/episodio/demo-2x4">2x4</a>';
+  const found = html.episodeLinks(source, 'https://example.test/serie/demo', 2, 3);
+  assert.equal(found.url, 'https://example.test/episodio/demo-2x3');
+  assert.equal(html.episodeLinks(source, 'https://example.test/', 3, 3), null);
+});
+
+test('decodifica Base64URL y el payload de enlaces tipo JWT', () => {
+  assert.equal(base64.decodeBase64Url('aHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbw'), 'https://sw.example/e/demo');
+  assert.equal(base64.decodeTokenLink('eyJhbGciOiJub25lIn0.eyJsaW5rIjoiaHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbyJ9.signature'), 'https://sw.example/e/demo');
+});
+
+test('extrae HLS y descarta páginas embed, DASH y javascript:', () => {
+  const found = extractors.directMediaInHtml(fixture('player-hls.html'), 'https://player.example/e/demo');
+  assert.deepEqual(found, ['https://cdn.example/video/playlist.m3u8']);
+  assert.equal(streams.isPlayableUrl('https://sw.example/e/demo'), false);
+  assert.equal(streams.isPlayableUrl('https://cdn.example/video/manifest.mpd'), false);
+  assert.equal(streams.isPlayableUrl('javascript:alert(1)'), false);
+  assert.equal(streams.mediaKind('https://cdn.example/video.m3u8'), 'hls');
+});
+
+test('resuelve dataLink y omite servidores de descarga', () => {
+  const source = '<script>var dataLink = [{"video_language":"LAT","sortedEmbeds":[{"servername":"download","link":"https://download.example/file.mp4"},{"servername":"StreamWish","link":"eyJhbGciOiJub25lIn0.eyJsaW5rIjoiaHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbyJ9.signature"}]}];</script>';
+  const result = extractors.dataLinkCandidates(source, 'https://embed.example/f/demo');
+  assert.equal(result.length, 1);
+  assert.equal(result[0].url, 'https://sw.example/e/demo');
+  assert.equal(result[0].language, 'LAT');
+});
+
+test('descifra AES-CBC después de resolver la prueba de trabajo', () => {
+  const CryptoJS = require('crypto-js');
+  const challenge = 'fixture';
+  const difficulty = 1;
+  const salt = 'salt';
+  let nonce = 0;
+  while (!CryptoJS.SHA256(challenge + nonce).toString().startsWith('0')) nonce += 1;
+  const key = CryptoJS.SHA256(challenge + nonce + salt);
+  const iv = CryptoJS.enc.Hex.parse('00112233445566778899aabbccddeeff');
+  const encrypted = CryptoJS.AES.encrypt('https://sw.example/e/demo', key, { iv });
+  const bytes = CryptoJS.lib.WordArray.create(iv.words.slice(), 16).concat(encrypted.ciphertext);
+  const link = CryptoJS.enc.Base64.stringify(bytes);
+  const source = `<script>const POW_CHALLENGE='${challenge}'; const POW_DIFFICULTY=${difficulty}; const POW_SALT='${salt}'; var dataLink = [{"video_language":"LAT","sortedEmbeds":[{"servername":"StreamWish","link":"${link}"}]}];</script>`;
+  const result = extractors.protectedDataLinkCandidates(source, 'https://embed.example/f/demo');
+  assert.equal(result.length, 1);
+  assert.equal(result[0].url, 'https://sw.example/e/demo');
+});
+
+test('desempaqueta Dean Edwards sin ejecutar JavaScript', () => {
+  const packed = `<script>eval(function(p,a,c,k,e,d){return p}('0("1://2.3/4.5");',6,6,'sources|https|cdn|example|playlist|m3u8'.split('|')))</script>`;
+  const unpacked = extractors.unpackAll(packed);
+  assert.match(unpacked, /https:\/\/cdn\.example\/playlist\.m3u8/);
+});
+
+test('nextData y playerOptions conservan metadatos del reproductor', () => {
+  const next = html.nextData(fixture('poseidon-show.html'));
+  assert.equal(next.props.pageProps.thisSerie.seasons[1].episodes[0].number, 3);
+  const options = html.playerOptions(fixture('base64-player.html'), 'https://site.example/movie');
+  assert.equal(options[0].server, 'aHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbw==');
+});
+
+test('la cookie de sesión se limita al dominio y se reenvía', async () => {
+  const http = loadSource('src/core/http.js');
+  const mock = mockFetch([
+    ['https://session.example/login', { __response: true, body: 'ok', headers: { 'Set-Cookie': 'session=abc; Path=/; HttpOnly' } }],
+    [(url) => url === 'https://session.example/private', (url, init) => {
+      assert.match(init.headers.Cookie, /session=abc/);
+      return 'private';
+    }],
+    [(url) => url === 'https://other.example/private', (url, init) => {
+      assert.equal(init.headers.Cookie, undefined);
+      return 'other';
+    }],
+  ]);
+  try {
+    await http.fetchText('https://session.example/login');
+    await http.fetchText('https://session.example/private');
+    await http.fetchText('https://other.example/private');
+  } finally { mock.restore(); }
+});
