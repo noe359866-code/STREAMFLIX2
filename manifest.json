@@ -1,11 +1,11 @@
 {
   "name": "STREAMFLIX2",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scrapers": [
     {
       "id": "animeav1",
       "name": "AnimeAV1",
-      "description": "Proveedor de anime en español que devuelve enlaces HLS directos",
+      "description": "Proveedor de anime en español; enlaces HLS directos",
       "version": "0.1.0",
       "author": "noe359866-code",
       "filename": "providers/animeav1.js",
@@ -22,6 +22,51 @@
         "hls"
       ],
       "limited": false,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": false
+    },
+    {
+      "id": "animebum",
+      "name": "AnimeBum",
+      "description": "Proveedor de anime en español; enlaces HLS directos",
+      "version": "0.1.0",
+      "author": "noe359866-code",
+      "filename": "providers/animebum.js",
+      "supportedTypes": [
+        "tv"
+      ],
+      "enabled": true,
+      "logo": "https://www.animebum.net/images/logo.png",
+      "contentLanguage": [
+        "es"
+      ],
+      "formats": [
+        "hls"
+      ],
+      "limited": true,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": false
+    },
+    {
+      "id": "flixlatam",
+      "name": "FlixLatam",
+      "description": "Proveedor de películas y series en español; enlaces HLS directos",
+      "version": "0.1.0",
+      "author": "noe359866-code",
+      "filename": "providers/flixlatam.js",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "logo": "https://images2.imgbox.com/94/59/1ClPdx5Z_o.jpg",
+      "contentLanguage": [
+        "es"
+      ],
+      "formats": [
+        "hls"
+      ],
+      "limited": true,
       "disabledPlatforms": [],
       "supportsExternalPlayer": false
     }
