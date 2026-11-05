@@ -1,0 +1,29 @@
+{
+  "id": "streamflix2-nuvio",
+  "name": "STREAMFLIX2",
+  "description": "Proveedores HLS de STREAMFLIX2 para Nuvio",
+  "version": "0.1.0",
+  "author": "noe359866-code",
+  "providers": [
+    {
+      "id": "animeav1",
+      "name": "AnimeAV1",
+      "description": "Fuentes HLS directas de AnimeAV1",
+      "filename": "providers/animeav1.js",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "logo": "https://animeav1.com/favicon.png",
+      "contentLanguage": [
+        "es"
+      ],
+      "formats": [
+        "m3u8"
+      ],
+      "limited": false,
+      "supportsExternalPlayer": false
+    }
+  ]
+}
