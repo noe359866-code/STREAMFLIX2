@@ -758,7 +758,7 @@ async function resolveOne(candidate, context, depth) {
     const nested = await resolveCandidates(nestedServers, { ...context, referer: pageUrl }, depth + 1);
     if (nested.length) return nested.map((item) => ({ ...item, language: item.language || candidate.language }));
   }
-  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1];
+  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1] || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : "");
   const next = absoluteUrl(iframe || "", pageUrl);
   if (next && next !== candidate.url && depth < 2) {
     return resolveOne({ ...candidate, url: next, referer: pageUrl }, context, depth + 1);

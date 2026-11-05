@@ -83,6 +83,23 @@ test('TioPlus: servidor Base64 y película', async () => {
   assertStream(result);
 });
 
+test('TioPlus: valida seasonsJson antes de solicitar S02E03', async () => {
+  const episodeUrl = 'https://tioplus.app/serie/contenido-demo/season/2/episode/3';
+  const routes = [
+    ['tioplus.app/search/', card('/serie/contenido-demo')],
+    [episodeUrl, fixture('base64-player.html')],
+    ['tioplus.app/serie/contenido-demo', fixture('tioplus-seasons.html')],
+  ];
+  const result = await run('tioplus', { routes });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === episodeUrl));
+
+  const missingUrl = 'https://tioplus.app/serie/contenido-demo/season/2/episode/4';
+  const missing = await run('tioplus', { routes, episode: 4 });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url === missingUrl));
+});
+
 test('SoloLatino: dataLink con enlace tipo JWT', async () => {
   const result = await run('sololatino', {
     mediaType: 'movie',
@@ -205,11 +222,25 @@ test('Doramasflix: GraphQL detail/listEpisodes/links_online', async () => {
   assertStream(result);
 });
 
+test('SeriesFlix: carga temporada 2, desenvuelve data-url y conserva LAT', async () => {
+  const seasonUrl = 'https://seriesflixhd.lol/serie/contenido-demo/temporada-2/';
+  const result = await run('seriesflix', {
+    routes: [
+      ['seriesflixhd.lol/?s=', card('/serie/contenido-demo')],
+      ['seriesflixhd.lol/episodio/contenido-demo-2x3', fixture('seriesflix-episode.html')],
+      [seasonUrl, fixture('seriesflix-season.html')],
+      ['seriesflixhd.lol/serie/contenido-demo', fixture('seriesflix-show.html')],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es-LAT');
+  assert.ok(result.calls.some((call) => call.url === seasonUrl));
+});
+
 const wordpressCases = [
   { id: 'cinecalidad', base: 'https://www.cinecalidad.am', search: '/?s=', show: '/ver-serie/contenido-demo', player: '<li data-option="https://sw.example/e/demo" data-nume="1"></li>' },
   { id: 'cine24h', base: 'https://cine24h.online', search: '/?s=', show: '/series/contenido-demo', player: '<li data-src="aHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbw==" data-nume="1"></li>' },
   { id: 'pelisflixhd', base: 'https://pelisflixhd.win', search: '/busqueda/', show: '/serie/contenido-demo', player: fixture('base64-player.html') },
-  { id: 'seriesflix', base: 'https://seriesflixhd.lol', search: '/?s=', show: '/serie/contenido-demo', player: '<li data-url="aHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbw==" data-nume="1"></li>' },
   { id: 'seriesturcas', base: 'https://tbg.seriesturcastv.to', search: '/?s=', show: '/series/contenido-demo', player: '<div class="dl-contenti"><a href="https://streamwish.example/e/demo">StreamWish</a></div>' },
   { id: 'flixlatam', base: 'https://flixlatam.com', search: '/search?s=', show: '/serie/contenido-demo', player: fixture('datalink-player.html') },
 ];

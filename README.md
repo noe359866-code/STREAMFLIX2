@@ -2,7 +2,7 @@
 
 Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**, empaquetados para el runtime **QuickJS/CommonJS de Nuvio**. Incluye **19 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
 
-> **Estado:** listo para instalación y pruebas en una compilación sideloaded de Nuvio. La compilación y **33 pruebas offline** pasan localmente y en GitHub Actions. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) también confirmó descubrimiento real en CineHax y al menos un medio con firma válida. Los otros dominios y la reproducción dentro de la app **siguen sin verificar**. Un proveedor puede dejar de responder, cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** listo para instalación y pruebas en una compilación sideloaded de Nuvio. La compilación y **34 pruebas offline** pasan localmente y en GitHub Actions. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) también confirmó descubrimiento real en CineHax y al menos un medio con firma válida. Los otros dominios y la reproducción dentro de la app **siguen sin verificar**. Un proveedor puede dejar de responder, cambiar su HTML o exigir Cloudflare sin previo aviso.
 
 ## Instalación
 

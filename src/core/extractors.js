@@ -241,7 +241,9 @@ async function resolveOne(candidate, context, depth) {
   // Seguir únicamente iframes de vídeo, no enlaces publicitarios ni páginas HTML como streams.
   const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1]
     || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1]
-    || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1];
+    || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1]
+    || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1]
+    || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : '');
   const next = absoluteUrl(iframe || '', pageUrl);
   if (next && next !== candidate.url && depth < 2) {
     return resolveOne({ ...candidate, url: next, referer: pageUrl }, context, depth + 1);

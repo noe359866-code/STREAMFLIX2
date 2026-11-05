@@ -18,11 +18,11 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido c
 | `latanime` | Latanime — `latanime.org` | Película/TV | Activo | ✅ | `data-player` Base64 y episodio comprobado en la ficha. |
 | `pelisflixhd` | PelisflixHD — `pelisflixhd.win` | Película/TV | Activo | ✅ | Reproductores `data-server` Base64. |
 | `poseidonhd2` | PoseidonHD2 — `www.poseidonhd2.co` | Película/TV | Activo | ✅ | `__NEXT_DATA__`, latino/castellano/subtitulado y bridges de player. |
-| `seriesflix` | SeriesFlix — `seriesflixhd.lol` | TV | Activo | ✅ | Solo series; `data-url` Base64. |
+| `seriesflix` | SeriesFlix — `seriesflixhd.lol` | TV | Activo | ✅ | Solo series; carga temporadas, desenvuelve `data-url`/`url=` y conserva el idioma. |
 | `seriesturcas` | Series Turcas — `tbg.seriesturcastv.to` | TV | Activo | ✅ | Solo series; Vidmoly/Voe/Esprinahy y otros hosters conocidos. |
 | `sololatino` | SoloLatino — `sololatino.net` + Embed69 | Película/TV | Activo | ✅ | `player-url`, XSRF, `dataLink`, AES/PoW y fallback IMDb Embed69. |
 | `tioanime` | TioAnime — `tioanime.com` | Película/TV | Activo | ✅ | Verifica `var episodes`; usa únicamente Voe/YourUpload como el origen. |
-| `tioplus` | TioPlus/Pelisplusto — `tioplus.app` | Película/TV | Activo | ✅ | URLs `season/{s}/episode/{e}` y `.bg-tabs` Base64. |
+| `tioplus` | TioPlus/Pelisplusto — `tioplus.app` | Película/TV | Activo | ✅ | Valida `seasonsJson`; URLs `season/{s}/episode/{e}` y `.bg-tabs` Base64. |
 | `animebum` | AnimeBum — `www.animebum.net` | Película/TV | **Inactivo** | ✅ | Presente pero deshabilitado en Streamflix; `video[]` y pCloud. No activar esperando disponibilidad. |
 
 ## Resultado de validación
@@ -30,7 +30,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido c
 - Compilación esbuild/CommonJS: **20/20**.
 - Export `getStreams`: **20/20**.
 - Recorrido offline con fixtures: **20/20**.
-- Suite completa: **33/33** pruebas.
+- Suite completa: **34/34** pruebas.
 - GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **offline correcto; CineHax descubrió al menos un stream real y al menos un medio superó la comprobación de firma HLS/MP4/MKV/WebM**.
 - Descubrimiento en los otros dominios reales: **no verificado**.
 - Reproducción dentro de Nuvio/dispositivo: **no verificada**.

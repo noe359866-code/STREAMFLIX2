@@ -739,7 +739,7 @@ async function resolveOne(candidate, context, depth) {
     const nested = await resolveCandidates(nestedServers, { ...context, referer: pageUrl }, depth + 1);
     if (nested.length) return nested.map((item) => ({ ...item, language: item.language || candidate.language }));
   }
-  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1];
+  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1] || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : "");
   const next = absoluteUrl(iframe || "", pageUrl);
   if (next && next !== candidate.url && depth < 2) {
     return resolveOne({ ...candidate, url: next, referer: pageUrl }, context, depth + 1);
@@ -770,8 +770,23 @@ async function search(query, mediaType) {
   return cardsFromAnchors(page.text, page.url, { mediaType, path: /\/(?:pelicula|serie|anime)\//i });
 }
 async function streams(match, media) {
-  const url = media.mediaType === "movie" ? match.url : `${match.url.replace(/\/$/, "")}/season/${media.season}/episode/${media.episode}`;
-  const page = await fetchText(url, { referer: `${BASE}/` });
+  let url = match.url;
+  let referer = `${BASE}/`;
+  if (media.mediaType !== "movie") {
+    const show = await fetchText(match.url, { referer: `${BASE}/` });
+    const raw = extractBalanced(show.text, "seasonsJson", "{", "}");
+    let seasons = null;
+    try {
+      seasons = raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return [];
+    }
+    const episodes = seasons?.[String(media.season)];
+    if (!Array.isArray(episodes) || !episodes.some((item) => Number(item.episode) === media.episode)) return [];
+    url = `${match.url.replace(/\/$/, "")}/season/${media.season}/episode/${media.episode}`;
+    referer = show.url;
+  }
+  const page = await fetchText(url, { referer });
   const candidates = playerOptions(page.text, page.url).map((item) => {
     const decoded = decodeBase64Url(item.server);
     return {
