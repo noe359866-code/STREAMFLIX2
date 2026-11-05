@@ -109,7 +109,7 @@ async function probe(stream) {
   if (playback) {
     result.playback = [];
     for (const stream of streams.slice(0, 5)) result.playback.push(await probe(stream));
-    result.playbackInterpretation = 'Valida firma HLS/MP4/MKV/WebM de los primeros bytes; no sustituye una prueba en el reproductor de Nuvio ni verifica audio, subtítulos o duración.';
+    result.playbackInterpretation = 'Valida solo la firma de los primeros bytes (en HLS, la playlist inicial; no variantes ni segmentos). No sustituye una prueba en Nuvio ni verifica audio, subtítulos o duración.';
   }
   const serialized = `${JSON.stringify(result, null, 2)}\n`;
   if (output) fs.writeFileSync(path.resolve(output), serialized);

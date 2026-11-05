@@ -264,7 +264,7 @@ test('VerPeliculasOnline: DooPlayer AJAX conserva ESP/LAT/SUB y omite el tráile
   assert.ok(!result.calls.some((call) => call.init.body?.includes('nume=trailer')));
 });
 
-test('PelisForte: tarjetas ToroFilm, r.php y Byse .mp4 se resuelven como embed', async () => {
+test('PelisForte: fixture sintético ToroFilm/r.php conserva idiomas y no devuelve embeds', async () => {
   const byse = 'https://byseraguci.example/e/0albi51inneu/movie.mp4';
   const nested = 'https://n1mwq.example/6vd4p/0albi51inneu';
   const result = await run('pelisforte', {

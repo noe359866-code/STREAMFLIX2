@@ -139,7 +139,7 @@
     {
       "id": "pelisforte",
       "name": "PelisForte",
-      "description": "Películas y series ToroFilm; temporadas AJAX, puerta r.php y hosters externos.",
+      "description": "Películas y series ToroFilm; episodios exactos. Byse/n1mwq con attestation no resuelto.",
       "version": "1.0.0",
       "filename": "providers/pelisforte.js",
       "supportedTypes": ["movie", "tv"],
@@ -227,7 +227,7 @@
     {
       "id": "verpeliculasonline",
       "name": "VerPeliculasOnline",
-      "description": "Películas; opciones DooPlayer AJAX por idioma y resolución de Voe.",
+      "description": "Películas; DooPlayer AJAX por idioma y Voe F7 con HLS firmado, sin descargas.",
       "version": "1.0.0",
       "filename": "providers/verpeliculasonline.js",
       "supportedTypes": ["movie"],

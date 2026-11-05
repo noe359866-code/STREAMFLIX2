@@ -9,6 +9,9 @@ Este producto adapta lógica de Streamflix Reborn 2:
   https://github.com/theonlyhausofai-design/streamflix-reborn
   Commit: ff970d39374acc6cbd5b482a50f5ff2867e60bf4
 
+La variante F7 de Voe se contrastó con VoeExtractor.kt del proyecto Apache-2.0:
+  https://github.com/Kohi-den/extensions-source/tree/main/lib/voe-extractor
+
 La implementación JavaScript, los adaptadores del runtime y las pruebas son una
 conversión independiente para Nuvio. No se incluye código Android/Kotlin compilado,
 contenido multimedia, cuentas, credenciales ni claves TMDB.

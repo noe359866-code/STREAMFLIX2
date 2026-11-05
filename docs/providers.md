@@ -1,6 +1,6 @@
 # Matriz de proveedores
 
-Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido completo se validó con respuestas sintéticas offline; no certifica que el dominio real responda hoy ni que el vídeo reproduzca. CineHax superó posteriormente una prueba real de descubrimiento y firma de medio en GitHub Actions; ningún conector ha sido probado todavía dentro del reproductor de la app Nuvio.
+Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido se validó offline con respuestas sintéticas o, en la regresión Voe, una captura real minimizada; no certifica por sí solo que el dominio responda hoy ni que el vídeo reproduzca. CineHax superó una prueba real de descubrimiento y firma de medio. Para VerPeliculasOnline se comprobaron por separado las páginas/AJAX reales y la firma HLS del hoster Voe. Ningún conector ha sido probado dentro del reproductor de la app Nuvio.
 
 | ID | Nombre y dominio portado | Tipos | Manifiesto | Fixture | Implementación / limitación principal |
 |---|---|---|---|---|---|
@@ -16,6 +16,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido c
 | `jkanime` | JKAnime — `jkanime.net` | Película/TV | Activo | ✅ | AJAX con CSRF/cookies y `var servers`; hosters dependen del extractor. |
 | `lacartoons` | LaCartoons — `www.lacartoons.com` | TV | Activo | ✅ | Selección por panel de temporada y “Capitulo/Capítulo N”. |
 | `latanime` | Latanime — `latanime.org` | Película/TV | Activo | ✅ | `data-player` Base64 y episodio comprobado en la ficha. |
+| `pelisforte` | PelisForte — `www2.pelisforte.se` | Película/TV | Activo | ✅ | ToroFilm, temporadas AJAX, episodio exacto y `r.php`. La cadena real Byse/n1mwq observada requiere attestation/fingerprint/PoW y no tiene extractor compatible; sin medio real validado. |
 | `pelisflixhd` | PelisflixHD — `pelisflixhd.win` | Película/TV | Activo | ✅ | Reproductores `data-server` Base64. |
 | `poseidonhd2` | PoseidonHD2 — `www.poseidonhd2.co` | Película/TV | Activo | ✅ | `__NEXT_DATA__`, latino/castellano/subtitulado y bridges de player. |
 | `seriesflix` | SeriesFlix — `seriesflixhd.lol` | TV | Activo | ✅ | Solo series; carga temporadas, desenvuelve `data-url`/`url=` y conserva el idioma. |
@@ -23,20 +24,26 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido c
 | `sololatino` | SoloLatino — `sololatino.net` + Embed69 | Película/TV | Activo | ✅ | `player-url`, XSRF, `dataLink`, AES/PoW y fallback IMDb Embed69. |
 | `tioanime` | TioAnime — `tioanime.com` | Película/TV | Activo | ✅ | Verifica `var episodes`; usa únicamente Voe/YourUpload como el origen. |
 | `tioplus` | TioPlus/Pelisplusto — `tioplus.app` | Película/TV | Activo | ✅ | Valida `seasonsJson`; URLs `season/{s}/episode/{e}` y `.bg-tabs` Base64. |
+| `verpeliculasonline` | VerPeliculasOnline — `verpeliculasonline.net` | **Película** | Activo | ✅ | DooPlayer `admin-ajax.php`, ESP/LAT/SUB, sin tráiler/descargas. Decodifica Voe F7 y rechaza el señuelo Big Buck Bunny; HLS real validado a nivel de playlist, no de reproducción. |
 | `animebum` | AnimeBum — `www.animebum.net` | Película/TV | **Inactivo** | ✅ | Presente pero deshabilitado en Streamflix; `video[]` y pCloud. No activar esperando disponibilidad. |
 
 ## Resultado de validación
 
-- Compilación esbuild/CommonJS: **20/20**.
-- Export `getStreams`: **20/20**.
-- Recorrido offline con fixtures: **20/20**.
-- Suite completa: **34/34** pruebas.
-- GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **offline correcto; CineHax descubrió al menos un stream real y al menos un medio superó la comprobación de firma HLS/MP4/MKV/WebM**.
-- Descubrimiento en los otros dominios reales: **no verificado**.
+- Compilación esbuild/CommonJS: **22/22**.
+- Export `getStreams`: **22/22**.
+- Recorrido offline con fixtures: **22/22**.
+- Suite completa: **38/38** pruebas.
+- GitHub Actions, [run 42081217116](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217116): **build y 38 pruebas offline correctos**, incluida la regresión Voe F7.
+- GitHub Actions, [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): el Voe real de Van Helsing decodificó el título correcto; su `master.m3u8` respondió **HTTP 200**, `application/vnd.apple.mpegurl`, 690 bytes y `#EXTM3U`. No se comprobaron segmentos ni reproducción en Nuvio.
+- GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **CineHax descubrió al menos un stream real y un medio superó la comprobación de firma**.
+- PelisForte: las páginas reales confirmaron búsqueda, ficha, temporada/episodio y puerta hasta Byse/n1mwq; **no se validó un stream real** y el player sintético del fixture no certifica compatibilidad con Byse.
+- Descubrimiento en los demás dominios reales: **no verificado**.
 - Reproducción dentro de Nuvio/dispositivo: **no verificada**.
 
 ## Formatos y hosters
 
-La capa común sigue iframes hasta dos niveles, interpreta declaraciones directas HLS/MP4, JavaScript Dean Edwards empaquetado sin `eval`, Streamtape, MixDrop, variantes directas de Voe, Zilla, pCloud y MovieMaster. Un nombre de hoster en esta lista no garantiza compatibilidad con todas sus variantes.
+La capa común sigue iframes hasta dos niveles, interpreta declaraciones directas HLS/MP4, JavaScript Dean Edwards empaquetado sin `eval`, Streamtape, MixDrop, Voe, Zilla, pCloud y MovieMaster. Un nombre de hoster en esta lista no garantiza compatibilidad con todas sus variantes.
 
-Se rechazan páginas HTML, DASH/MPD y URLs sin una extensión o patrón de medio reconocido. Filemoon con attestation moderno, CAPTCHA, WebView/Cloudflare, DRM y reproductores que exijan ejecución arbitraria de JavaScript quedan fuera del soporte garantizado.
+Para el payload Voe F7 observado se aplican transformaciones deterministas (ROT13, marcadores, Base64, desplazamiento e inversión) sin ejecutar el loader del hoster. Se prioriza `source`; `fallback` solo se usa si falta una fuente válida. `direct_access_url` se excluye por ser una descarga y cualquier medio de `test-videos.co.uk` se rechaza como señuelo. Las URLs firmadas caducan y pueden depender de la red que las generó.
+
+Se rechazan páginas HTML entregadas como streams, incluidas rutas Byse `/e/….mp4`, DASH/MPD y URLs sin una extensión o patrón de medio reconocido. Byse/n1mwq con attestation de dispositivo, huella de navegador, challenge/PoW y configuración cifrada queda fuera del soporte actual. Filemoon con attestation moderno, CAPTCHA, WebView/Cloudflare, DRM y reproductores que exijan ejecución arbitraria de JavaScript tampoco tienen compatibilidad garantizada.
