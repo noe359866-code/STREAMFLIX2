@@ -1,4 +1,50 @@
-{"name":"hdfull-movie","inputUrl":"https://hdfull.company/peliculas/weapons","assets":1,"status":200,"finalUrl":"https://r.jina.ai/https://hdfull.company/peliculas/weapons","bytes":166213,"title":"Weapons Película Completa","scripts":["https://hdfull.company/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Bcn-gyid.js"],"iframes":["https://www.googletagmanager.com/ns.html?id=GTM-PGVDF5HN"],"hasNextData":false,"apiSnippets":["/_astro/SearchOverlay.52OCZ1lY.js"]}
-{"name":"hdfull-episode","inputUrl":"https://hdfull.company/series/slow-horses/temporada/2/episodio/3","assets":1,"status":200,"finalUrl":"https://r.jina.ai/https://hdfull.company/series/slow-horses/temporada/2/episodio/3","bytes":137368,"title":"Ver Slow Horses Temporada 2 Capítulo 3","scripts":["https://hdfull.company/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Bcn-gyid.js"],"iframes":["https://www.googletagmanager.com/ns.html?id=GTM-PGVDF5HN"],"hasNextData":false,"apiSnippets":["/_astro/SearchOverlay.52OCZ1lY.js"]}
-{"name":"pelisgo-movie","inputUrl":"https://pelisgo.online/movies/la-hora-de-la-desaparicion","assets":0,"status":200,"finalUrl":"https://r.jina.ai/https://pelisgo.online/movies/la-hora-de-la-desaparicion","bytes":5910,"title":"Just a moment...","scripts":[],"iframes":[],"hasNextData":false,"apiSnippets":[]}
-{"name":"pelisgo-episode","inputUrl":"https://pelisgo.online/series/caballos-lentos/temporada/3/episodio/3","assets":0,"status":200,"finalUrl":"https://r.jina.ai/https://pelisgo.online/series/caballos-lentos/temporada/3/episodio/3","bytes":5967,"title":"Just a moment...","scripts":[],"iframes":[],"hasNextData":false,"apiSnippets":[]}
+{
+  "search": {
+    "status": 403,
+    "headers": {
+      "content-type": "text/html; charset=utf-8"
+    },
+    "bytes": 1680,
+    "body": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex\"><title>403 Forbidden</title><style>:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--fg:#1f2328;--muted:#656d76;--line:#e2e5e9;--accent:#3b6fd8}@media (prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#161b22;--fg:#e6edf3;--muted:#8d96a0;--line:#262c35;--accent:#6d9cff}}*{box-sizing:border-box}html,body{height:100%;margin:0}body{display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif;-webkit-font-smoothing:antialiased}main{width:100%;max-width:30rem;padding:3rem 2rem;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06)}.code{margin:0;font-size:clamp(4rem,16vw,5.5rem);font-weight"
+  },
+  "media": [
+    {
+      "name": "title-content-url",
+      "url": "https://hdfull.company/vod-movie/v1/weapons.mp4?d=7722&q=1080&title=Weapons",
+      "head": {
+        "status": 403,
+        "finalUrl": "https://hdfull.company/vod-movie/v1/weapons.mp4?d=7722&q=1080&title=Weapons",
+        "headers": {
+          "content-type": "text/html; charset=utf-8"
+        }
+      }
+    },
+    {
+      "name": "generic-player-decoy",
+      "url": "https://cdn.zss90.pl/vod-video.mp4",
+      "head": {
+        "status": 200,
+        "finalUrl": "https://cdn.zss90.pl/vod-video.mp4",
+        "headers": {
+          "content-type": "video/mp4",
+          "content-length": "3442103",
+          "accept-ranges": "bytes",
+          "last-modified": "Fri, 13 Mar 2026 12:30:31 GMT"
+        }
+      },
+      "range": {
+        "status": 206,
+        "finalUrl": "https://cdn.zss90.pl/vod-video.mp4",
+        "headers": {
+          "content-type": "video/mp4",
+          "content-length": "4096",
+          "content-range": "bytes 0-4095/3442103",
+          "last-modified": "Fri, 13 Mar 2026 12:30:31 GMT"
+        },
+        "bytesRead": 4096,
+        "ftyp": true,
+        "hex": "000000206674797069736f6d0000020069736f6d69736f32617663316d703431"
+      }
+    }
+  ]
+}
