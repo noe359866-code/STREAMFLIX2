@@ -1,0 +1,7 @@
+{
+  "inputUrl": "https://shannoncoldalready.com/e/jfconahnwkyn",
+  "finalUrl": "https://shannoncoldalready.com/e/jfconahnwkyn",
+  "status": 200,
+  "bytes": 126621,
+  "media": []
+}
