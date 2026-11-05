@@ -1,0 +1,115 @@
+name: Validate Nuvio plugins
+
+on:
+  push:
+    branches: [main, "feature/**", "arena/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Proveedor para la prueba real"
+        required: true
+        default: cinehax
+        type: string
+      tmdb:
+        description: "ID TMDB para la prueba real"
+        required: true
+        default: "550"
+        type: string
+      media_type:
+        description: "Tipo de contenido"
+        required: true
+        default: movie
+        type: choice
+        options: [movie, tv]
+      season:
+        description: "Temporada para TV"
+        required: true
+        default: "1"
+        type: string
+      episode:
+        description: "Episodio para TV"
+        required: true
+        default: "1"
+        type: string
+      playback:
+        description: "Descargar los primeros bytes del medio"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  validate:
+    name: Build y pruebas offline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Instalar dependencias fijadas
+        run: npm ci
+      - name: Compilar y ejecutar todas las pruebas
+        run: npm run check
+      - name: Validar sintaxis de herramientas
+        run: |
+          node --check server.cjs
+          node --check scripts/live-check.cjs
+      - name: Comprobar manifiesto y bundle servidos
+        run: |
+          npm start > /tmp/streamflix2-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:3000/manifest.json -o /tmp/manifest.json; then break; fi
+            sleep 1
+          done
+          cmp manifest.json /tmp/manifest.json
+          curl -fsS http://127.0.0.1:3000/providers/animeav1.js -o /tmp/animeav1.js
+          grep -q getStreams /tmp/animeav1.js
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/package.json)" = 404
+      - name: Publicar paquete instalable
+        uses: actions/upload-artifact@v4
+        with:
+          name: streamflix2-nuvio-providers
+          path: |
+            manifest.json
+            providers/
+          if-no-files-found: error
+
+  live:
+    name: Prueba real desde GitHub Actions
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[live]'))
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Descubrir y comprobar streams reales
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          PROVIDER: ${{ inputs.provider || 'cinehax' }}
+          TMDB_ID: ${{ inputs.tmdb || '550' }}
+          MEDIA_TYPE: ${{ inputs.media_type || 'movie' }}
+          SEASON: ${{ inputs.season || '1' }}
+          EPISODE: ${{ inputs.episode || '1' }}
+          PLAYBACK: ${{ github.event_name == 'push' && 'true' || inputs.playback }}
+        run: |
+          args=(--provider "$PROVIDER" --tmdb "$TMDB_ID" --type "$MEDIA_TYPE" --season "$SEASON" --episode "$EPISODE" --output live-result.json)
+          if [[ "$PLAYBACK" == "true" ]]; then args+=(--playback); fi
+          node scripts/live-check.cjs "${args[@]}"
+      - name: Publicar informe de la prueba real
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-${{ inputs.provider || 'cinehax' }}-${{ inputs.tmdb || '550' }}
+          path: live-result.json
+          if-no-files-found: warn
