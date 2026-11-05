@@ -2,7 +2,7 @@
 
 Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**, empaquetados para el runtime **QuickJS/CommonJS de Nuvio**. Incluye **24 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
 
-> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio. La compilación de **25 bundles** y **43 pruebas offline** pasa localmente; el run final de GitHub Actions se enlaza abajo y en la matriz. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio. La compilación de **25 bundles** y **43 pruebas offline** pasa localmente y en GitHub Actions ([run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146)). El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
 
 ## Instalación
 
@@ -125,13 +125,15 @@ También se puede activar la prueba predeterminada de CineHax con un commit cuyo
 
 - [Run 41983314335](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983314335): validación offline inicial correcta.
 - [Run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): validación offline y prueba real de CineHax correctas; al menos un stream descubierto y un medio con firma válida.
+- [Run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): 25 bundles y 43 pruebas offline correctos con Danimados, PelisGo y HDFull registrados.
+- [Run 42093805057](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093805057): diagnóstico operativo; `TMDB_API_KEY` no está configurada en el repositorio, por lo que las pruebas end-to-end de los tres nuevos conectores no se ejecutaron. No es un resultado de catálogo ni de reproducción.
 - [Run 42081217116](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217116): 22 bundles y 38 pruebas offline correctos tras añadir la regresión Voe.
 - [Run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): sonda independiente del hoster Voe; título Van Helsing correcto, HLS HTTP 200, tipo `application/vnd.apple.mpegurl` y firma `#EXTM3U`. No es una ejecución completa del proveedor ni una prueba en Nuvio.
 
 ## Limitaciones conocidas
 
 - Cloudflare/WebView, CAPTCHA y retos que exijan un navegador completo no se pueden resolver de forma fiable en QuickJS. Anime Online Ninja es especialmente dependiente de Cloudflare. PelisGo mostró verificación interactiva durante esta validación y HDFull respondió 403 a búsqueda/medio desde Actions; no se intentó eludir ninguno de los dos controles.
-- Danimados solo declara TV; PelisGo admite película/TV; HDFull solo declara películas. Ninguno de los tres cambia de temporada ni sustituye un episodio ausente por otro.
+- Danimados solo declara TV; PelisGo admite película/TV; HDFull solo declara películas. Ninguno de los tres cambia de temporada ni sustituye un episodio ausente por otro. Sus recorridos offline están cubiertos, pero el `live-check` end-to-end externo no se ejecutó porque falta el secreto `TMDB_API_KEY` del repositorio; Nuvio usa la clave efectiva de la app, no ese secreto de CI.
 - Las variantes modernas de Filemoon con attestation, hosters con JavaScript cambiante y enlaces DRM pueden no producir streams. En particular, Byse/n1mwq requiere attestation, fingerprint, challenge/PoW y configuración cifrada que este runtime no resuelve.
 - El extractor Voe cubre el payload F7 observado el 5 de noviembre de 2026 y variantes HLS directas/Base64 anteriores. No ejecuta su loader, no garantiza variantes futuras y sus URLs firmadas pueden caducar o quedar vinculadas a la red que las obtuvo.
 - Los demás desempaquetadores y selectores cubren las estructuras portadas de Streamflix, no cualquier variante futura de StreamWish, VidHide, MixDrop o Doodstream.

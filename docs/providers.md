@@ -36,7 +36,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 - Export `getStreams`: **25/25**.
 - Recorrido offline con fixtures: **25/25**.
 - Suite completa: **43/43** pruebas.
-- Validación local: **build y 43 pruebas offline correctos**; el run final de GitHub Actions se añade al completar la entrega.
+- GitHub Actions, [run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): **25 bundles y 43 pruebas offline correctos** con los tres nuevos conectores registrados.
 - GitHub Actions, [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): el Voe real de Van Helsing decodificó el título correcto; su `master.m3u8` respondió **HTTP 200**, `application/vnd.apple.mpegurl`, 690 bytes y `#EXTM3U`. No se comprobaron segmentos ni reproducción en Nuvio.
 - GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **CineHax descubrió al menos un stream real y un medio superó la comprobación de firma**.
 - PelisForte: las páginas reales confirmaron búsqueda, ficha, temporada/episodio y puerta hasta Byse/n1mwq; **no se validó un stream real** y el player sintético del fixture no certifica compatibilidad con Byse.
@@ -44,6 +44,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 - PelisGo: `/search?q=weapons` fue observable, pero el player posterior quedó en verificación interactiva de Cloudflare; no se resolvió el reto ni se afirma compatibilidad en vivo. `/api/source` devolvió 404 y no se usa.
 - HDFull, [run 42088287982](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42088287982): DOM Astro completo de película/episodio y JavaScript público de búsqueda/player. La película declara un `contentUrl` específico; el episodio no declara fuente equivalente y el player usa un clip genérico/publicitario.
 - HDFull, [run 42089237281](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42089237281): búsqueda y `contentUrl` respondieron **403** desde Actions, sin reintentos ni proxy de evasión. El clip genérico sí respondió como MP4 de **3.442.103 bytes** y queda explícitamente rechazado; su firma no valida el contenido de la película.
+- Prueba end-to-end externa de Danimados/PelisGo/HDFull, [run 42093805057](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093805057): **no ejecutada** porque `TMDB_API_KEY` no está configurada como secreto del repositorio; se comprobó antes de cualquier solicitud. Nuvio inyecta la clave efectiva de la app, pero no se afirma descubrimiento ni reproducción real para estos tres conectores.
 - Salvo los casos enlazados, descubrimiento en los demás dominios reales: **no verificado**.
 - Reproducción dentro de Nuvio/dispositivo: **no verificada**.
 
