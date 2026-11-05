@@ -1,0 +1,66 @@
+name: Deploy Stremio Addon to Beamup
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "Nombre del proyecto en Beamup (minúsculas, números y guiones)"
+        required: false
+        default: "streamflix2"
+        type: string
+      beamup_host:
+        description: "Host de Beamup"
+        required: false
+        default: "a.baby-beamup.club"
+        type: string
+
+jobs:
+  deploy:
+    name: Validar y desplegar a Beamup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout completo para push a Dokku/Beamup
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias y validar addon antes de desplegar
+        run: |
+          npm ci
+          npm run check
+          npm run nginx:render -- --check
+
+      - name: Comprobar secreto SSH_PRIVATE_KEY
+        id: check_secret
+        env:
+          HAS_KEY: ${{ secrets.SSH_PRIVATE_KEY != '' && 'true' || 'false' }}
+        run: |
+          echo "ready=${HAS_KEY}" >> "$GITHUB_OUTPUT"
+          if [[ "$HAS_KEY" != "true" ]]; then
+            {
+              echo "### Despliegue automático a Beamup pendiente de \`SSH_PRIVATE_KEY\`"
+              echo "Añade la clave privada SSH asociada a tu cuenta de GitHub en **Settings → Secrets and variables → Actions → New repository secret** con nombre \`SSH_PRIVATE_KEY\` (o ejecuta \`npm run deploy:beamup\` localmente)."
+              echo ""
+              echo "URL destino precalculada para \`@noe359866-code\`:"
+              echo "- \`https://7e2a912be9c9-streamflix2.baby-beamup.club/manifest.json\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Desplegar a Beamup
+        if: steps.check_secret.outputs.ready == 'true'
+        uses: Stremio/beamup-deploy-action@v1.0.1
+        with:
+          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          beamup_host: ${{ inputs.beamup_host || secrets.BEAMUP_HOST || 'a.baby-beamup.club' }}
+          username_github: ${{ secrets.USERNAME_GITHUB || github.repository_owner }}
+          project_name: ${{ inputs.project_name || secrets.PROJECT_NAME || 'streamflix2' }}
