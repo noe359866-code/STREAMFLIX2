@@ -5,12 +5,13 @@
   "description": "Nuvio plugin repository for STREAMFLIX2",
   "scripts": {
     "test": "node --test",
-    "test:syntax": "node --check providers/animeav1.js"
+    "test:syntax": "node --check providers/animeav1.js",
+    "build": "node build.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "cheerio-without-node-native": "^0.1.2"
+    "cheerio-without-node-native": "^0.20.2"
   }
 }
