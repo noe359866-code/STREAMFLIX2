@@ -16,7 +16,7 @@ No hace falta instalar Node.js para usar los bundles ya generados.
    ```
 
    Si el repositorio se publica en otra rama, cambia el segmento de rama en la URL. Nuvio descarga cada `filename` de forma relativa al manifiesto. **Actualmente el repositorio es privado**: para que esta URL funcione directamente en Nuvio hay que hacerlo público o alojar `manifest.json` y `providers/` en un servidor accesible. No uses URLs con tokens temporales; como alternativa, utiliza el servidor local descrito abajo.
-3. Configura `TMDB_API_KEY` en los ajustes de Nuvio. No hay ninguna clave TMDB incrustada en este repositorio. CineHax puede usar directamente el ID recibido, pero el resto necesita resolver título, año, títulos alternativos e IMDb mediante TMDB.
+3. **No necesitas añadir otra clave TMDB dentro de Nuvio en condiciones normales.** El runtime inyecta automáticamente `TMDB_API_KEY` con la clave efectiva de Nuvio: la personal si la configuraste o la predeterminada de la app si dejaste el campo vacío. Este repositorio no incrusta ninguna clave. CineHax usa directamente el ID recibido; el resto hace consultas propias a TMDB para obtener título, año, títulos alternativos e IMDb. La clave secreta solo es necesaria al ejecutar pruebas externas en Node/GitHub Actions, donde no existe el runtime de Nuvio.
 4. Activa individualmente los proveedores que quieras probar. AnimeBum aparece intencionadamente deshabilitado.
 
 ### Servidor local opcional
