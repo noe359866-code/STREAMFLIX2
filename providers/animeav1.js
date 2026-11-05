@@ -3,7 +3,6 @@ const cheerio = require("cheerio-without-node-native");
 const BASE_URL = "https://animeav1.com";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-const REQUEST_TIMEOUT_MS = 20000;
 
 function absoluteUrl(value, base) {
   if (!value || typeof value !== "string") return "";
