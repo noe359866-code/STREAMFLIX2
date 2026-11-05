@@ -140,6 +140,27 @@ jobs:
           args=(--provider "$PROVIDER" --tmdb "$TMDB_ID" --type "$MEDIA_TYPE" --season "$SEASON" --episode "$EPISODE" --output live-result.json)
           if [[ "$PLAYBACK" == "true" ]]; then args+=(--playback); fi
           node scripts/live-check.cjs "${args[@]}"
+      - name: Probar extremo a extremo el Addon Stremio (Cinemeta tt0137523 -> CineHax)
+        if: (inputs.provider || 'cinehax') == 'cinehax'
+        run: |
+          PORT=7009 npm start > /tmp/stremio-live.log 2>&1 &
+          ADDON_PID=$!
+          trap 'kill "$ADDON_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:7009/health >/dev/null; then break; fi
+            sleep 1
+          done
+          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["cinehax"], proxyMode: "both", proxyUrl: "https://proxy.example.org", proxyToken: "demo" }));')"
+          curl -fsS "http://127.0.0.1:7009/${SEG}/stream/movie/tt0137523.json" -o /tmp/stremio-live-streams.json
+          node -e '
+            const fs = require("node:fs");
+            const data = JSON.parse(fs.readFileSync("/tmp/stremio-live-streams.json", "utf8"));
+            if (!Array.isArray(data.streams) || data.streams.length < 2) {
+              console.error("Se esperaban streams directos y proxy para tt0137523:", data);
+              process.exit(1);
+            }
+            console.log(`✓ Stremio live tt0137523 devolvió ${data.streams.length} entradas (directo + /hlsp/)`);
+          '
       - name: Publicar informe de la prueba real
         if: always()
         uses: actions/upload-artifact@v4
