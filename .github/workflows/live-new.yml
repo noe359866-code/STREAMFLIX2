@@ -5,6 +5,9 @@ on:
     branches: [arena/e6074aa1-streamflix2]
     paths: [.github/workflows/live-new.yml]
 
+permissions:
+  contents: write
+
 jobs:
   live:
     name: Live new providers
