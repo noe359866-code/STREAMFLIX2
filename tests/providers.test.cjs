@@ -83,6 +83,23 @@ test('TioPlus: servidor Base64 y película', async () => {
   assertStream(result);
 });
 
+test('TioPlus: valida seasonsJson antes de solicitar S02E03', async () => {
+  const episodeUrl = 'https://tioplus.app/serie/contenido-demo/season/2/episode/3';
+  const routes = [
+    ['tioplus.app/search/', card('/serie/contenido-demo')],
+    [episodeUrl, fixture('base64-player.html')],
+    ['tioplus.app/serie/contenido-demo', fixture('tioplus-seasons.html')],
+  ];
+  const result = await run('tioplus', { routes });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === episodeUrl));
+
+  const missingUrl = 'https://tioplus.app/serie/contenido-demo/season/2/episode/4';
+  const missing = await run('tioplus', { routes, episode: 4 });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url === missingUrl));
+});
+
 test('SoloLatino: dataLink con enlace tipo JWT', async () => {
   const result = await run('sololatino', {
     mediaType: 'movie',
@@ -205,11 +222,219 @@ test('Doramasflix: GraphQL detail/listEpisodes/links_online', async () => {
   assertStream(result);
 });
 
+test('SeriesFlix: carga temporada 2, desenvuelve data-url y conserva LAT', async () => {
+  const seasonUrl = 'https://seriesflixhd.lol/serie/contenido-demo/temporada-2/';
+  const result = await run('seriesflix', {
+    routes: [
+      ['seriesflixhd.lol/?s=', card('/serie/contenido-demo')],
+      ['seriesflixhd.lol/episodio/contenido-demo-2x3', fixture('seriesflix-episode.html')],
+      [seasonUrl, fixture('seriesflix-season.html')],
+      ['seriesflixhd.lol/serie/contenido-demo', fixture('seriesflix-show.html')],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es-LAT');
+  assert.ok(result.calls.some((call) => call.url === seasonUrl));
+});
+
+test('VerPeliculasOnline: DooPlayer AJAX conserva ESP/LAT/SUB y omite el tráiler', async () => {
+  const ids = { 1: 'cast', 2: 'lat', 3: 'sub' };
+  const result = await run('verpeliculasonline', {
+    mediaType: 'movie',
+    routes: [
+      ['verpeliculasonline.net/?s=', fixture('verpeliculasonline-search.html')],
+      ['verpeliculasonline.net/pelicula/contenido-demo/', fixture('verpeliculasonline-movie.html')],
+      ['verpeliculasonline.net/wp-admin/admin-ajax.php', (url, init) => {
+        assert.equal(init.method, 'POST');
+        const number = init.body.match(/(?:^|&)nume=(\d+)/)?.[1];
+        assert.match(init.body, /action=doo_player_ajax/);
+        assert.match(init.body, /post=56924/);
+        return { embed_url: `https://voe.example/e/${ids[number]}` };
+      }],
+      ['https://voe.example/e/cast', fixture('voe-embed.html')],
+      ['https://voe.example/e/lat', fixture('player-hls.html')],
+      ['https://voe.example/e/sub', fixture('player-hls.html')],
+    ],
+  });
+  assertStream(result, 3);
+  assert.deepEqual(result.streams.map((stream) => stream.language), ['es-ES', 'es-LAT', 'es-SUB']);
+  assert.match(result.streams[0].url, /jfconahnwkyn_.*master\.m3u8\?/i);
+  assert.ok(result.streams.every((stream) => !/test-videos\.co\.uk|Big_Buck_Bunny/i.test(stream.url)));
+  assert.equal(result.calls.filter((call) => call.url.includes('/wp-admin/admin-ajax.php')).length, 3);
+  assert.ok(!result.calls.some((call) => call.init.body?.includes('nume=trailer')));
+});
+
+test('PelisForte: fixture sintético ToroFilm/r.php conserva idiomas y no devuelve embeds', async () => {
+  const byse = 'https://byseraguci.example/e/0albi51inneu/movie.mp4';
+  const nested = 'https://n1mwq.example/6vd4p/0albi51inneu';
+  const result = await run('pelisforte', {
+    mediaType: 'movie',
+    routes: [
+      ['www2.pelisforte.se/?s=', fixture('pelisforte-search.html')],
+      ['www2.pelisforte.se/pelicula/contenido-demo-2024-1711083273', fixture('pelisforte-movie.html')],
+      ['mp4.nu/r.php?h=TOKEN-LATINO', (url, init) => {
+        assert.match(init.headers.Referer, /mp4\.nu\/\?h=TOKEN-LATINO/);
+        return { __response: true, url: byse, body: '<!doctype html><title>Byse</title>' };
+      }],
+      [byse, `<!doctype html><iframe src="${nested}"></iframe>`],
+      [nested, fixture('player-hls.html')],
+    ],
+  });
+  assertStream(result, 2);
+  assert.deepEqual(result.streams.map((stream) => stream.language), ['es-LAT', 'es-SUB']);
+  assert.ok(result.calls.some((call) => call.url.includes('mp4.nu/r.php?h=TOKEN-LATINO')));
+  assert.ok(result.calls.some((call) => call.url === nested));
+  assert.ok(!result.streams.some((stream) => stream.url.includes('byseraguci')));
+  assert.ok(!result.calls.some((call) => call.url.includes('download.php')));
+});
+
+test('PelisForte: carga la temporada AJAX y nunca inventa un episodio ausente', async () => {
+  const routes = [
+    ['www2.pelisforte.se/?s=', fixture('pelisforte-search.html')],
+    ['www2.pelisforte.se/serie/contenido-demo-2024-1746483016', fixture('pelisforte-series.html')],
+    ['www2.pelisforte.se/wp-admin/admin-ajax.php', (url, init) => {
+      assert.equal(init.method, 'POST');
+      assert.match(init.body, /action=action_select_season/);
+      assert.match(init.body, /nonce=nonce-demo/);
+      assert.match(init.body, /season=1/);
+      assert.match(init.body, /post=28341/);
+      return fixture('pelisforte-season1.html');
+    }],
+    ['www2.pelisforte.se/episodio/contenido-demo-1x2', fixture('pelisforte-episode.html')],
+  ];
+  const result = await run('pelisforte', { season: 1, episode: 2, routes });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es-ES');
+  assert.ok(result.calls.some((call) => call.url.endsWith('/episodio/contenido-demo-1x2')));
+
+  const missing = await run('pelisforte', { season: 1, episode: 3, routes });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/contenido-demo-1x3')));
+});
+
+test('HDFull: search-route y contentUrl de la ficha, nunca el clip genérico del player', async () => {
+  const routes = [
+    ['hdfull.company/search-route', (url, init) => {
+      assert.equal(init.method, 'POST');
+      assert.deepEqual(JSON.parse(init.body), { host: 'hdfull.company', locale: 'es', searchTerm: 'Weapons' });
+      return { data: [{ type: 'movie', slug: 'weapons', title: 'Weapons', title_with_prefix: 'Weapons Película Completa', release_date: '2025-08-04' }] };
+    }],
+    ['hdfull.company/peliculas/weapons', fixture('hdfull-movie.html')],
+  ];
+  const metadata = { title: 'Weapons', original_title: 'Weapons', release_date: '2025-08-04' };
+  const result = await run('hdfull', { mediaType: 'movie', metadata, routes });
+  assertStream(result);
+  assert.equal(result.streams[0].url, 'https://hdfull.company/vod-movie/v1/weapons.mp4?d=7722&q=1080&title=Weapons');
+  assert.equal(result.streams[0].quality, '1080p');
+  assert.ok(!result.streams.some((stream) => /zss90\.pl|vod-video\.mp4/i.test(stream.url)));
+
+  const mismatched = await run('hdfull', {
+    mediaType: 'movie', metadata,
+    routes: [routes[0], ['hdfull.company/peliculas/weapons', fixture('hdfull-movie.html').replaceAll('/weapons.mp4?', '/otro-titulo.mp4?')]],
+  });
+  assert.deepEqual(mismatched.streams, []);
+});
+
+test('HDFull TV: no inventa una fuente de episodio ni devuelve el player publicitario', async () => {
+  const result = await run('hdfull', {
+    mediaType: 'tv', season: 2, episode: 3,
+    metadata: { name: 'Slow Horses', original_name: 'Slow Horses', first_air_date: '2022-04-01' },
+    routes: [['hdfull.company/search-route', { data: [{ type: 'serie', slug: 'slow-horses', title: 'Slow Horses', release_date: '2022-04-01' }] }]],
+  });
+  assert.deepEqual(result.streams, []);
+  assert.ok(!result.calls.some((call) => /temporada\/2\/episodio\/3|zss90\.pl|vod-video\.mp4/i.test(call.url)));
+});
+
+test('Danimados: S02E03 exacto, cuatro opciones AJAX y banderas latino', async () => {
+  const embeds = {
+    1: 'https://minochinos.com/embed/crvaxdrygaex',
+    2: 'https://bysedikamoum.com/e/54huk1933cpp',
+    3: 'https://voe.sx/e/wy5cn8e52mmd',
+    4: 'https://hglink.to/e/5p1x7p87m3j1',
+  };
+  const routes = [
+    ['danimados.cc/?s=', fixture('danimados-search.html')],
+    ['danimados.cc/series/contenido-demo/', fixture('danimados-show.html')],
+    ['danimados.cc/episodios/contenido-demo-2x3/', fixture('danimados-episode.html')],
+    ['danimados.cc/wp-admin/admin-ajax.php', (url, init) => {
+      assert.equal(init.method, 'POST');
+      assert.match(init.body, /action=doo_player_ajax/);
+      assert.match(init.body, /post=8165/);
+      assert.match(init.body, /type=tv/);
+      assert.match(init.headers.Referer, /contenido-demo-2x3/);
+      assert.equal(init.headers['X-Requested-With'], 'XMLHttpRequest');
+      return { embed_url: embeds[init.body.match(/(?:^|&)nume=(\d+)/)?.[1]] };
+    }],
+    ...Object.entries(embeds).filter(([number]) => number !== '3').map(([number, url]) => [url,
+      `<script>file:"https://cdn.example/video/danimados-${number}.m3u8"</script>`]),
+    [embeds[3], fixture('voe-embed.html')],
+  ];
+  const result = await run('danimados', { routes });
+  assertStream(result, 4);
+  assert.deepEqual(result.streams.map((stream) => stream.language), ['es-LAT', 'es-LAT', 'es-LAT', 'es-LAT']);
+  assert.equal(result.calls.filter((call) => call.url.includes('/wp-admin/admin-ajax.php')).length, 4);
+  assert.ok(result.streams.every((stream) => !Object.values(embeds).includes(stream.url)));
+  assert.ok(result.streams.every((stream) => !/test-videos\.co\.uk|Big_Buck_Bunny|\/descargar\//i.test(stream.url)));
+
+  const missing = await run('danimados', { routes, episode: 9 });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/contenido-demo-2x9')));
+  assert.ok(!missing.calls.some((call) => call.url.includes('/wp-admin/admin-ajax.php')));
+});
+
+function pelisgoPlayerRoutes() {
+  return [
+    ['https://magi.example/e/lat', '<script>file:"https://cdn.example/video/pelisgo-lat.m3u8"</script>'],
+    ['https://filemoon.example/e/cast', '<script>file:"https://cdn.example/video/pelisgo-cast.m3u8"</script>'],
+    ['https://voe.example/e/sub', '<script>file:"https://cdn.example/video/pelisgo-sub.m3u8"</script>'],
+  ];
+}
+
+test('PelisGo: objetos normales/RSC conservan LAT/ESP/SUB y excluyen descargas', async () => {
+  const result = await run('pelisgo', {
+    mediaType: 'movie',
+    routes: [
+      ['pelisgo.online/search?q=', card('/movies/contenido-demo')],
+      ['pelisgo.online/movies/contenido-demo', fixture('pelisgo-player.html')],
+      ...pelisgoPlayerRoutes(),
+    ],
+  });
+  assertStream(result, 3);
+  assert.deepEqual(result.streams.map((stream) => stream.language), ['es-LAT', 'es-ES', 'es-SUB']);
+  assert.deepEqual(result.streams.map((stream) => stream.quality), ['1080p', '720p', '720p']);
+  assert.ok(result.streams.every((stream) => !/magi\.example|filemoon\.example|voe\.example\/e\//i.test(stream.url)));
+  assert.ok(!result.calls.some((call) => /\/api\/download\/|pixeldrain/i.test(call.url)));
+});
+
+test('PelisGo TV: usa el slug encontrado y valida el episodio sin cambiar de temporada', async () => {
+  const episodeUrl = 'https://pelisgo.online/series/contenido-demo/temporada/2/episodio/3';
+  const routes = [
+    ['pelisgo.online/search?q=', card('/series/contenido-demo')],
+    [episodeUrl, fixture('pelisgo-player.html')],
+    ...pelisgoPlayerRoutes(),
+  ];
+  const result = await run('pelisgo', { routes });
+  assertStream(result, 3);
+  assert.ok(result.calls.some((call) => call.url === episodeUrl));
+  assert.ok(!result.calls.some((call) => call.url.includes('/api/source/')));
+
+  const missingUrl = 'https://pelisgo.online/series/contenido-demo/temporada/2/episodio/9';
+  const missing = await run('pelisgo', {
+    episode: 9,
+    routes: [
+      ['pelisgo.online/search?q=', card('/series/contenido-demo')],
+      [missingUrl, { __response: true, status: 404, body: '<title>404</title><h1>Escena no encontrada</h1>' }],
+    ],
+  });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(missing.calls.some((call) => call.url === missingUrl));
+  assert.ok(!missing.calls.some((call) => /temporada\/3\/episodio\/3|magi\.example|filemoon\.example/.test(call.url)));
+});
+
 const wordpressCases = [
   { id: 'cinecalidad', base: 'https://www.cinecalidad.am', search: '/?s=', show: '/ver-serie/contenido-demo', player: '<li data-option="https://sw.example/e/demo" data-nume="1"></li>' },
   { id: 'cine24h', base: 'https://cine24h.online', search: '/?s=', show: '/series/contenido-demo', player: '<li data-src="aHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbw==" data-nume="1"></li>' },
   { id: 'pelisflixhd', base: 'https://pelisflixhd.win', search: '/busqueda/', show: '/serie/contenido-demo', player: fixture('base64-player.html') },
-  { id: 'seriesflix', base: 'https://seriesflixhd.lol', search: '/?s=', show: '/serie/contenido-demo', player: '<li data-url="aHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbw==" data-nume="1"></li>' },
   { id: 'seriesturcas', base: 'https://tbg.seriesturcastv.to', search: '/?s=', show: '/series/contenido-demo', player: '<div class="dl-contenti"><a href="https://streamwish.example/e/demo">StreamWish</a></div>' },
   { id: 'flixlatam', base: 'https://flixlatam.com', search: '/search?s=', show: '/serie/contenido-demo', player: fixture('datalink-player.html') },
 ];

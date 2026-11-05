@@ -71,6 +71,17 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "danimados",
+      "name": "Danimados",
+      "description": "Solo series animadas: episodio exacto, DooPlayer por admin-ajax y latino/castellano/subtitulado.",
+      "version": "1.0.0",
+      "filename": "providers/danimados.js",
+      "supportedTypes": ["tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
       "id": "doramasflix",
       "name": "Doramasflix",
       "description": "Doramas y películas asiáticas con audio o subtítulos en español.",
@@ -104,6 +115,17 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "hdfull",
+      "name": "HDFull",
+      "description": "Solo películas: search-route y contentUrl específico de la ficha; TV y clip publicitario excluidos.",
+      "version": "1.0.0",
+      "filename": "providers/hdfull.js",
+      "supportedTypes": ["movie"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["mp4"]
+    },
+    {
       "id": "jkanime",
       "name": "JKAnime",
       "description": "Anime y películas; AJAX de episodios y servidores codificados.",
@@ -131,6 +153,28 @@
       "description": "Anime con enlaces data-player codificados en Base64.",
       "version": "1.0.0",
       "filename": "providers/latanime.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "pelisforte",
+      "name": "PelisForte",
+      "description": "Películas y series ToroFilm; episodios exactos. Byse/n1mwq con attestation no resuelto.",
+      "version": "1.0.0",
+      "filename": "providers/pelisforte.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "pelisgo",
+      "name": "PelisGo",
+      "description": "Películas y TV: episodio exacto y servidores HTML/RSC; descargas y Pixeldrain excluidos.",
+      "version": "1.0.0",
+      "filename": "providers/pelisgo.js",
       "supportedTypes": ["movie", "tv"],
       "enabled": true,
       "contentLanguage": ["es"],
@@ -209,6 +253,17 @@
       "version": "1.0.0",
       "filename": "providers/tioplus.js",
       "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "verpeliculasonline",
+      "name": "VerPeliculasOnline",
+      "description": "Películas; DooPlayer AJAX por idioma y Voe F7 con HLS firmado, sin descargas.",
+      "version": "1.0.0",
+      "filename": "providers/verpeliculasonline.js",
+      "supportedTypes": ["movie"],
       "enabled": true,
       "contentLanguage": ["es"],
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]

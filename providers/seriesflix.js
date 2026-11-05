@@ -249,9 +249,8 @@ function attributes(tag) {
   while (match = regex.exec(String(tag || ""))) result[match[1].toLowerCase()] = decodeHtml(match[3]);
   return result;
 }
-function tags(html, tagName) {
-  const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return String(html || "").match(new RegExp(`<${escaped}\\b[^>]*>`, "gi")) || [];
+function attribute(tag, name) {
+  return attributes(tag)[String(name || "").toLowerCase()] || "";
 }
 function extractBalanced(source, marker, opening = "[", closing = "]") {
   const text = String(source || "");
@@ -365,6 +364,9 @@ function mediaKind(url, explicit) {
 }
 function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ""))) return false;
+  if (/^https?:\/\/(?:[^/@]+\.)?test-videos\.co\.uk(?::\d+)?\//i.test(url)) return false;
+  if (/^https?:\/\/cdn\.zss90\.pl\/vod-video\.mp4(?:$|[?#])/i.test(url)) return false;
+  if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\.mpd(?:$|[?#])/i.test(url)) return false;
   return /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i.test(url) || /\/m3u8\/|\/get_video\?|\/videoplayback(?:\?|$)|\/manifest\.m3u8/i.test(url);
 }
@@ -381,9 +383,9 @@ function qualityOf(...values) {
 function languageOf(value, fallback = "es") {
   const text = String(value || "").toLowerCase();
   if (/\b(lat|latino|dub|doblaje|es-mx|es-la)\b/.test(text)) return "es-LAT";
-  if (/\b(cast|castellano|esp|spanish|es-es)\b/.test(text)) return "es-ES";
-  if (/\b(sub|subtitulado|vose|sub espanol)\b/.test(text)) return "es-SUB";
-  if (/\b(eng|english|en)\b/.test(text)) return "en";
+  if (/\b(cast|castellano|esp|spanish|español|espanol|es-es)\b/.test(text)) return "es-ES";
+  if (/\b(sub|subtitulad[oa]|subt[ií]tulos?|vose|sub espanol)\b/.test(text)) return "es-SUB";
+  if (/\b(eng|english|ingl[eé]s|ingles|en)\b/.test(text)) return "en";
   return fallback;
 }
 function makeStream(provider, url, options = {}) {
@@ -470,26 +472,6 @@ function cardsFromAnchors(html, base, options = {}) {
   }
   return output;
 }
-function playerOptions(html, base) {
-  return tags(html, "li").map((tag) => {
-    const attrs = attributes(tag);
-    const nume = attrs["data-nume"];
-    const post = attrs["data-post"];
-    const type = attrs["data-type"];
-    const option = attrs["data-option"];
-    const server = attrs["data-server"] || attrs["data-src"] || attrs["data-url"];
-    const url = absoluteUrl(option || "", base);
-    if (!nume && !url && !server) return null;
-    return {
-      number: Number(nume) || 1,
-      postId: post || "",
-      type: type || "movie",
-      url,
-      server,
-      raw: tag
-    };
-  }).filter(Boolean);
-}
 function episodeLinks(html, base, season, episode) {
   const wanted = [];
   for (const anchor of anchors(html)) {
@@ -506,10 +488,13 @@ function episodeLinks(html, base, season, episode) {
 }
 
 // src/core/base64.js
-function decodeBase64(value) {
+function decodeBase64Binary(value) {
   let input = String(value || "").trim().replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
   while (input.length % 4) input += "=";
-  const binary = atob(input);
+  return atob(input);
+}
+function decodeBase64(value) {
+  const binary = decodeBase64Binary(value);
   if (typeof TextDecoder !== "undefined") {
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
@@ -632,17 +617,53 @@ function mixdropUrl(html, base) {
   const value = match[1];
   return cleanMediaUrl(value.startsWith("//") ? `https:${value}` : value.startsWith("http") ? value : `https://${value}`, base);
 }
+function rot13(value) {
+  return value.replace(/[a-z]/gi, (char) => {
+    const base = char <= "Z" ? 65 : 97;
+    return String.fromCharCode((char.charCodeAt(0) - base + 13) % 26 + base);
+  });
+}
+function decodeVoeConfig(encoded) {
+  try {
+    let value = rot13(encoded);
+    for (const pattern of ["@$", "^^", "~@", "%?", "*~", "!!", "#&"]) value = value.split(pattern).join("_");
+    value = value.replace(/_/g, "");
+    const binary = decodeBase64Binary(value);
+    const shifted = Array.from(binary, (char) => String.fromCharCode(char.charCodeAt(0) - 3)).reverse().join("");
+    const config = JSON.parse(decodeBase64(shifted));
+    return config && typeof config === "object" ? config : null;
+  } catch (_) {
+    return null;
+  }
+}
 function voeUrls(html) {
+  const text = String(html || "");
+  const scripts = text.matchAll(/<script\b(?=[^>]*\btype\s*=\s*["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/gi);
+  for (const script of scripts) {
+    const raw = script[1].trim();
+    let encoded = "";
+    try {
+      const wrapper = JSON.parse(raw);
+      if (Array.isArray(wrapper) && typeof wrapper[0] === "string") encoded = wrapper[0];
+    } catch (_) {
+    }
+    if (!encoded) encoded = raw.match(/^\[\s*"([^"]+)"\s*\]$/)?.[1] || "";
+    const config = encoded ? decodeVoeConfig(encoded) : null;
+    if (!config) continue;
+    if (isPlayableUrl(config.source)) return [config.source];
+    const fallback = (Array.isArray(config.fallback) ? config.fallback : []).map((item) => item?.file).filter((url) => isPlayableUrl(url));
+    if (fallback.length) return unique(fallback);
+  }
   const output = [];
-  const candidates = [...String(html || "").matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
+  const candidates = [...text.matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
   for (const match of candidates) {
-    if (/\.m3u8/i.test(match[1])) output.push(match[1]);
+    if (/\.m3u8/i.test(match[1]) && isPlayableUrl(match[1])) output.push(match[1]);
     else if (/^[a-zA-Z0-9+/=_-]{40,}$/.test(match[1])) {
       const decoded = decodeBase64Url(match[1]);
-      if (decoded.includes(".m3u8")) output.push(decoded);
+      if (decoded.includes(".m3u8") && isPlayableUrl(decoded)) output.push(decoded);
     }
   }
-  return output;
+  return unique(output);
 }
 function dataLinkCandidates(html, base) {
   const output = [];
@@ -740,8 +761,9 @@ async function resolveOne(candidate, context, depth) {
   const html = response.text;
   const pageUrl = response.url || candidate.url;
   const direct = unique([
-    ...directMediaInHtml(html, pageUrl),
+    // El JSON autenticado de Voe tiene prioridad sobre MP4 de muestra incrustados en su página.
     ...voeUrls(html),
+    ...directMediaInHtml(html, pageUrl),
     streamtapeUrl(html, pageUrl),
     mixdropUrl(html, pageUrl)
   ].filter(Boolean));
@@ -758,7 +780,7 @@ async function resolveOne(candidate, context, depth) {
     const nested = await resolveCandidates(nestedServers, { ...context, referer: pageUrl }, depth + 1);
     if (nested.length) return nested.map((item) => ({ ...item, language: item.language || candidate.language }));
   }
-  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1];
+  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1] || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : "");
   const next = absoluteUrl(iframe || "", pageUrl);
   if (next && next !== candidate.url && depth < 2) {
     return resolveOne({ ...candidate, url: next, referer: pageUrl }, context, depth + 1);
@@ -788,17 +810,68 @@ async function search(query) {
   const page = await fetchText(withQuery(`${BASE}/`, { s: query }), { referer: `${BASE}/` });
   return cardsFromAnchors(page.text, page.url, { mediaType: "tv", path: /\/serie\//i });
 }
+function seasonLink(html, base, season) {
+  const links = anchors(html).filter((anchor) => /\/temporada(?:\/|-)/i.test(anchor.href));
+  if (!links.length) return { url: base, hasSeasonPages: false };
+  const match = links.find((anchor) => {
+    const fromText = anchor.raw.replace(/<[^>]+>/g, " ").match(/temporada\s*(\d+)/i)?.[1];
+    const fromUrl = anchor.href.match(/-(\d+)\/?(?:[?#].*)?$/i)?.[1];
+    return Number(fromText || fromUrl) === Number(season);
+  });
+  return { url: match ? absoluteUrl(match.href, base) : "", hasSeasonPages: true };
+}
+function findEpisode(html, base, season, episode) {
+  const paired = episodeLinks(html, base, season, episode);
+  if (paired) return paired.url;
+  const rows = String(html || "").match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || [];
+  for (const row of rows) {
+    const href = row.match(/<a\b[^>]*href\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!href || !/\/episodio\//i.test(href)) continue;
+    const pair = row.match(/(\d+)\s*[x×-]\s*(\d+)/i);
+    const number = row.match(/class\s*=\s*["'][^"']*Num[^"']*["'][^>]*>\s*(\d+)/i)?.[1] || row.match(/(?:episodio|cap[ií]tulo)\s*(\d+)/i)?.[1];
+    if (pair && Number(pair[1]) === Number(season) && Number(pair[2]) === Number(episode) || !pair && Number(number) === Number(episode)) return absoluteUrl(href, base);
+  }
+  return "";
+}
+function unwrapServerUrl(value) {
+  const decoded = decodeHtml(value);
+  const inner = decoded.match(/[?&]url=([^&]+)/i)?.[1];
+  if (!inner) return decoded;
+  try {
+    const url = decodeURIComponent(inner);
+    return /^https?:\/\//i.test(url) ? url : decoded;
+  } catch (_) {
+    return decoded;
+  }
+}
+function serverCandidates(html, base) {
+  const groups = String(html || "").split(/<div\b(?=[^>]*class\s*=\s*["'][^"']*drpdn)[^>]*>/i).slice(1);
+  const candidates = [];
+  for (const group of groups.length ? groups : [String(html || "")]) {
+    const language = stripTags(group.match(/<button\b(?=[^>]*class\s*=\s*["'][^"']*bstd)[^>]*>([\s\S]*?)<\/button>/i)?.[1] || "") || "es";
+    const tags2 = group.match(/<(?:a|button|li)\b[^>]*data-url\s*=\s*["'][^"']+["'][^>]*>/gi) || [];
+    tags2.forEach((tag, index) => {
+      const decoded = decodeBase64Url(attribute(tag, "data-url"));
+      if (!decoded) return;
+      const url = absoluteUrl(unwrapServerUrl(decoded), base);
+      if (!url) return;
+      candidates.push({ url, language, server: `${hostName(url)} ${index + 1}`, referer: base });
+    });
+  }
+  return unique(candidates, (item) => item.url);
+}
 async function streams(match, media) {
   const show = await fetchText(match.url, { referer: `${BASE}/` });
-  const episode = episodeLinks(show.text, show.url, media.season, media.episode);
-  if (!episode) return [];
-  const page = await fetchText(episode.url, { referer: show.url });
-  const candidates = playerOptions(page.text, page.url).map((item) => ({
-    url: item.url || decodeBase64Url(item.server),
-    language: "es",
-    server: `Opci\xF3n ${item.number}`,
+  const season = seasonLink(show.text, show.url, media.season);
+  if (!season.url) return [];
+  const seasonPage = season.hasSeasonPages ? await fetchText(season.url, { referer: show.url }) : show;
+  const episodeUrl = findEpisode(seasonPage.text, seasonPage.url, media.season, media.episode);
+  if (!episodeUrl) return [];
+  const page = await fetchText(episodeUrl, { referer: seasonPage.url });
+  return resolveCandidates(serverCandidates(page.text, page.url), {
+    provider: "SeriesFlix",
+    providerId: "seriesflix",
     referer: page.url
-  })).filter((item) => item.url);
-  return resolveCandidates(candidates, { provider: "SeriesFlix", providerId: "seriesflix", referer: page.url });
+  });
 }
 module.exports = { getStreams: createSiteProvider({ name: "SeriesFlix", search, streams }) };

@@ -1,6 +1,6 @@
 import { fetchJson, fetchText, mapLimit, origin, requestHeaders, USER_AGENT } from './http.js';
 import { absoluteUrl, anchors, decodeHtml, extractBalanced, hostName, unique } from './text.js';
-import { decodeBase64Url, decodeTokenLink } from './base64.js';
+import { decodeBase64, decodeBase64Binary, decodeBase64Url, decodeTokenLink } from './base64.js';
 import { isPlayableUrl, makeStream } from './streams.js';
 
 function decodeJsString(value) {
@@ -100,18 +100,59 @@ function mixdropUrl(html, base) {
   return cleanMediaUrl(value.startsWith('//') ? `https:${value}` : value.startsWith('http') ? value : `https://${value}`, base);
 }
 
-function voeUrls(html) {
+function rot13(value) {
+  return value.replace(/[a-z]/gi, (char) => {
+    const base = char <= 'Z' ? 65 : 97;
+    return String.fromCharCode((char.charCodeAt(0) - base + 13) % 26 + base);
+  });
+}
+
+function decodeVoeConfig(encoded) {
+  try {
+    let value = rot13(encoded);
+    // Marcadores del payload F7 actual de Voe; no se ejecuta ningún script del hoster.
+    for (const pattern of ['@$', '^^', '~@', '%?', '*~', '!!', '#&']) value = value.split(pattern).join('_');
+    value = value.replace(/_/g, '');
+    const binary = decodeBase64Binary(value);
+    const shifted = Array.from(binary, (char) => String.fromCharCode(char.charCodeAt(0) - 3)).reverse().join('');
+    const config = JSON.parse(decodeBase64(shifted));
+    return config && typeof config === 'object' ? config : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function voeUrls(html) {
+  const text = String(html || '');
+  const scripts = text.matchAll(/<script\b(?=[^>]*\btype\s*=\s*["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/gi);
+  for (const script of scripts) {
+    const raw = script[1].trim();
+    let encoded = '';
+    try {
+      const wrapper = JSON.parse(raw);
+      if (Array.isArray(wrapper) && typeof wrapper[0] === 'string') encoded = wrapper[0];
+    } catch (_) { /* se prueba el envoltorio mínimo abajo */ }
+    if (!encoded) encoded = raw.match(/^\[\s*"([^"]+)"\s*\]$/)?.[1] || '';
+    const config = encoded ? decodeVoeConfig(encoded) : null;
+    if (!config) continue;
+    // direct_access_url es una descarga (/download/, d=1), no un stream del pack.
+    if (isPlayableUrl(config.source)) return [config.source];
+    const fallback = (Array.isArray(config.fallback) ? config.fallback : [])
+      .map((item) => item?.file).filter((url) => isPlayableUrl(url));
+    if (fallback.length) return unique(fallback);
+  }
+
   const output = [];
-  // VOE ha usado tanto fuentes directas como cadenas base64 en distintos despliegues.
-  const candidates = [...String(html || '').matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
+  // Compatibilidad con despliegues antiguos de Voe con HLS directo o Base64.
+  const candidates = [...text.matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
   for (const match of candidates) {
-    if (/\.m3u8/i.test(match[1])) output.push(match[1]);
+    if (/\.m3u8/i.test(match[1]) && isPlayableUrl(match[1])) output.push(match[1]);
     else if (/^[a-zA-Z0-9+/=_-]{40,}$/.test(match[1])) {
       const decoded = decodeBase64Url(match[1]);
-      if (decoded.includes('.m3u8')) output.push(decoded);
+      if (decoded.includes('.m3u8') && isPlayableUrl(decoded)) output.push(decoded);
     }
   }
-  return output;
+  return unique(output);
 }
 
 export function dataLinkCandidates(html, base) {
@@ -215,8 +256,9 @@ async function resolveOne(candidate, context, depth) {
   const html = response.text;
   const pageUrl = response.url || candidate.url;
   const direct = unique([
-    ...directMediaInHtml(html, pageUrl),
+    // El JSON autenticado de Voe tiene prioridad sobre MP4 de muestra incrustados en su página.
     ...voeUrls(html),
+    ...directMediaInHtml(html, pageUrl),
     streamtapeUrl(html, pageUrl),
     mixdropUrl(html, pageUrl),
   ].filter(Boolean));
@@ -241,7 +283,9 @@ async function resolveOne(candidate, context, depth) {
   // Seguir únicamente iframes de vídeo, no enlaces publicitarios ni páginas HTML como streams.
   const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1]
     || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1]
-    || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1];
+    || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1]
+    || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1]
+    || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : '');
   const next = absoluteUrl(iframe || '', pageUrl);
   if (next && next !== candidate.url && depth < 2) {
     return resolveOne({ ...candidate, url: next, referer: pageUrl }, context, depth + 1);

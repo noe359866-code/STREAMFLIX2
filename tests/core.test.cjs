@@ -30,13 +30,25 @@ test('decodifica Base64URL y el payload de enlaces tipo JWT', () => {
   assert.equal(base64.decodeTokenLink('eyJhbGciOiJub25lIn0.eyJsaW5rIjoiaHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbyJ9.signature'), 'https://sw.example/e/demo');
 });
 
-test('extrae HLS y descarta páginas embed, DASH y javascript:', () => {
+test('extrae HLS y descarta páginas embed, DASH, clip genérico y javascript:', () => {
   const found = extractors.directMediaInHtml(fixture('player-hls.html'), 'https://player.example/e/demo');
   assert.deepEqual(found, ['https://cdn.example/video/playlist.m3u8']);
   assert.equal(streams.isPlayableUrl('https://sw.example/e/demo'), false);
+  assert.equal(streams.isPlayableUrl('https://cdn.zss90.pl/vod-video.mp4'), false);
   assert.equal(streams.isPlayableUrl('https://cdn.example/video/manifest.mpd'), false);
   assert.equal(streams.isPlayableUrl('javascript:alert(1)'), false);
   assert.equal(streams.mediaKind('https://cdn.example/video.m3u8'), 'hls');
+});
+
+test('Voe F7 recupera el HLS del título y rechaza el MP4 Big Buck Bunny de muestra', () => {
+  const source = fixture('voe-embed.html');
+  const decoy = 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/av1/1080/Big_Buck_Bunny_1080_10s_5MB.mp4';
+  const found = extractors.voeUrls(source);
+  assert.equal(found.length, 1);
+  assert.match(found[0], /jfconahnwkyn_.*master\.m3u8\?/i);
+  assert.ok(!found[0].includes('/download/'));
+  assert.equal(streams.isPlayableUrl(decoy), false);
+  assert.deepEqual(extractors.directMediaInHtml(source, 'https://voe.example/e/cast'), []);
 });
 
 test('resuelve dataLink y omite servidores de descarga', () => {
