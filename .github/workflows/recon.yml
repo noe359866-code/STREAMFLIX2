@@ -1,0 +1,37 @@
+name: Temporary site reconnaissance
+
+on:
+  push:
+    branches: [arena/e6074aa1-streamflix2]
+    paths:
+      - .github/workflows/recon.yml
+      - scripts/site-recon.cjs
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: arena/e6074aa1-streamflix2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Inspect public pages without executing scripts
+        run: node scripts/site-recon.cjs
+      - name: Return diagnostic text to the working branch
+        run: |
+          git config user.name "arena-recon[bot]"
+          git config user.email "arena-recon[bot]@users.noreply.github.com"
+          git add recon
+          if git diff --cached --quiet; then
+            echo "No diagnostic changes"
+            exit 0
+          fi
+          git commit -m "Collect temporary site diagnostics [skip ci]"
+          git push origin arena/e6074aa1-streamflix2
