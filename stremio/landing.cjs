@@ -47,22 +47,12 @@ function renderConfigurePage(options = {}) {
   const env = options.env || process.env;
   const userConfig = options.userConfig || {};
   const baseUrl = String(options.baseUrl || '').replace(/\/+$/, '');
-
-  const serverState = {
-    hasServerTmdbKey: Boolean(env.TMDB_API_KEY),
-    hasServerProxyUrl: Boolean(env.NGINX_PROXY_URL),
-    hasServerProxyToken: Boolean(env.NGINX_PROXY_TOKEN),
-    defaultProxyMode: env.DEFAULT_PROXY_MODE || 'direct',
-  };
+  const hasServerTmdbKey = Boolean(env.TMDB_API_KEY);
 
   // Nunca serializar secretos del servidor en el HTML público; solo reflejar lo que vino en /:config/configure
   const initialClientConfig = {
     providers: Array.isArray(userConfig.providers) ? userConfig.providers : ACTIVE_IDS,
     lang: userConfig.lang || 'all',
-    proxyMode: userConfig.proxyMode || serverState.defaultProxyMode || 'direct',
-    proxyAll: Boolean(userConfig.proxyAll),
-    proxyUrl: userConfig.proxyUrl || '',
-    proxyToken: userConfig.proxyToken || '',
     tmdbKey: userConfig.tmdbKey || '',
     timeoutSec: Number(userConfig.timeoutSec) || 10,
   };
@@ -172,9 +162,7 @@ function renderConfigurePage(options = {}) {
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 14px;
     }
-    label.field {
-      display: block;
-    }
+    label.field { display: block; }
     label.field span.lbl {
       display: block;
       font-size: 0.84rem;
@@ -182,7 +170,7 @@ function renderConfigurePage(options = {}) {
       margin-bottom: 6px;
       color: #dbe3ff;
     }
-    input[type="text"], input[type="url"], input[type="password"], input[type="number"], select {
+    input[type="text"], input[type="password"], input[type="number"], select {
       width: 100%;
       background: var(--panel-2);
       color: var(--text);
@@ -192,51 +180,7 @@ function renderConfigurePage(options = {}) {
       font-size: 0.92rem;
       outline: none;
     }
-    input:focus, select:focus {
-      border-color: var(--accent);
-    }
-    .mode-cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-    .mode-card {
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px 14px;
-      cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
-    }
-    .mode-card.active {
-      border-color: var(--accent);
-      background: rgba(255, 77, 90, 0.11);
-    }
-    .mode-card input { margin-right: 6px; }
-    .mode-card strong { font-size: 0.92rem; }
-    .mode-card small {
-      display: block;
-      color: var(--muted);
-      margin-top: 4px;
-      font-size: 0.8rem;
-    }
-    .nginx-box {
-      padding: 14px;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px dashed rgba(255, 255, 255, 0.14);
-      margin-top: 10px;
-    }
-    .check-inline {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 12px;
-      font-size: 0.88rem;
-      color: #dbe3ff;
-      cursor: pointer;
-    }
+    input:focus, select:focus { border-color: var(--accent); }
     .toolbar {
       display: flex;
       gap: 8px;
@@ -270,9 +214,7 @@ function renderConfigurePage(options = {}) {
       cursor: pointer;
       user-select: none;
     }
-    .prov-item.checked {
-      border-color: rgba(255, 77, 90, 0.5);
-    }
+    .prov-item.checked { border-color: rgba(255, 77, 90, 0.5); }
     .prov-item input { margin-top: 3px; accent-color: var(--accent); }
     .prov-meta { min-width: 0; flex: 1; }
     .prov-name {
@@ -283,15 +225,8 @@ function renderConfigurePage(options = {}) {
       justify-content: space-between;
       gap: 6px;
     }
-    .prov-cat {
-      font-size: 0.7rem;
-      color: var(--muted);
-    }
-    .prov-types {
-      font-size: 0.68rem;
-      color: #ffb088;
-      white-space: nowrap;
-    }
+    .prov-cat { font-size: 0.7rem; color: var(--muted); }
+    .prov-types { font-size: 0.68rem; color: #ffb088; white-space: nowrap; }
     .install-bar {
       position: sticky;
       bottom: 14px;
@@ -357,61 +292,18 @@ function renderConfigurePage(options = {}) {
         <h1>${escapeHtml(ADDON_NAME)}</h1>
         <div class="badges">
           <span class="badge">v${escapeHtml(ADDON_VERSION)}</span>
-          <span class="badge ok">Beamup + Nginx Ready</span>
+          <span class="badge ok">Beamup Ready</span>
           <span class="badge">24 proveedores activos</span>
           <span class="badge">IMDb (tt…) + TMDB</span>
-          ${serverState.hasServerTmdbKey ? '<span class="badge ok">TMDB configurada en servidor</span>' : '<span class="badge">Fallback Cinemeta activo</span>'}
-          ${serverState.hasServerProxyUrl ? '<span class="badge ok">Nginx externo preconfigurado</span>' : ''}
+          ${hasServerTmdbKey ? '<span class="badge ok">TMDB configurada en servidor</span>' : '<span class="badge">Fallback Cinemeta activo</span>'}
         </div>
       </div>
     </header>
 
     <section class="card">
-      <h2>1. Cabeceras HTTP y Proxy Nginx externo</h2>
+      <h2>1. Idioma, Metadatos TMDB y Tiempos</h2>
       <p class="hint">
-        Por defecto se envían <code>behaviorHints.proxyHeaders</code> para no consumir ancho de banda en Beamup.
-        Si usas Stremio Web, iOS o Smart TV y tienes tu Nginx externo desplegado, activa el modo Proxy Nginx o Dual.
-      </p>
-      <div class="mode-cards" id="modeCards">
-        <label class="mode-card" data-mode="direct">
-          <input type="radio" name="proxyMode" value="direct">
-          <strong>Directo (proxyHeaders)</strong>
-          <small>Recomendado para PC/Android. Cero tráfico de vídeo por el servidor.</small>
-        </label>
-        <label class="mode-card" data-mode="nginx">
-          <input type="radio" name="proxyMode" value="nginx">
-          <strong>Proxy Nginx externo</strong>
-          <small>Reescribe streams con Referer hacia <code>/hlsp/…</code> en tu Nginx externo.</small>
-        </label>
-        <label class="mode-card" data-mode="both">
-          <input type="radio" name="proxyMode" value="both">
-          <strong>Dual (Directo + Nginx)</strong>
-          <small>Entrega el enlace directo y debajo una opción <code>[Proxy Nginx]</code> para Web/TV.</small>
-        </label>
-      </div>
-
-      <div class="nginx-box" id="nginxBox">
-        <div class="grid-2">
-          <label class="field">
-            <span class="lbl">URL base de tu servidor Nginx externo</span>
-            <input type="url" id="proxyUrl" placeholder="${serverState.hasServerProxyUrl ? '✓ Configurada en el servidor (opcional sobrescribir)' : 'https://proxy.tudominio.com'}">
-          </label>
-          <label class="field">
-            <span class="lbl">Token del proxy Nginx (opcional, <code>NGINX_PROXY_TOKEN</code>)</span>
-            <input type="password" id="proxyToken" autocomplete="off" placeholder="${serverState.hasServerProxyToken ? '✓ Token configurado en servidor' : 'Sin token público o escribe tu clave'}">
-          </label>
-        </div>
-        <label class="check-inline">
-          <input type="checkbox" id="proxyAll">
-          <span>Proxificar todos los streams por Nginx (incluso MP4 HTTPS que no piden Referer)</span>
-        </label>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>2. Idioma, Metadatos TMDB y Tiempos</h2>
-      <p class="hint">
-        Los IDs de IMDb (<code>tt…</code>) funcionan sin clave usando Cinemeta automáticamente. Añadir una clave TMDB v3 mejora la coincidencia con títulos localizados en español (<code>es-MX</code>) y habilita IDs <code>tmdb:…</code>.
+        Los IDs de IMDb (<code>tt…</code>) funcionan sin clave usando Cinemeta automáticamente, y las cabeceras de stream se entregan con <code>behaviorHints.proxyHeaders</code>. Añadir una clave TMDB v3 mejora la coincidencia con títulos localizados en español (<code>es-MX</code>) y habilita IDs <code>tmdb:…</code>.
       </p>
       <div class="grid-2">
         <label class="field">
@@ -431,13 +323,13 @@ function renderConfigurePage(options = {}) {
         </label>
         <label class="field" style="grid-column: 1 / -1;">
           <span class="lbl">Clave API de TMDB v3 (opcional)</span>
-          <input type="password" id="tmdbKey" autocomplete="off" placeholder="${serverState.hasServerTmdbKey ? '✓ TMDB_API_KEY activa en el servidor (deja vacío para usarla)' : 'Opcional · p. ej. a1b2c3d4e5f6...'}">
+          <input type="password" id="tmdbKey" autocomplete="off" placeholder="${hasServerTmdbKey ? '✓ TMDB_API_KEY activa en el servidor (deja vacío para usarla)' : 'Opcional · p. ej. a1b2c3d4e5f6...'}">
         </label>
       </div>
     </section>
 
     <section class="card">
-      <h2>3. Proveedores activos (<span id="selectedCount">24</span> / ${ACTIVE_SCRAPERS.length})</h2>
+      <h2>2. Proveedores activos (<span id="selectedCount">24</span> / ${ACTIVE_SCRAPERS.length})</h2>
       <p class="hint">Selecciona qué conectores consultar en cada búsqueda.</p>
       <div class="toolbar">
         <button type="button" class="btn-chip" data-filter="all">Todos (${ACTIVE_SCRAPERS.length})</button>
@@ -482,9 +374,6 @@ function renderConfigurePage(options = {}) {
       const langEl = document.getElementById('lang');
       const timeoutEl = document.getElementById('timeoutSec');
       const tmdbEl = document.getElementById('tmdbKey');
-      const proxyUrlEl = document.getElementById('proxyUrl');
-      const proxyTokenEl = document.getElementById('proxyToken');
-      const proxyAllEl = document.getElementById('proxyAll');
 
       const selected = new Set(INITIAL.providers && INITIAL.providers.length ? INITIAL.providers : ALL_IDS);
 
@@ -522,30 +411,11 @@ function renderConfigurePage(options = {}) {
         });
       }
 
-      function currentMode() {
-        const checked = document.querySelector('input[name="proxyMode"]:checked');
-        return checked ? checked.value : 'direct';
-      }
-
-      function syncModeCards() {
-        const mode = currentMode();
-        document.querySelectorAll('.mode-card').forEach((card) => {
-          card.classList.toggle('active', card.dataset.mode === mode);
-        });
-      }
-
       function buildEncodedSegment() {
         const payload = {};
         const list = ALL_IDS.filter((id) => selected.has(id));
         if (list.length !== ALL_IDS.length) payload.p = list;
         if (langEl.value !== 'all') payload.l = langEl.value;
-        const mode = currentMode();
-        if (mode !== 'direct') payload.m = mode;
-        if (proxyAllEl.checked) payload.a = 1;
-        const cleanUrl = proxyUrlEl.value.trim().replace(/\\/+$/, '').replace(/\\/hlsp(?:\\/.*)?$/i, '');
-        if (cleanUrl) payload.u = cleanUrl;
-        const cleanToken = proxyTokenEl.value.trim().replace(/[^A-Za-z0-9._~-]/g, '');
-        if (cleanToken) payload.k = cleanToken;
         const cleanTmdb = tmdbEl.value.trim();
         if (cleanTmdb) payload.t = cleanTmdb;
         const tSec = Math.max(4, Math.min(25, Math.round(Number(timeoutEl.value) || 10)));
@@ -557,7 +427,6 @@ function renderConfigurePage(options = {}) {
 
       function updateUrls() {
         countEl.textContent = String(selected.size);
-        syncModeCards();
         const originBase = (window.location && window.location.origin && window.location.origin !== 'null')
           ? window.location.origin
           : SERVER_BASE;
@@ -569,19 +438,11 @@ function renderConfigurePage(options = {}) {
         installWebBtn.href = 'https://web.stremio.com/#/addons?addon=' + encodeURIComponent(manifestUrl);
       }
 
-      // Inicializar valores
       langEl.value = INITIAL.lang || 'all';
       timeoutEl.value = String(INITIAL.timeoutSec || 10);
       tmdbEl.value = INITIAL.tmdbKey || '';
-      proxyUrlEl.value = INITIAL.proxyUrl || '';
-      proxyTokenEl.value = INITIAL.proxyToken || '';
-      proxyAllEl.checked = Boolean(INITIAL.proxyAll);
-      const radio = document.querySelector('input[name="proxyMode"][value="' + (INITIAL.proxyMode || 'direct') + '"]')
-        || document.querySelector('input[name="proxyMode"][value="direct"]');
-      if (radio) radio.checked = true;
 
-      document.querySelectorAll('input[name="proxyMode"]').forEach((el) => el.addEventListener('change', updateUrls));
-      [langEl, timeoutEl, tmdbEl, proxyUrlEl, proxyTokenEl, proxyAllEl].forEach((el) => {
+      [langEl, timeoutEl, tmdbEl].forEach((el) => {
         el.addEventListener('input', updateUrls);
         el.addEventListener('change', updateUrls);
       });

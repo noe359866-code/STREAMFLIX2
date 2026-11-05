@@ -13,7 +13,6 @@ USER_LOWER="$(printf '%s' "$GITHUB_USER" | tr '[:upper:]' '[:lower:]')"
 USER_HASH="$(printf '%s\n' "$USER_LOWER" | shasum -a 256 | cut -c1-12)"
 REMOTE_SPEC="dokku@${BEAMUP_HOST}:${USER_HASH}/${PROJECT_NAME}"
 
-# Dominio base público de Beamup (p. ej. a.baby-beamup.club -> baby-beamup.club)
 BASE_DOMAIN="$(printf '%s' "$BEAMUP_HOST" | awk -F. '{if (NF>=3) print $(NF-1)"."$NF; else print $0}')"
 PUBLIC_HOST="${USER_HASH}-${PROJECT_NAME}.${BASE_DOMAIN}"
 
@@ -22,7 +21,6 @@ SYNC_KEY_FILE="$(mktemp)"
 trap 'rm -f "$SYNC_KEY_FILE"' EXIT
 chmod 600 "$SYNC_KEY_FILE"
 
-# Clave pública de sincronización oficial distribuida por Stremio/stremio-beamup
 cat <<'EOF' | base64 -d > "$SYNC_KEY_FILE"
 b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABFwAAAAdzc2gtcn
 NhAAAAAwEAAQAAAQEAtx/91VFc3BoLBKjHSUtFcg8tCpMM+c8sec8SmE5ZEllwyMceZcrV
@@ -62,14 +60,10 @@ fi
 echo "==> Desplegando HEAD -> ${REMOTE_SPEC}..."
 git push beamup HEAD:master --force
 
-# Si el entorno tiene secretos opcionales definidos, configurarlos en Beamup
-for VAR_NAME in TMDB_API_KEY NGINX_PROXY_URL NGINX_PROXY_TOKEN DEFAULT_PROXY_MODE; do
-  VAR_VAL="${!VAR_NAME:-}"
-  if [ -n "$VAR_VAL" ]; then
-    echo "==> Configurando secreto ${VAR_NAME} en Beamup..."
-    ssh -o StrictHostKeyChecking=accept-new "dokku@${BEAMUP_HOST}" config:set "${USER_HASH}/${PROJECT_NAME}" "${VAR_NAME}=${VAR_VAL}"
-  fi
-done
+if [ -n "${TMDB_API_KEY:-}" ]; then
+  echo "==> Configurando secreto TMDB_API_KEY en Beamup..."
+  ssh -o StrictHostKeyChecking=accept-new "dokku@${BEAMUP_HOST}" config:set "${USER_HASH}/${PROJECT_NAME}" "TMDB_API_KEY=${TMDB_API_KEY}"
+fi
 
 echo ""
 echo "✓ Addon desplegado en Beamup:"

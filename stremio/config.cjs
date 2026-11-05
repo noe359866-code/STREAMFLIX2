@@ -32,7 +32,6 @@ const ACTIVE_SCRAPERS = ALL_SCRAPERS.filter((scraper) => scraper.enabled);
 const ACTIVE_IDS = ACTIVE_SCRAPERS.map((scraper) => scraper.id);
 const ACTIVE_ID_SET = new Set(ACTIVE_IDS);
 
-const VALID_PROXY_MODES = new Set(['direct', 'nginx', 'both']);
 const VALID_LANG_MODES = new Set([
   'all',
   'prefer-es-LAT',
@@ -42,25 +41,6 @@ const VALID_LANG_MODES = new Set([
   'only-es-ES',
   'only-es-SUB',
 ]);
-
-function normalizeProxyUrl(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return '';
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
-    const cleanPath = parsed.pathname
-      .replace(/\/+$/, '')
-      .replace(/\/hlsp(?:\/.*)?$/i, '');
-    return `${parsed.origin}${cleanPath}`;
-  } catch (_) {
-    return '';
-  }
-}
-
-function sanitizeToken(raw) {
-  return String(raw || '').trim().replace(/[^A-Za-z0-9._~-]/g, '').slice(0, 128);
-}
 
 function sanitizeTmdbKey(raw) {
   return String(raw || '').trim().replace(/[^\w.-]/g, '').slice(0, 256);
@@ -73,9 +53,6 @@ function clampTimeout(value, fallback = 10) {
 }
 
 function defaultConfig(env = process.env) {
-  const envMode = String(env.DEFAULT_PROXY_MODE || '').trim().toLowerCase();
-  const proxyUrl = normalizeProxyUrl(env.NGINX_PROXY_URL || '');
-  const defaultMode = VALID_PROXY_MODES.has(envMode) ? envMode : 'direct';
   const defaultTimeoutSec = clampTimeout(
     env.PROVIDER_TIMEOUT_MS ? Number(env.PROVIDER_TIMEOUT_MS) / 1000 : 10,
     10,
@@ -83,10 +60,6 @@ function defaultConfig(env = process.env) {
   return {
     providers: [...ACTIVE_IDS],
     lang: 'all',
-    proxyMode: defaultMode,
-    proxyAll: env.NGINX_PROXY_ALL === '1' || env.NGINX_PROXY_ALL === 'true',
-    proxyUrl,
-    proxyToken: sanitizeToken(env.NGINX_PROXY_TOKEN || ''),
     tmdbKey: sanitizeTmdbKey(env.TMDB_API_KEY || ''),
     timeoutSec: defaultTimeoutSec,
   };
@@ -115,19 +88,6 @@ function normalizeConfig(input = {}, env = process.env) {
   }
 
   const lang = VALID_LANG_MODES.has(input.lang) ? input.lang : defaults.lang;
-  const proxyMode = VALID_PROXY_MODES.has(input.proxyMode) ? input.proxyMode : defaults.proxyMode;
-  const proxyAll = input.proxyAll === undefined
-    ? defaults.proxyAll
-    : (input.proxyAll === true || input.proxyAll === 1 || input.proxyAll === '1' || input.proxyAll === 'true' || input.proxyAll === 'on');
-
-  const proxyUrl = input.proxyUrl !== undefined
-    ? (normalizeProxyUrl(input.proxyUrl) || (input.proxyUrl === '' ? '' : defaults.proxyUrl))
-    : defaults.proxyUrl;
-
-  const proxyToken = input.proxyToken !== undefined
-    ? sanitizeToken(input.proxyToken)
-    : defaults.proxyToken;
-
   const tmdbKey = input.tmdbKey !== undefined
     ? sanitizeTmdbKey(input.tmdbKey)
     : defaults.tmdbKey;
@@ -139,10 +99,6 @@ function normalizeConfig(input = {}, env = process.env) {
   return {
     providers,
     lang,
-    proxyMode,
-    proxyAll,
-    proxyUrl,
-    proxyToken,
     tmdbKey,
     timeoutSec,
   };
@@ -160,10 +116,6 @@ function encodeConfig(input = {}) {
     && ACTIVE_IDS.every((id) => clean.providers.includes(id));
   if (!isAllProviders) payload.p = clean.providers;
   if (clean.lang !== 'all') payload.l = clean.lang;
-  if (clean.proxyMode !== 'direct') payload.m = clean.proxyMode;
-  if (clean.proxyAll) payload.a = 1;
-  if (clean.proxyUrl) payload.u = clean.proxyUrl;
-  if (clean.proxyToken) payload.k = clean.proxyToken;
   if (clean.tmdbKey) payload.t = clean.tmdbKey;
   if (clean.timeoutSec !== 10) payload.s = clean.timeoutSec;
 
@@ -177,10 +129,6 @@ function expandShortPayload(raw = {}) {
   return {
     providers: raw.providers !== undefined ? raw.providers : raw.p,
     lang: raw.lang !== undefined ? raw.lang : raw.l,
-    proxyMode: raw.proxyMode !== undefined ? raw.proxyMode : raw.m,
-    proxyAll: raw.proxyAll !== undefined ? raw.proxyAll : raw.a,
-    proxyUrl: raw.proxyUrl !== undefined ? raw.proxyUrl : raw.u,
-    proxyToken: raw.proxyToken !== undefined ? raw.proxyToken : raw.k,
     tmdbKey: raw.tmdbKey !== undefined ? raw.tmdbKey : raw.t,
     timeoutSec: raw.timeoutSec !== undefined ? raw.timeoutSec : raw.s,
   };
@@ -233,10 +181,7 @@ module.exports = {
   ACTIVE_SCRAPERS,
   ACTIVE_IDS,
   ACTIVE_ID_SET,
-  VALID_PROXY_MODES,
   VALID_LANG_MODES,
-  normalizeProxyUrl,
-  sanitizeToken,
   sanitizeTmdbKey,
   defaultConfig,
   normalizeConfig,

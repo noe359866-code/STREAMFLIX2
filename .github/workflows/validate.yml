@@ -41,7 +41,7 @@ on:
 
 jobs:
   validate:
-    name: Build y pruebas E2E (Nuvio + Stremio + Nginx real)
+    name: Build y pruebas offline (Nuvio + Stremio Beamup)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -52,18 +52,14 @@ jobs:
           cache: npm
       - name: Instalar dependencias fijadas
         run: npm ci
-      - name: Compilar y ejecutar todas las pruebas unitarias e integración
+      - name: Compilar y ejecutar todas las pruebas
         run: npm run check
-      - name: Validar sintaxis de herramientas y plantillas
+      - name: Validar sintaxis de herramientas
         run: |
           node --check server.cjs
           node --check stremio/server.cjs
-          node --check nginx/render-config.cjs
-          node --check scripts/verify-nginx-e2e.cjs
           node --check scripts/live-check.cjs
           bash -n scripts/deploy-beamup.sh
-          bash -n nginx/install-nginx.sh
-          npm run nginx:render -- --check
       - name: Comprobar servidor local Nuvio
         run: |
           PORT=3001 npm run start:nuvio > /tmp/streamflix2-nuvio.log 2>&1 &
@@ -77,27 +73,24 @@ jobs:
           curl -fsS http://127.0.0.1:3001/providers/animeav1.js -o /tmp/animeav1.js
           grep -q getStreams /tmp/animeav1.js
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/package.json)" = 404
-      - name: Prueba E2E real con Nginx (caché, HLS sub_filter, Range 206, token y SSRF)
+      - name: Comprobar Addon Stremio y stremio-addon-linter (check-deploy de Beamup)
         run: |
-          set -o pipefail
-          {
-            echo "127.0.0.1 cdn.streamflix2.test" | sudo tee -a /etc/hosts
-            sudo apt-get update -y && sudo apt-get install -y nginx-core gettext-base
-            sudo rm -f /etc/nginx/sites-enabled/default
-            sudo env "PATH=$PATH" \
-              NGINX_PORT=8088 \
-              SERVER_NAME=_ \
-              BEAMUP_SCHEME=http \
-              BEAMUP_HOST=127.0.0.1:7001 \
-              NGINX_PROXY_TOKEN=ci_tok_2026 \
-              DNS_RESOLVER=127.0.0.53 \
-              bash nginx/install-nginx.sh
-            ADDON_PORT=7001 CDN_PORT=8080 NGINX_URL=http://127.0.0.1:8088 NGINX_PROXY_TOKEN=ci_tok_2026 npm run nginx:e2e
-          } 2>&1 | tee /tmp/nginx-e2e.log || {
-            MSG="$(tail -n 25 /tmp/nginx-e2e.log | tr '\n' ' ' | cut -c1-800)"
-            echo "::error title=NginxE2E::${MSG}"
-            exit 1
-          }
+          PORT=7001 npm start > /tmp/streamflix2-stremio.log 2>&1 &
+          STREMIO_PID=$!
+          trap 'kill "$STREMIO_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:7001/manifest.json -o /tmp/stremio-manifest.json; then break; fi
+            sleep 1
+          done
+          node -e '
+            const fs = require("node:fs");
+            const { lintManifest } = require("stremio-addon-linter");
+            const res = lintManifest(JSON.parse(fs.readFileSync("/tmp/stremio-manifest.json", "utf8")));
+            if (!res.valid) { console.error(res.errors); process.exit(1); }
+          '
+          curl -fsS http://127.0.0.1:7001/configure | grep -q "STREAMFLIX2"
+          curl -fsS http://127.0.0.1:7001/nuvio/manifest.json -o /tmp/stremio-nuvio-manifest.json
+          cmp manifest.json /tmp/stremio-nuvio-manifest.json
       - name: Publicar paquete instalable Nuvio
         uses: actions/upload-artifact@v4
         with:
@@ -105,13 +98,6 @@ jobs:
           path: |
             manifest.json
             providers/
-          if-no-files-found: error
-      - name: Publicar paquete Nginx externo listo para servidor
-        uses: actions/upload-artifact@v4
-        with:
-          name: streamflix2-external-nginx
-          path: |
-            nginx/
           if-no-files-found: error
 
   live:
@@ -150,16 +136,16 @@ jobs:
             if curl -fsS http://127.0.0.1:7009/health >/dev/null; then break; fi
             sleep 1
           done
-          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["cinehax"], proxyMode: "both", proxyUrl: "https://proxy.example.org", proxyToken: "demo" }));')"
+          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["cinehax"] }));')"
           curl -fsS "http://127.0.0.1:7009/${SEG}/stream/movie/tt0137523.json" -o /tmp/stremio-live-streams.json
           node -e '
             const fs = require("node:fs");
             const data = JSON.parse(fs.readFileSync("/tmp/stremio-live-streams.json", "utf8"));
-            if (!Array.isArray(data.streams) || data.streams.length < 2) {
-              console.error("Se esperaban streams directos y proxy para tt0137523:", data);
+            if (!Array.isArray(data.streams) || data.streams.length < 1) {
+              console.error("Se esperaba al menos 1 stream para tt0137523:", data);
               process.exit(1);
             }
-            console.log(`✓ Stremio live tt0137523 devolvió ${data.streams.length} entradas (directo + /hlsp/)`);
+            console.log(`✓ Stremio live tt0137523 devolvió ${data.streams.length} streams con proxyHeaders`);
           '
       - name: Publicar informe de la prueba real
         if: always()

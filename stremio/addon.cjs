@@ -9,11 +9,6 @@ const {
   normalizeConfig,
 } = require('./config.cjs');
 const {
-  cleanRequestHeaders,
-  needsHeaderProxy,
-  buildNginxProxyUrl,
-} = require('./proxy.cjs');
-const {
   runWithRequestContext,
   parseStremioId,
   resolveStremioMetadata,
@@ -59,15 +54,27 @@ function loadProviderModule(id) {
   return providerModules.get(id);
 }
 
+function cleanRequestHeaders(headers) {
+  if (!headers || typeof headers !== 'object') return {};
+  const output = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (!value) continue;
+    const cleanVal = String(value).replace(/[\r\n]+/g, ' ').trim();
+    if (!cleanVal) continue;
+    output[key] = cleanVal;
+  }
+  return output;
+}
+
+function needsHeaderProxy(stream) {
+  const headers = cleanRequestHeaders(stream && stream.headers);
+  const keys = Object.keys(headers).map((key) => key.toLowerCase());
+  return keys.some((key) => key === 'referer' || key === 'origin' || key === 'cookie' || key === 'authorization');
+}
+
 function buildManifest(rawConfig = {}, options = {}) {
   const config = normalizeConfig(rawConfig, options.env);
   const count = config.providers.length;
-  const modeSummary = config.proxyMode === 'nginx' && config.proxyUrl
-    ? 'Proxy Nginx externo activo'
-    : config.proxyMode === 'both' && config.proxyUrl
-      ? 'Modo dual (Directo + Proxy Nginx)'
-      : 'Modo directo (proxyHeaders)';
-
   const langNote = config.lang.startsWith('only-')
     ? ` · Filtro ${LANGUAGE_SHORT[config.lang.replace('only-', '')] || config.lang}`
     : '';
@@ -76,7 +83,7 @@ function buildManifest(rawConfig = {}, options = {}) {
     id: ADDON_ID,
     version: ADDON_VERSION,
     name: ADDON_NAME,
-    description: `Streams VOD en español latino, castellano y subtitulado (${count} proveedores activos · ${modeSummary}${langNote}). Diseñado para Beamup + Nginx.`,
+    description: `Streams VOD en español latino, castellano y subtitulado (${count} proveedores activos${langNote}). Listo para Beamup.`,
     types: ['movie', 'series'],
     catalogs: [],
     idPrefixes: ['tt', 'tmdb:'],
@@ -167,7 +174,7 @@ function matchesLanguageFilter(language, langMode) {
   return (language || 'es') === target;
 }
 
-function toDirectStremioStream(stream, context) {
+function toStremioStream(stream, context) {
   const headers = cleanRequestHeaders(stream.headers);
   const requireProxyHeaders = needsHeaderProxy(stream);
   const isHttpsMp4 = /^https:\/\//i.test(stream.url) && stream.type === 'mp4' && !requireProxyHeaders;
@@ -207,38 +214,6 @@ function toDirectStremioStream(stream, context) {
     url: stream.url,
     ...(subtitles ? { subtitles } : {}),
     behaviorHints,
-  };
-}
-
-function toNginxProxiedStremioStream(stream, proxiedUrl, context, asCompanion = false) {
-  const langCode = stream.language || 'es';
-  const langBadge = LANGUAGE_SHORT[langCode] || 'ES';
-  const langLabel = LANGUAGE_LABELS[langCode] || langCode;
-  const quality = stream.quality || 'Auto';
-  const formatUpper = String(stream.type || 'hls').toUpperCase();
-  const providerSlug = stream.provider || 'streamflix2';
-  const bingeGroup = `streamflix2-nginx-${providerSlug}-${langCode}-${quality}`;
-  const filename = inferFilename(stream, context.metadata, context.parsed);
-  const serverDetail = String(stream.title || '').split('·')[0].trim() || stream.name;
-  const tag = asCompanion ? '⚡ Proxy Nginx (Web/TV)' : '⚡ Proxy Nginx';
-
-  const description = [
-    `🎬 ${stream.name}${serverDetail && serverDetail !== stream.name ? ` · ${serverDetail}` : ''}`,
-    `${langLabel} · ${quality} · ${formatUpper} · ${tag}`,
-  ].join('\n');
-
-  const subtitles = mapSubtitles(stream.subtitles, providerSlug);
-
-  return {
-    name: `STREAMFLIX2${asCompanion ? ' [Proxy]' : ''}\n${quality} · ${langBadge}`,
-    title: description,
-    description,
-    url: proxiedUrl,
-    ...(subtitles ? { subtitles } : {}),
-    behaviorHints: {
-      bingeGroup,
-      filename,
-    },
   };
 }
 
@@ -348,28 +323,7 @@ async function getStremioStreams(params = {}) {
   });
 
   const context = { metadata, parsed, config };
-  const output = [];
-
-  for (const item of flatStreams.slice(0, 60)) {
-    const shouldProxy = Boolean(config.proxyUrl) && (config.proxyAll || needsHeaderProxy(item));
-    const proxiedUrl = shouldProxy
-      ? buildNginxProxyUrl(item.url, item.headers, {
-        proxyUrl: config.proxyUrl,
-        proxyToken: config.proxyToken,
-      })
-      : null;
-
-    if (config.proxyMode === 'nginx' && proxiedUrl) {
-      output.push(toNginxProxiedStremioStream(item, proxiedUrl, context, false));
-    } else if (config.proxyMode === 'both') {
-      output.push(toDirectStremioStream(item, context));
-      if (proxiedUrl) {
-        output.push(toNginxProxiedStremioStream(item, proxiedUrl, context, true));
-      }
-    } else {
-      output.push(toDirectStremioStream(item, context));
-    }
-  }
+  const output = flatStreams.slice(0, 60).map((item) => toStremioStream(item, context));
 
   return {
     streams: output,
@@ -382,6 +336,7 @@ async function getStremioStreams(params = {}) {
 module.exports = {
   buildManifest,
   getStremioStreams,
-  toDirectStremioStream,
-  toNginxProxiedStremioStream,
+  toStremioStream,
+  cleanRequestHeaders,
+  needsHeaderProxy,
 };

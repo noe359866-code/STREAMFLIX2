@@ -1,17 +1,17 @@
-# STREAMFLIX2 — proveedores español/latino para Nuvio y Addon de Stremio (Beamup + Nginx)
+# STREAMFLIX2 — proveedores español/latino para Nuvio y Addon de Stremio (Beamup)
 
 Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**, disponible en dos formatos dentro del mismo repositorio:
 
 1. **Pack de plugins para el runtime QuickJS/CommonJS de Nuvio** (`manifest.json` + `providers/*.js` en la raíz).
-2. **Addon de Stremio (`org.streamflix2.es`) listo para Beamup + servidor Nginx externo** (`stremio/`, `Procfile`, `nginx/`), con resolución automática de IDs IMDb (`tt…`) mediante Cinemeta, clave TMDB opcional, selector interactivo en `/configure` y soporte tanto de `behaviorHints.proxyHeaders` como de proxy HLS/MP4 externo en Nginx (`/hlsp/…`).
+2. **Addon de Stremio (`org.streamflix2.es`) listo para Beamup** (`stremio/`, `Procfile`, `scripts/deploy-beamup.sh`), con resolución automática de IDs IMDb (`tt…`) mediante Cinemeta, clave TMDB opcional, selector interactivo en `/configure` y entrega de cabeceras mediante `behaviorHints.proxyHeaders`.
 
 Incluye **24 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
 
-> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **25 bundles** y **51 pruebas offline** pasa localmente y en GitHub Actions ([run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146)). El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **25 bundles** y **49 pruebas offline** pasa localmente y en GitHub Actions ([run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146)). El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
 
-## Addon de Stremio (Beamup + Nginx externo)
+## Addon de Stremio (Beamup)
 
-Consulta la guía completa paso a paso en **[`docs/stremio-beamup-nginx.md`](docs/stremio-beamup-nginx.md)**.
+Consulta la guía paso a paso en **[`docs/stremio-beamup.md`](docs/stremio-beamup.md)**.
 
 ### Arranque rápido del Addon de Stremio
 
@@ -20,11 +20,10 @@ npm ci
 npm start
 ```
 
-- Escucha en `0.0.0.0:${PORT:-7000}` (compatible directamente con **Beamup** mediante `Procfile` y `git push beamup HEAD:master`).
+- Escucha en `0.0.0.0:${PORT:-7000}` (compatible directamente con **Beamup** mediante `Procfile`, `npm run deploy:beamup` o `git push beamup HEAD:master`).
 - Configurador web e instalador `stremio://`: `/configure`
 - Manifiesto Stremio: `/manifest.json` y `/:config/manifest.json`
 - Streams de películas y series (`tt…` y `tmdb:…`): `/stream/:type/:id.json`
-- El paquete para el **Nginx externo separado** (reverse-proxy + caché hacia Beamup + proxy dinámico HLS/MP4 `/hlsp/…` con reescritura de `.m3u8` y protección SSRF) está en [`nginx/`](nginx/) (`docker-compose.yml`, `streamflix2.conf.template` y `npm run nginx:render`).
 
 ## Instalación en Nuvio
 
