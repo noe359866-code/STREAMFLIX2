@@ -1,6 +1,6 @@
 # Matriz de proveedores
 
-Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido completo se validó con respuestas sintéticas offline; no certifica que el dominio real responda hoy ni que el vídeo reproduzca. Ningún conector ha superado una prueba de reproducción real en Nuvio desde este entorno.
+Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido completo se validó con respuestas sintéticas offline; no certifica que el dominio real responda hoy ni que el vídeo reproduzca. CineHax superó posteriormente una prueba real de descubrimiento y firma de medio en GitHub Actions; ningún conector ha sido probado todavía dentro del reproductor de la app Nuvio.
 
 | ID | Nombre y dominio portado | Tipos | Manifiesto | Fixture | Implementación / limitación principal |
 |---|---|---|---|---|---|
@@ -31,8 +31,9 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido c
 - Export `getStreams`: **20/20**.
 - Recorrido offline con fixtures: **20/20**.
 - Suite completa: **33/33** pruebas.
-- Descubrimiento en dominios reales: **no verificado**.
-- Reproducción en Nuvio/dispositivo: **no verificada**.
+- GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **offline correcto; CineHax descubrió al menos un stream real y al menos un medio superó la comprobación de firma HLS/MP4/MKV/WebM**.
+- Descubrimiento en los otros dominios reales: **no verificado**.
+- Reproducción dentro de Nuvio/dispositivo: **no verificada**.
 
 ## Formatos y hosters
 

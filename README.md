@@ -2,7 +2,7 @@
 
 Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**, empaquetados para el runtime **QuickJS/CommonJS de Nuvio**. Incluye **19 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
 
-> **Estado:** listo para instalación y pruebas en una compilación sideloaded de Nuvio. La compilación y **33 pruebas offline** pasan. Los dominios reales y la reproducción en dispositivos **no han sido verificados desde este entorno**. Un proveedor puede dejar de responder, cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** listo para instalación y pruebas en una compilación sideloaded de Nuvio. La compilación y **33 pruebas offline** pasan localmente y en GitHub Actions. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) también confirmó descubrimiento real en CineHax y al menos un medio con firma válida. Los otros dominios y la reproducción dentro de la app **siguen sin verificar**. Un proveedor puede dejar de responder, cambiar su HTML o exigir Cloudflare sin previo aviso.
 
 ## Instalación
 
@@ -107,6 +107,15 @@ TMDB_API_KEY=... npm run test:playback -- \
 - `test:playback` además solicita como máximo 4 KiB de hasta cinco resultados y comprueba la firma HLS/MP4/MKV/WebM.
 - Ninguna de las dos sustituye abrir el episodio en Nuvio y comprobar imagen, audio, idioma, subtítulos y duración.
 - Una lista vacía se informa como **sin resultados**, no como prueba concluyente de que el proveedor esté roto: también puede ser un título ausente, un bloqueo de red o anti-bot.
+
+### GitHub Actions
+
+El workflow **Validate Nuvio plugins** ejecuta `npm ci`, `npm run check`, valida el servidor y publica un artifact con el paquete instalable. Puede lanzarse manualmente con proveedor, ID TMDB, tipo, temporada, episodio y opción de playback; para proveedores que resuelven metadatos necesita el secreto `TMDB_API_KEY` del repositorio.
+
+También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Resultados:
+
+- [Run 41983314335](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983314335): validación offline inicial correcta.
+- [Run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): validación offline y prueba real de CineHax correctas; al menos un stream descubierto y un medio con firma válida.
 
 ## Limitaciones conocidas
 
