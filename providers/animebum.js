@@ -38,7 +38,7 @@ function findPage(html, title) {
 function extractDirectHls(html) {
   const found = [];
   const source = String(html || "");
-  const patterns = [/https?:\\/\\/[^"'\\s<>]+?\\.m3u8(?:\\?[^"'\\s<>]*)?/gi];
+  const patterns = [/https?:\/\/[^"'\s<>]+?\.m3u8(?:\?[^"'\s<>]*)?/gi];
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(source))) {
