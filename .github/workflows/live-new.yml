@@ -1,0 +1,36 @@
+name: Temporary new-provider live validation
+
+on:
+  push:
+    branches: [arena/e6074aa1-streamflix2]
+    paths: [.github/workflows/live-new.yml]
+
+jobs:
+  live:
+    name: Live ${{ matrix.provider }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { provider: danimados, tmdb: "111111", type: tv, season: "2", episode: "3" }
+          - { provider: pelisgo, tmdb: tt26581740, type: movie, season: "1", episode: "1" }
+          - { provider: hdfull, tmdb: tt26581740, type: movie, season: "1", episode: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Descubrir y comprobar como máximo 4 KiB por stream
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: node scripts/live-check.cjs --provider "${{ matrix.provider }}" --tmdb "${{ matrix.tmdb }}" --type "${{ matrix.type }}" --season "${{ matrix.season }}" --episode "${{ matrix.episode }}" --playback --output live-result.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-new-${{ matrix.provider }}
+          path: live-result.json
+          if-no-files-found: warn
