@@ -251,13 +251,15 @@ test('VerPeliculasOnline: DooPlayer AJAX conserva ESP/LAT/SUB y omite el tráile
         assert.match(init.body, /post=56924/);
         return { embed_url: `https://voe.example/e/${ids[number]}` };
       }],
-      ['https://voe.example/e/cast', fixture('player-hls.html')],
+      ['https://voe.example/e/cast', fixture('voe-embed.html')],
       ['https://voe.example/e/lat', fixture('player-hls.html')],
       ['https://voe.example/e/sub', fixture('player-hls.html')],
     ],
   });
   assertStream(result, 3);
   assert.deepEqual(result.streams.map((stream) => stream.language), ['es-ES', 'es-LAT', 'es-SUB']);
+  assert.match(result.streams[0].url, /jfconahnwkyn_.*master\.m3u8\?/i);
+  assert.ok(result.streams.every((stream) => !/test-videos\.co\.uk|Big_Buck_Bunny/i.test(stream.url)));
   assert.equal(result.calls.filter((call) => call.url.includes('/wp-admin/admin-ajax.php')).length, 3);
   assert.ok(!result.calls.some((call) => call.init.body?.includes('nume=trailer')));
 });

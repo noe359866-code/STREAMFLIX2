@@ -1,7 +1,11 @@
-export function decodeBase64(value) {
+export function decodeBase64Binary(value) {
   let input = String(value || '').trim().replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '');
   while (input.length % 4) input += '=';
-  const binary = atob(input);
+  return atob(input);
+}
+
+export function decodeBase64(value) {
+  const binary = decodeBase64Binary(value);
   if (typeof TextDecoder !== 'undefined') {
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);

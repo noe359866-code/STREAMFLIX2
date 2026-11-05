@@ -244,6 +244,7 @@ function mediaKind(url, explicit) {
 }
 function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ""))) return false;
+  if (/^https?:\/\/(?:[^/@]+\.)?test-videos\.co\.uk(?::\d+)?\//i.test(url)) return false;
   if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\.mpd(?:$|[?#])/i.test(url)) return false;
   return /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i.test(url) || /\/m3u8\/|\/get_video\?|\/videoplayback(?:\?|$)|\/manifest\.m3u8/i.test(url);
@@ -319,10 +320,13 @@ function createDirectProvider(config) {
 }
 
 // src/core/base64.js
-function decodeBase64(value) {
+function decodeBase64Binary(value) {
   let input = String(value || "").trim().replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, "");
   while (input.length % 4) input += "=";
-  const binary = atob(input);
+  return atob(input);
+}
+function decodeBase64(value) {
+  const binary = decodeBase64Binary(value);
   if (typeof TextDecoder !== "undefined") {
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
@@ -445,17 +449,53 @@ function mixdropUrl(html, base) {
   const value = match[1];
   return cleanMediaUrl(value.startsWith("//") ? `https:${value}` : value.startsWith("http") ? value : `https://${value}`, base);
 }
+function rot13(value) {
+  return value.replace(/[a-z]/gi, (char) => {
+    const base = char <= "Z" ? 65 : 97;
+    return String.fromCharCode((char.charCodeAt(0) - base + 13) % 26 + base);
+  });
+}
+function decodeVoeConfig(encoded) {
+  try {
+    let value = rot13(encoded);
+    for (const pattern of ["@$", "^^", "~@", "%?", "*~", "!!", "#&"]) value = value.split(pattern).join("_");
+    value = value.replace(/_/g, "");
+    const binary = decodeBase64Binary(value);
+    const shifted = Array.from(binary, (char) => String.fromCharCode(char.charCodeAt(0) - 3)).reverse().join("");
+    const config = JSON.parse(decodeBase64(shifted));
+    return config && typeof config === "object" ? config : null;
+  } catch (_) {
+    return null;
+  }
+}
 function voeUrls(html) {
+  const text = String(html || "");
+  const scripts = text.matchAll(/<script\b(?=[^>]*\btype\s*=\s*["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/gi);
+  for (const script of scripts) {
+    const raw = script[1].trim();
+    let encoded = "";
+    try {
+      const wrapper = JSON.parse(raw);
+      if (Array.isArray(wrapper) && typeof wrapper[0] === "string") encoded = wrapper[0];
+    } catch (_) {
+    }
+    if (!encoded) encoded = raw.match(/^\[\s*"([^"]+)"\s*\]$/)?.[1] || "";
+    const config = encoded ? decodeVoeConfig(encoded) : null;
+    if (!config) continue;
+    if (isPlayableUrl(config.source)) return [config.source];
+    const fallback = (Array.isArray(config.fallback) ? config.fallback : []).map((item) => item?.file).filter((url) => isPlayableUrl(url));
+    if (fallback.length) return unique(fallback);
+  }
   const output = [];
-  const candidates = [...String(html || "").matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
+  const candidates = [...text.matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
   for (const match of candidates) {
-    if (/\.m3u8/i.test(match[1])) output.push(match[1]);
+    if (/\.m3u8/i.test(match[1]) && isPlayableUrl(match[1])) output.push(match[1]);
     else if (/^[a-zA-Z0-9+/=_-]{40,}$/.test(match[1])) {
       const decoded = decodeBase64Url(match[1]);
-      if (decoded.includes(".m3u8")) output.push(decoded);
+      if (decoded.includes(".m3u8") && isPlayableUrl(decoded)) output.push(decoded);
     }
   }
-  return output;
+  return unique(output);
 }
 function dataLinkCandidates(html, base) {
   const output = [];
@@ -553,8 +593,9 @@ async function resolveOne(candidate, context, depth) {
   const html = response.text;
   const pageUrl = response.url || candidate.url;
   const direct = unique([
-    ...directMediaInHtml(html, pageUrl),
+    // El JSON autenticado de Voe tiene prioridad sobre MP4 de muestra incrustados en su página.
     ...voeUrls(html),
+    ...directMediaInHtml(html, pageUrl),
     streamtapeUrl(html, pageUrl),
     mixdropUrl(html, pageUrl)
   ].filter(Boolean));
