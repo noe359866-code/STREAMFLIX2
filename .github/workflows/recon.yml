@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/recon.yml
       - scripts/site-recon.cjs
+      - scripts/browser-recon.cjs
   workflow_dispatch:
 
 permissions:
@@ -22,13 +23,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Inspect public pages without executing scripts
-        run: node scripts/site-recon.cjs
+      - name: Install a temporary browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install chromium
+      - name: Inspect public pages in a browser
+        run: xvfb-run -a node scripts/browser-recon.cjs
       - name: Return diagnostic text to the working branch
         run: |
           git config user.name "arena-recon[bot]"
           git config user.email "arena-recon[bot]@users.noreply.github.com"
-          git add recon
+          git add recon-browser
           if git diff --cached --quiet; then
             echo "No diagnostic changes"
             exit 0
