@@ -15,7 +15,7 @@ No hace falta instalar Node.js para usar los bundles ya generados.
    https://raw.githubusercontent.com/noe359866-code/STREAMFLIX2/arena/cdfd952a-streamflix2/manifest.json
    ```
 
-   Si el repositorio se publica en otra rama, cambia el segmento de rama en la URL. Nuvio descarga cada `filename` de forma relativa al manifiesto.
+   Si el repositorio se publica en otra rama, cambia el segmento de rama en la URL. Nuvio descarga cada `filename` de forma relativa al manifiesto. **Actualmente el repositorio es privado**: para que esta URL funcione directamente en Nuvio hay que hacerlo público o alojar `manifest.json` y `providers/` en un servidor accesible. No uses URLs con tokens temporales; como alternativa, utiliza el servidor local descrito abajo.
 3. Configura `TMDB_API_KEY` en los ajustes de Nuvio. No hay ninguna clave TMDB incrustada en este repositorio. CineHax puede usar directamente el ID recibido, pero el resto necesita resolver título, año, títulos alternativos e IMDb mediante TMDB.
 4. Activa individualmente los proveedores que quieras probar. AnimeBum aparece intencionadamente deshabilitado.
 
