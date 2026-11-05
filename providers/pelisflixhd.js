@@ -360,6 +360,7 @@ function mediaKind(url, explicit) {
 }
 function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ""))) return false;
+  if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\.mpd(?:$|[?#])/i.test(url)) return false;
   return /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i.test(url) || /\/m3u8\/|\/get_video\?|\/videoplayback(?:\?|$)|\/manifest\.m3u8/i.test(url);
 }

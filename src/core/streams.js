@@ -11,6 +11,8 @@ export function mediaKind(url, explicit) {
 
 export function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ''))) return false;
+  // Byse y algunos mirrors usan /e/<id>/<nombre>.mp4 para una página HTML, no para el medio.
+  if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\.mpd(?:$|[?#])/i.test(url)) return false; // Se evita entregar DASH/DRM sin licencia.
   return /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i.test(url)
     || /\/m3u8\/|\/get_video\?|\/videoplayback(?:\?|$)|\/manifest\.m3u8/i.test(url);

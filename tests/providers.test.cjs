@@ -237,6 +237,79 @@ test('SeriesFlix: carga temporada 2, desenvuelve data-url y conserva LAT', async
   assert.ok(result.calls.some((call) => call.url === seasonUrl));
 });
 
+test('VerPeliculasOnline: DooPlayer AJAX conserva ESP/LAT/SUB y omite el tráiler', async () => {
+  const ids = { 1: 'cast', 2: 'lat', 3: 'sub' };
+  const result = await run('verpeliculasonline', {
+    mediaType: 'movie',
+    routes: [
+      ['verpeliculasonline.net/?s=', fixture('verpeliculasonline-search.html')],
+      ['verpeliculasonline.net/pelicula/contenido-demo/', fixture('verpeliculasonline-movie.html')],
+      ['verpeliculasonline.net/wp-admin/admin-ajax.php', (url, init) => {
+        assert.equal(init.method, 'POST');
+        const number = init.body.match(/(?:^|&)nume=(\d+)/)?.[1];
+        assert.match(init.body, /action=doo_player_ajax/);
+        assert.match(init.body, /post=56924/);
+        return { embed_url: `https://voe.example/e/${ids[number]}` };
+      }],
+      ['https://voe.example/e/cast', fixture('player-hls.html')],
+      ['https://voe.example/e/lat', fixture('player-hls.html')],
+      ['https://voe.example/e/sub', fixture('player-hls.html')],
+    ],
+  });
+  assertStream(result, 3);
+  assert.deepEqual(result.streams.map((stream) => stream.language), ['es-ES', 'es-LAT', 'es-SUB']);
+  assert.equal(result.calls.filter((call) => call.url.includes('/wp-admin/admin-ajax.php')).length, 3);
+  assert.ok(!result.calls.some((call) => call.init.body?.includes('nume=trailer')));
+});
+
+test('PelisForte: tarjetas ToroFilm, r.php y Byse .mp4 se resuelven como embed', async () => {
+  const byse = 'https://byseraguci.example/e/0albi51inneu/movie.mp4';
+  const nested = 'https://n1mwq.example/6vd4p/0albi51inneu';
+  const result = await run('pelisforte', {
+    mediaType: 'movie',
+    routes: [
+      ['www2.pelisforte.se/?s=', fixture('pelisforte-search.html')],
+      ['www2.pelisforte.se/pelicula/contenido-demo-2024-1711083273', fixture('pelisforte-movie.html')],
+      ['mp4.nu/r.php?h=TOKEN-LATINO', (url, init) => {
+        assert.match(init.headers.Referer, /mp4\.nu\/\?h=TOKEN-LATINO/);
+        return { __response: true, url: byse, body: '<!doctype html><title>Byse</title>' };
+      }],
+      [byse, `<!doctype html><iframe src="${nested}"></iframe>`],
+      [nested, fixture('player-hls.html')],
+    ],
+  });
+  assertStream(result, 2);
+  assert.deepEqual(result.streams.map((stream) => stream.language), ['es-LAT', 'es-SUB']);
+  assert.ok(result.calls.some((call) => call.url.includes('mp4.nu/r.php?h=TOKEN-LATINO')));
+  assert.ok(result.calls.some((call) => call.url === nested));
+  assert.ok(!result.streams.some((stream) => stream.url.includes('byseraguci')));
+  assert.ok(!result.calls.some((call) => call.url.includes('download.php')));
+});
+
+test('PelisForte: carga la temporada AJAX y nunca inventa un episodio ausente', async () => {
+  const routes = [
+    ['www2.pelisforte.se/?s=', fixture('pelisforte-search.html')],
+    ['www2.pelisforte.se/serie/contenido-demo-2024-1746483016', fixture('pelisforte-series.html')],
+    ['www2.pelisforte.se/wp-admin/admin-ajax.php', (url, init) => {
+      assert.equal(init.method, 'POST');
+      assert.match(init.body, /action=action_select_season/);
+      assert.match(init.body, /nonce=nonce-demo/);
+      assert.match(init.body, /season=1/);
+      assert.match(init.body, /post=28341/);
+      return fixture('pelisforte-season1.html');
+    }],
+    ['www2.pelisforte.se/episodio/contenido-demo-1x2', fixture('pelisforte-episode.html')],
+  ];
+  const result = await run('pelisforte', { season: 1, episode: 2, routes });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es-ES');
+  assert.ok(result.calls.some((call) => call.url.endsWith('/episodio/contenido-demo-1x2')));
+
+  const missing = await run('pelisforte', { season: 1, episode: 3, routes });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/contenido-demo-1x3')));
+});
+
 const wordpressCases = [
   { id: 'cinecalidad', base: 'https://www.cinecalidad.am', search: '/?s=', show: '/ver-serie/contenido-demo', player: '<li data-option="https://sw.example/e/demo" data-nume="1"></li>' },
   { id: 'cine24h', base: 'https://cine24h.online', search: '/?s=', show: '/series/contenido-demo', player: '<li data-src="aHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbw==" data-nume="1"></li>' },

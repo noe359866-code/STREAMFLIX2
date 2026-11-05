@@ -137,6 +137,17 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "pelisforte",
+      "name": "PelisForte",
+      "description": "Películas y series ToroFilm; temporadas AJAX, puerta r.php y hosters externos.",
+      "version": "1.0.0",
+      "filename": "providers/pelisforte.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
       "id": "pelisflixhd",
       "name": "PelisflixHD",
       "description": "Películas y series con reproductores Base64.",
@@ -209,6 +220,17 @@
       "version": "1.0.0",
       "filename": "providers/tioplus.js",
       "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "verpeliculasonline",
+      "name": "VerPeliculasOnline",
+      "description": "Películas; opciones DooPlayer AJAX por idioma y resolución de Voe.",
+      "version": "1.0.0",
+      "filename": "providers/verpeliculasonline.js",
+      "supportedTypes": ["movie"],
       "enabled": true,
       "contentLanguage": ["es"],
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]

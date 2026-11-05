@@ -63,7 +63,7 @@ function mockFetch(routes, metadata = {}) {
     for (const [route, value] of routes) {
       if (!matches(route, url, init)) continue;
       const result = typeof value === 'function' ? await value(url, init, calls) : value;
-      if (result && result.__response) return response(result.body, url, result);
+      if (result && result.__response) return response(result.body, result.url || url, result);
       return response(result === undefined ? '' : result, url);
     }
     throw new Error(`Fixture sin ruta: ${url}`);
