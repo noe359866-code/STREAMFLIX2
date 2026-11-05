@@ -1,0 +1,17 @@
+{
+  "name": "streamflix2-nuvio-plugins",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Nuvio plugin repository for STREAMFLIX2",
+  "scripts": {
+    "test": "node --test",
+    "test:syntax": "node --check providers/animeav1.js && node --check providers/animebum.js && node --check providers/flixlatam.js",
+    "build": "node build.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cheerio-without-node-native": "^0.20.2"
+  }
+}
