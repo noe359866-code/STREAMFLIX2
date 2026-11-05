@@ -6,8 +6,6 @@ on:
     paths:
       - .github/workflows/recon.yml
       - scripts/catalog-recon.cjs
-      - scripts/danimados-player-recon.cjs
-      - scripts/player-browser-recon.cjs
   workflow_dispatch:
 
 permissions:
@@ -24,22 +22,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Inspect Danimados player AJAX
-        run: node scripts/danimados-player-recon.cjs > recon-danimados-player.txt 2>&1
-      - name: Install a temporary browser
-        run: |
-          {
-            npm install --no-save --package-lock=false playwright@1.56.1 &&
-            npx playwright install chromium
-          } > recon-install.txt 2>&1
-      - name: Inspect public players in a browser
-        run: xvfb-run -a node scripts/player-browser-recon.cjs > recon-player-browser.txt 2>&1
+      - name: Inspect equivalent public player pages and first-party scripts
+        run: node scripts/catalog-recon.cjs > recon-shared.txt 2>&1
       - name: Return diagnostics to the working branch
         if: always()
         run: |
-          cat recon-danimados-player.txt || true
-          cat recon-install.txt || true
-          cat recon-player-browser.txt || true
+          cat recon-shared.txt || true
           git config user.name "arena-recon[bot]"
           git config user.email "arena-recon[bot]@users.noreply.github.com"
           git add -A
@@ -47,5 +35,5 @@ jobs:
             echo "No diagnostic changes"
             exit 0
           fi
-          git commit -m "Collect temporary catalog diagnostics [skip ci]"
+          git commit -m "Collect temporary shared-player diagnostics [skip ci]"
           git push origin arena/e6074aa1-streamflix2
