@@ -109,7 +109,30 @@ function nuploadCodeInfo(html) {
   return { loopFound: true, arrayFound: Boolean(arrayText), arrayChars: arrayText.length, entries: entries.length,
     firstLengths: entries.slice(0, 4).map((entry) => entry.length), decodedLength: decoded.length,
     decodedUrl: safeUrl(decoded), fileExpressionFound: Boolean(file), tokenLength: token.length,
-    result: safeUrl(full), isHls: /\.m3u8(?:[?#]|$)/i.test(full), isMp4: /\.mp4(?:[?#]|$)/i.test(full) };
+    result: safeUrl(full), isHls: /\.m3u8(?:[?#]|$)/i.test(full), isMp4: /\.mp4(?:[?#]|$)/i.test(full),
+    candidateUrl: full };
+}
+async function mediaProbe(url, referer) {
+  try {
+    const target = new URL(url);
+    if (target.protocol !== 'https:' || !/^sv\d+\.ibra\.lat$/.test(target.hostname)) return { error: 'fuera-de-host-observado' };
+    const response = await fetch(url, { headers: { ...HEADERS, Accept: '*/*', Range: 'bytes=0-4095', Referer: referer },
+      redirect: 'manual', signal: AbortSignal.timeout(12000) });
+    const reader = response.body?.getReader();
+    let prefix = Buffer.alloc(0);
+    if (reader && response.status >= 200 && response.status < 300) {
+      try { prefix = Buffer.from((await reader.read()).value || []).subarray(0, 64); }
+      finally { await reader.cancel().catch(() => {}); }
+    } else if (reader) await reader.cancel().catch(() => {});
+    return { status: response.status, contentType: response.headers.get('content-type') || '',
+      contentRange: Boolean(response.headers.get('content-range')),
+      contentLength: Number(response.headers.get('content-length') || 0),
+      location: safeUrl(response.headers.get('location'), url),
+      magic: prefix.toString('utf8').startsWith('#EXTM3U') ? 'hls'
+        : prefix.subarray(4, 8).toString('ascii') === 'ftyp' ? 'mp4'
+          : /^\s*<(!doctype|html)/i.test(prefix.toString('utf8')) ? 'html' : 'otro',
+      prefixBytes: prefix.length };
+  } catch (error) { return { status: null, error: error?.name || 'red' }; }
 }
 function mediaHints(html) {
   return {
@@ -222,11 +245,12 @@ async function repelis() {
         const embedded = String(data?.embed_url || '').match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)/i)?.[1] || data?.embed_url;
         if (typeof embedded === 'string' && /^https:\/\/nupload\.me\//i.test(embedded)) {
           const hoster = await get(embedded, url);
+          const { candidateUrl, ...numericPlayer } = nuploadCodeInfo(hoster.html);
           item.hoster = { status: hoster.status, error: hoster.error, redirectChain: hoster.redirectChain,
             redirectLocations: hoster.redirectLocations, location: hoster.location, contentType: hoster.contentType,
             title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(hoster.html)?.[1]),
             iframes: iframeInfo(hoster.html, hoster.url || embedded), media: mediaHints(hoster.html),
-            numericPlayer: nuploadCodeInfo(hoster.html),
+            numericPlayer,
             scripts: [...hoster.html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)]
               .slice(0, 12).map((m) => safeUrl(m[1], hoster.url || embedded)),
             signals: ['jwplayer', 'hls', 'base64', 'atob(', 'plyr', 'playerjs', 'fetch(', 'eval(', 'iframe', 'source:']
@@ -265,6 +289,7 @@ async function repelis() {
                 .replace(/[a-z0-9_-]{20,}/gi, '<token>');
             })(),
           };
+          if (candidateUrl) item.hoster.mediaProbe = await mediaProbe(candidateUrl, hoster.url);
         }
       }
       summary.players.push(item);
