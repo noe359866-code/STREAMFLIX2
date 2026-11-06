@@ -152,7 +152,7 @@ jobs:
 
   audit-media:
     name: Auditar HLS/MP4 reales · tres intentos por proveedor
-    if: github.event_name == 'workflow_dispatch' && inputs.provider == 'audit-media'
+    if: (github.event_name == 'workflow_dispatch' && inputs.provider == 'audit-media') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-media]'))
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 50

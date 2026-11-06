@@ -6,6 +6,8 @@ Para ejecutar la auditoría en la rama que contiene el workflow, ve a **Actions 
 gh workflow run validate.yml --ref <rama> -f provider=audit-media
 ```
 
+Si tu integración de GitHub no permite `workflow_dispatch`, el mismo job también se ejecuta al hacer push de un commit cuyo mensaje contenga `[audit-media]` a una rama cubierta por el workflow (por ejemplo `arena/**`). No se activa en los push ordinarios.
+
 La acción compila los proveedores activos y ejecuta **tres intentos por proveedor**. Cada intento resuelve un título de prueba (sin necesitar clave de TMDB) y, **solo si obtiene URLs de HLS/MP4**, solicita una pequeña muestra de la playlist, sus variantes/segmentos (y clave AES-128 si la hubiera) o los primeros 4 KiB del MP4. Prueba GET con y sin `Range` si el host rechaza `Range` con 403; no descarga películas completas ni sigue controles de acceso o DRM. Los ejemplos de título por proveedor están en `scripts/media-audit.cjs`.
 
 El artefacto `media-audit-3-attempts` contiene `media-audit.json` con los tres intentos, los estados HTTP del **medio** y un resumen. No expone URLs firmadas, cookies ni claves. `discovery403` indica bloqueos *durante el descubrimiento* y **no** es criterio de retirada.
