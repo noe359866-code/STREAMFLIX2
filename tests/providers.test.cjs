@@ -530,6 +530,27 @@ test('Repelis24: busca la película real, usa wp_json y desenvuelve el Waaw expl
   assert.ok(result.streams.every((stream) => !/nupload\.me|waaw\.tv/.test(stream.url)));
 });
 
+test('Repelis24: Nupload solo entrega HLS tras descifrar la puerta y observar su redirección', async () => {
+  const base = 'https://sv4.ibra.lat/';
+  const offset = 4828350;
+  const values = [...base].map((char) => Buffer.from(String(offset + char.charCodeAt(0))).toString('base64'));
+  const token = 'ejemplo_firmado_temporal_0123456789abcdefghijkl';
+  const html = `<script>var datos=${JSON.stringify(values)}; var decoded=""; datos.forEach(function Oym(value) { decoded += String.fromCharCode(parseInt(atob(value).replace(/\\D/g,"")) - ${offset}); } ); var sesz="${token}"; player.setup({file:decoded+"?s="+sesz+""});</script>`;
+  const result = await run('repelis24', {
+    mediaType: 'movie', routes: [
+      ['repelis24.de/?s=Contenido%20Demo', card('/pelicula/contenido-demo/')],
+      ['repelis24.de/pelicula/contenido-demo/', '<script>var dtAjax={"play_method":"wp_json"}</script><li class="dooplay_player_option" data-type="movie" data-post="186263" data-nume="1"><span class="title">Nupload</span></li>'],
+      ['repelis24.de/wp-json/dooplayer/v2/186263/movie/1', { embed_url: 'https://nupload.me/watch/test' }],
+      ['nupload.me/watch/test', { __response: true, body: html, url: 'https://nupload.my/watch/test' }],
+      [`${base}?s=${token}`, { __response: true, body: '', status: 301, headers: { Location: `${base}79/9/demo.m3u8` } }],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].url, `${base}79/9/demo.m3u8`);
+  assert.equal(result.streams[0].headers.Referer, 'https://nupload.my/watch/test');
+  assert.ok(result.calls.some((call) => call.url.startsWith(`${base}?s=`) && call.init.redirect === 'manual'));
+});
+
 test('Repelis24: TV no fabrica episodios de una ficha /serie/ sin enlaces comprobados', async () => {
   const result = await run('repelis24', {
     routes: [['repelis24.de/?s=', card('/serie/contenido-demo/')]],

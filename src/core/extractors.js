@@ -2,6 +2,7 @@ import { fetchJson, fetchText, mapLimit, origin, requestHeaders, USER_AGENT } fr
 import { absoluteUrl, anchors, attributes, decodeHtml, extractBalanced, hostName, unique } from './text.js';
 import { decodeBase64, decodeBase64Binary, decodeBase64Url, decodeTokenLink } from './base64.js';
 import { isPlayableUrl, makeStream } from './streams.js';
+import { nuploadEndpointFromHtml, nuploadMediaRedirect } from './nupload.js';
 
 function decodeJsString(value) {
   return String(value || '').replace(/\\(u[0-9a-f]{4}|x[0-9a-f]{2}|.)/gi, (_, escape) => {
@@ -263,6 +264,16 @@ async function resolveOne(candidate, context, depth) {
     mixdropUrl(html, pageUrl),
   ].filter(Boolean));
   if (direct.length) return direct.map((url) => ({ ...candidate, url, referer: pageUrl, subtitles: subtitlesInHtml(html, pageUrl) }));
+
+  // Nupload: su URL /watch/ es HTML. La expresión numérica forma una puerta
+  // temporal ?s=; solo la redirección a .m3u8/.mp4 del host observado es vídeo.
+  if (/^https:\/\/nupload\.(?:my|me)\/watch\/[^/?#]+/i.test(pageUrl)) {
+    const endpoint = nuploadEndpointFromHtml(html);
+    if (endpoint) {
+      const url = await nuploadMediaRedirect(endpoint, pageUrl);
+      if (url) return [{ ...candidate, url, referer: pageUrl }];
+    }
+  }
 
   // Doodstream: la segunda petición conserva el token del reproductor.
   const pass = html.match(/(?:\$\.get|fetch)\(\s*["'](\/pass_md5\/[^"']+)["']/i);

@@ -40,6 +40,34 @@ test('extrae HLS y descarta páginas embed, DASH, clip genérico y javascript:',
   assert.equal(streams.mediaKind('https://cdn.example/video.m3u8'), 'hls');
 });
 
+test('Nupload: decodifica la expresión pública sin eval y solo sigue un Location de medio del mismo host', async () => {
+  const nupload = loadSource('src/core/nupload.js');
+  const base = 'https://sv4.ibra.lat/';
+  const offset = 4828350;
+  const values = [...base].map((char) => Buffer.from(String(offset + char.charCodeAt(0))).toString('base64'));
+  const token = 'ejemplo_firmado_temporal_0123456789abcdefghijkl';
+  const source = `<script>var valores=${JSON.stringify(values)}; var decoded=""; valores.forEach(function Oym(value) { decoded += String.fromCharCode(parseInt(atob(value).replace(/\\D/g,"")) - ${offset}); } ); var sesz="${token}"; player.setup({file:decoded+"?s="+sesz+""});</script>`;
+  const endpoint = `${base}?s=${token}`;
+  assert.equal(nupload.nuploadEndpointFromHtml(source), endpoint);
+  assert.equal(streams.isPlayableUrl(endpoint), false, 'la puerta sin extensión no es un vídeo');
+  const evilValues = [...'https://evil.example/'].map((char) => Buffer.from(String(offset + char.charCodeAt(0))).toString('base64'));
+  assert.equal(nupload.nuploadEndpointFromHtml(source.replace(JSON.stringify(values), JSON.stringify(evilValues))), '', 'no aceptar otro origen');
+  assert.equal(nupload.nuploadEndpointFromHtml(source.replace('file:decoded+', 'file:other+')), '');
+
+  const mock = mockFetch([
+    [endpoint, { __response: true, body: '', status: 301, headers: { Location: 'https://sv4.ibra.lat/79/9/playlist.m3u8' } }],
+  ]);
+  try {
+    assert.equal(await nupload.nuploadMediaRedirect(endpoint, 'https://nupload.my/watch/abc'), 'https://sv4.ibra.lat/79/9/playlist.m3u8');
+    assert.equal(mock.calls[0].init.redirect, 'manual');
+    assert.equal(mock.calls[0].init.headers.Range, 'bytes=0-4095');
+    assert.equal(mock.calls[0].init.headers.Referer, 'https://nupload.my/watch/abc');
+  } finally { mock.restore(); }
+  const malicious = mockFetch([[endpoint, { __response: true, body: '', status: 301, headers: { Location: 'https://another.example/stream.m3u8' } }]]);
+  try { assert.equal(await nupload.nuploadMediaRedirect(endpoint, 'https://nupload.my/watch/abc'), ''); }
+  finally { malicious.restore(); }
+});
+
 test('Voe F7 recupera el HLS del título y rechaza el MP4 Big Buck Bunny de muestra', () => {
   const source = fixture('voe-embed.html');
   const decoy = 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/av1/1080/Big_Buck_Bunny_1080_10s_5MB.mp4';

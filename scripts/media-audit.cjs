@@ -58,6 +58,10 @@ const MONEY_FIGHT = {
   id: 'money-fight', mediaType: 'movie', title: 'Money Fight', originalTitle: 'Money Fight',
   titles: ['Money Fight'], imdbId: '', year: '2021',
 };
+const BRAM_VAN_HELSING = {
+  id: 'bram-stokers-van-helsing', mediaType: 'movie', title: "Bram Stoker's Van Helsing",
+  originalTitle: "Bram Stoker's Van Helsing", titles: ["Bram Stoker's Van Helsing"], imdbId: '', year: '2021',
+};
 const TURKISH = {
   id: 'kara-sevda', mediaType: 'tv', title: 'Kara Sevda', originalTitle: 'Amor eterno',
   titles: ['Kara Sevda', 'Amor eterno'], imdbId: '', year: '2015',
@@ -70,7 +74,8 @@ function sampleFor(scraper) {
   if (id === 'doramasflix') return DORAMA;
   if (id === 'seriesturcas') return TURKISH;
   if (['seriesflix'].includes(id)) return SERIES;
-  if (['repelis24', 'gnulaone'].includes(id)) return MONEY_FIGHT;
+  if (id === 'repelis24') return BRAM_VAN_HELSING;
+  if (id === 'gnulaone') return MONEY_FIGHT;
   if (['hdfull', 'pelisgo'].includes(id)) return WEAPONS;
   if (!scraper.supportedTypes.includes('movie')) return SERIES;
   return MOVIE;

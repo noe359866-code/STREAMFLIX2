@@ -666,7 +666,8 @@ async function proxyFetch(input, init = {}, proxy, options = {}) {
     }
 
     const location = result.headers.Location || result.headers.location;
-    const redirectable = [301, 302, 303, 307, 308].includes(result.status) && location && redirects < maxRedirects;
+    const redirectable = init.redirect !== 'manual' && [301, 302, 303, 307, 308].includes(result.status)
+      && location && redirects < maxRedirects;
     if (!redirectable) {
       const responseBody = (result.status === 204 || result.status === 304) ? null : result.body;
       return new Response(responseBody, {
