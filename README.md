@@ -5,9 +5,9 @@ Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**
 1. **Pack de plugins para el runtime QuickJS/CommonJS de Nuvio** (`manifest.json` + `providers/*.js` en la raíz).
 2. **Addon de Stremio (`org.streamflix2.es`) listo para Beamup** (`stremio/`, `Procfile`, `scripts/deploy-beamup.sh`), con resolución automática de IDs IMDb (`tt…`) mediante Cinemeta, clave TMDB opcional, selector interactivo en `/configure` y entrega de cabeceras mediante `behaviorHints.proxyHeaders`.
 
-Incluye **30 conectores activos**, más **AnimeBum y TukiPlay deshabilitados**. AnimeBum estaba inactivo en el proyecto de origen y el HLS de TukiPlay devolvió 403 en tres intentos desde GitHub Actions.
+Incluye **32 conectores activos**, entre ellos **Repelis24** y **Gnula One** para películas (ambos experimentales), más **AnimeBum y TukiPlay deshabilitados**. AnimeBum estaba inactivo en el proyecto de origen y el HLS de TukiPlay devolvió 403 en tres intentos desde GitHub Actions.
 
-> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **32 bundles** y **74 pruebas offline** pasa localmente. El [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365) pasó la validación offline actual (32 bundles, 59 pruebas y lint del addon Beamup); la sonda live de Pelispedia no validó un medio reproducible en el título consultado. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **34 bundles** y **80 pruebas offline** pasa localmente y en [Actions 42290547535](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42290547535). CineHax y VerPeliculasOnline tienen comprobaciones históricas de firmas de medio; los dos proveedores recién añadidos **no** superaron una validación de reproducción: Repelis24 devolvió una playlist HLS 200 cuyos segmentos eran HTML y Gnula One no resolvió HLS/MP4 en la muestra. Ver [`docs/providers.md`](docs/providers.md) para el alcance exacto. Ninguna prueba sustituye la reproducción en Nuvio; los dominios y hosters cambian sin previo aviso.
 
 ## Addon de Stremio (Beamup)
 
@@ -56,7 +56,7 @@ El servidor de Nuvio escucha en `0.0.0.0:3000` y publica `/manifest.json` y `/pr
 | Grupo | Conectores |
 |---|---|
 | Películas y series | CineCalidad, Cine24H, CineHax/MovieMaster, Cuevana 3, Embed69, Fanpelis, FlixLatam, PlayLatinSRC, RepelisPlus, VideoAPI, PelisForte, PelisGo, PelisflixHD, PoseidonHD2, SoloLatino y TioPlus/Pelisplusto |
-| Películas solamente | HDFull y VerPeliculasOnline |
+| Películas solamente | HDFull, VerPeliculasOnline, Repelis24 y Gnula One (estos dos últimos experimentales) |
 | Doramas | Doramasflix |
 | Series solamente | Danimados (animadas), SeriesFlix, Series Turcas y LaCartoons |
 | Anime | AnimeAV1 (solo TV), Anime Online Ninja, JKAnime, Latanime y TioAnime |
@@ -66,6 +66,8 @@ La fuente, el tipo admitido, el dominio y las limitaciones de cada uno están en
 
 ### Estado de los conectores añadidos
 
+- **Repelis24:** solo películas. Busca en `/?s=`, selecciona una ficha real `/pelicula/` (descarta `/pelicula/<id>/`), lee `wp-json/dooplayer/v2/<post>/movie/<nume>` y pasa Nupload/Waaw al resolvedor. Nupload solo entrega una URL `.m3u8` tras reconstruir la puerta de la expresión pública y comprobar su redirección, sin ejecutar JavaScript ni presentar el embed como vídeo. En Actions la playlist respondió 200, pero **los segmentos eran HTML**; Waaw agotó tiempo. No se ha confirmado reproducción.
+- **Gnula One:** solo películas. Usa `/search/<título>` porque `/?s=` respondió 403 durante el reconocimiento. Examina `?trembed=N` y rechaza expresamente la portada a la que redirigieron las opciones observadas. En los tres intentos de Actions no resolvió HLS/MP4; no se afirma que reproduzca ni se declara TV sin episodio verificable.
 - **VerPeliculasOnline:** solo películas. Busca en DooPlay, consulta las opciones mediante `admin-ajax.php`, conserva ESP/LAT/SUB y omite el tráiler. El extractor estático Voe F7 recupera `source` HLS, no ejecuta JavaScript del hoster y rechaza el MP4 de Big Buck Bunny y `direct_access_url` (`/download/`). La respuesta real y la firma HLS se comprobaron por separado; las URLs firmadas caducan y la reproducción en Nuvio no está verificada.
 - **PelisForte:** películas y TV con selección exacta de temporada/episodio, carga AJAX de temporadas y expansión de `r.php`. Las páginas reales observadas llevan a Byse/n1mwq, cuya attestation de dispositivo, huella de navegador, PoW y configuración cifrada **no están soportadas** por el runtime actual. El fixture valida el recorrido con un player sintético, no un stream real de Byse; no se ha validado descubrimiento de medio real ni reproducción para este proveedor.
 - **Danimados:** solo series animadas. Busca la ficha, exige el episodio exacto y ejecuta `doo_player_ajax` con `post/type/nume` y el Referer del episodio. Las cuatro opciones reales observadas (VidHide, Filemoon, Voe y StreamWish) pasan al resolvedor común; su disponibilidad depende del hoster. No declara películas porque la colección REST `movies` está vacía.
@@ -84,7 +86,7 @@ Cada archivo de `providers/` exporta:
 async function getStreams(tmdbId, mediaType, season, episode)
 ```
 
-y devuelve únicamente candidatos con URL de medio validada (`.m3u8`, `.mp4`, `.mkv` o `.webm`), título, calidad, idioma, tipo y cabeceras cuando son necesarias. No se devuelven páginas `iframe` como si fueran streams. Se descartan DASH/MPD sin gestión DRM, enlaces de descarga y resultados cuya temporada/episodio no coincida.
+y devuelve únicamente URLs con formato de medio reconocido (`.m3u8`, `.mp4`, `.mkv` o `.webm`), título, calidad, idioma, tipo y cabeceras cuando son necesarias. El formato de la URL **no** acredita que los bytes sean reproducibles; eso se comprueba aparte en Actions. No se devuelven páginas `iframe` como si fueran streams. Se descartan DASH/MPD sin gestión DRM, enlaces de descarga y resultados cuya temporada/episodio no coincida.
 
 Ejemplo de resultado:
 
@@ -107,7 +109,7 @@ Requisito: **Node.js 20 o superior**.
 
 ```bash
 npm ci
-npm run check       # compila 32 bundles + ejecuta las pruebas offline
+npm run check       # compila 34 bundles + ejecuta las pruebas offline
 npm run build       # solo compila src/providers/*/index.js y manifest.json
 npm test            # no hace peticiones externas
 ```
@@ -119,7 +121,7 @@ npm test            # no hace peticiones externas
 - `manifest.json`: manifiesto generado para instalar.
 - `tests/fixtures/`: respuestas sintéticas y una captura Voe minimizada para regresión; ninguna prueba offline accede a la red.
 
-Las pruebas validan el recorrido TMDB → búsqueda → episodio → reproductor → medio para los 32 conectores, el formato del manifiesto, la ausencia de builtins de Node y utilidades como Base64URL, Voe F7 y su defensa contra vídeos de muestra, `__NEXT_DATA__`, datos Svelte, `dataLink`, AES-CBC/PoW y JavaScript empaquetado sin `eval`.
+Las pruebas validan el recorrido TMDB → búsqueda → episodio (cuando existe) → reproductor → URL con formato de medio para los 34 conectores, el formato del manifiesto, la ausencia de builtins de Node y utilidades como Base64URL, Voe F7 y su defensa contra vídeos de muestra, `__NEXT_DATA__`, datos Svelte, `dataLink`, AES-CBC/PoW y JavaScript empaquetado sin `eval`.
 
 ### Descubrimiento y reproducción reales
 
@@ -145,8 +147,9 @@ TMDB_API_KEY=... npm run test:playback -- \
 
 El workflow **Validate Nuvio plugins** ejecuta `npm ci`, `npm run check`, valida el servidor y publica un artifact con el paquete instalable. Puede lanzarse manualmente con proveedor, ID TMDB, tipo, temporada, episodio y opción de playback; para proveedores que resuelven metadatos necesita el secreto `TMDB_API_KEY` del repositorio.
 
-También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Para sondear en paralelo los siete adaptadores añadidos, usa `[live-providers]`; la Actions ejecuta descubrimiento y validación de hasta 4 KiB por URL y publica un informe por proveedor. En la opción manual de workflow se puede elegir un proveedor y pasar TMDb o IMDb (Cinemeta). Resultados:
+También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Para sondear en paralelo los siete adaptadores anteriores, usa `[live-providers]`; para los dos nuevos sitios usa `[audit-new-sites]` (tres intentos por web, comprueba HLS/MP4 y publica estados sin URLs firmadas). En la opción manual de workflow se puede elegir un proveedor y pasar TMDb o IMDb (Cinemeta). Resultados:
 
+- [Run 42290547535](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42290547535): 34 bundles y 80 pruebas offline correctos; Repelis24 descubrió URLs, pero sus segmentos HLS dieron HTML y Waaw agotó tiempo; Gnula One no obtuvo medios. Tres intentos por sitio, **ninguna reproducción confirmada ni 403 de medio persistente**.
 - [Run 41983314335](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983314335): validación offline inicial correcta.
 - [Run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): validación offline y prueba real de CineHax correctas; al menos un stream descubierto y un medio con firma válida.
 - [Run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): 25 bundles y 43 pruebas offline correctos con Danimados, PelisGo y HDFull registrados.
@@ -156,6 +159,7 @@ También se puede activar la prueba predeterminada de CineHax con un commit cuyo
 
 ## Limitaciones conocidas
 
+- Repelis24 y Gnula One se incluyen como **experimentales** para películas: la auditoría de Actions no encontró medios reproducibles para las muestras. En Gnula `?trembed` lleva a la portada; en Repelis24 el HLS de Nupload sirvió una playlist pero no un segmento de vídeo. No se implementó TV sin demostrar la selección de episodio.
 - TukiPlay está **desactivado**: su HLS devolvió 403 en los tres intentos de [la auditoría de medios en Actions](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42168396452). Se conserva el código para futuras reparaciones; este resultado se refiere a la red de Actions, no prueba un bloqueo en todos los dispositivos.
 - VideoAPI y PlayLatinSRC parten de sus embeds públicos y solo entregan medios directos expuestos en HTML estático; no ejecutan reproductores JavaScript, no suplantan orígenes permitidos ni usan claves API privadas. Su reproducción en Beamup no está validada. VideoAPI puede aplicar restricciones de origen.
 - RepelisPlus y las rutas directas IMDb de Embed69 están cubiertos por fixtures offline, no por pruebas end-to-end en sus webs. Embed69 ya se empleaba como hoster de fallback dentro de SoloLatino.

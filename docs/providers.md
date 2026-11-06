@@ -1,6 +1,6 @@
 # Matriz de proveedores
 
-Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido se validó offline con respuestas sintéticas o, en la regresión Voe, una captura real minimizada; no certifica por sí solo que el dominio responda hoy ni que el vídeo reproduzca. CineHax superó una prueba real de descubrimiento y firma de medio. Para VerPeliculasOnline se comprobaron por separado las páginas/AJAX reales y la firma HLS del hoster Voe. Ningún conector ha sido probado dentro del reproductor de la app Nuvio.
+Estado al **6 de noviembre de 2026**. “Fixture” significa que el recorrido se validó offline con respuestas sintéticas o, en la regresión Voe, una captura real minimizada; no certifica por sí solo que el dominio responda hoy ni que el vídeo reproduzca. CineHax superó una prueba real de descubrimiento y firma de medio. Para VerPeliculasOnline se comprobaron por separado las páginas/AJAX reales y la firma HLS del hoster Voe. Ningún conector ha sido probado dentro del reproductor de la app Nuvio.
 
 | ID | Nombre y dominio portado | Tipos | Manifiesto | Fixture | Implementación / limitación principal |
 |---|---|---|---|---|---|
@@ -15,6 +15,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 | `embed69` | Embed69 — `embed69.org` | Película/TV | Activo | ✅ | Ruta por IMDb y episodio; parsea `dataLink` público y pasa los resultados por los extractores comunes. También se usa como hoster en SoloLatino. |
 | `fanpelis` | Fanpelis — `fanpelis.to` | Película/TV | Activo | ✅ | REST `search`, `episodes`, `player`; compara números de episodio. |
 | `flixlatam` | FlixLatam — `flixlatam.com` | Película/TV | Activo | ✅ | `dataLink`, JWT/Base64, AES/PoW y `go_to_playerVast`; omite descargas. |
+| `gnulaone` | Gnula One — `ver.gnula.one` | **Película** | Activo (experimental) | ✅ | `/search/{título}` y opciones `?trembed=N`; en los títulos observados redirigen a la portada. La muestra real no produjo HLS/MP4, **reproducción sin validar**. No declara TV sin episodio comprobado. |
 | `hdfull` | HDFull — `hdfull.company` | **Película** | Activo | ✅ | `search-route` + `VideoObject.contentUrl`/`video` cuyo path coincide con el slug. Clip genérico/publicitario rechazado; TV no declarada. Firma del título sin validar por HTTP 403. |
 | `jkanime` | JKAnime — `jkanime.net` | Película/TV | Activo | ✅ | AJAX con CSRF/cookies y `var servers`; hosters dependen del extractor. |
 | `lacartoons` | LaCartoons — `www.lacartoons.com` | TV | Activo | ✅ | Selección por panel de temporada y “Capitulo/Capítulo N”. |
@@ -26,6 +27,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 | `pelisflixhd` | PelisflixHD — `pelisflixhd.win` | Película/TV | Activo | ✅ | Reproductores `data-server` Base64. |
 | `playlatinsrc` | PlayLatinSRC — `playlatinsrc.co` | Película/TV | Activo | ✅ | Genera player personalizado por IMDb y episodio; devuelve solo medios directos expuestos al resolver HTML. El embed consultado no mostró una fuente activa durante esta inspección. |
 | `poseidonhd2` | PoseidonHD2 — `www.poseidonhd2.co` | Película/TV | Activo | ✅ | `__NEXT_DATA__`, latino/castellano/subtitulado y bridges de player. |
+| `repelis24` | Repelis24 — `repelis24.de` | **Película** | Activo (experimental) | ✅ | `/?s=`, ficha y DooPlayer `wp-json`; Nupload se descodifica sin ejecutar JS y solo se acepta la redirección a HLS/MP4, Waaw es otra opción. La playlist HLS real respondió 200, pero sus segmentos devolvieron **HTML 200**, no vídeo; Waaw agotó tiempo. **No se afirma reproducción**. TV sin episodio verificado. |
 | `repelisplus` | RepelisPlus — `repelisplus.asia` | Película/TV | Activo | ✅ | Búsqueda y episodio exacto; extrae enlaces de players visibles en la respuesta pública sin inventar streams. End-to-end sin validar. |
 | `seriesflix` | SeriesFlix — `seriesflixhd.lol` | TV | Activo | ✅ | Solo series; carga temporadas, desenvuelve `data-url`/`url=` y conserva el idioma. |
 | `seriesturcas` | Series Turcas — `tbg.seriesturcastv.to` | TV | Activo | ✅ | Solo series; Vidmoly/Voe/Esprinahy y otros hosters conocidos. |
@@ -39,12 +41,13 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 
 ## Resultado de validación
 
-- Compilación esbuild/CommonJS: **32/32** (validación local de esta revisión).
-- Export `getStreams`: **32/32**.
-- Recorrido offline con fixtures: validado para los siete adaptadores nuevos; no equivale a disponibilidad real.
-- Suite completa en esta revisión: **74/74** pruebas offline; **30 proveedores activos** (TukiPlay y AnimeBum inactivos).
+- Compilación esbuild/CommonJS: **34/34** (validación local y Actions).
+- Export `getStreams`: **34/34**.
+- Recorrido offline con fixtures: incluye las dos búsquedas nuevas, DooPlayer REST, decodificación de Nupload, opciones Gnula y rechazo de la portada; no equivale a disponibilidad real.
+- Suite completa en esta revisión: **80/80** pruebas offline; **32 proveedores activos** (dos nuevos experimentales; TukiPlay y AnimeBum inactivos).
 - [Auditoría de medios en Actions, run 42168396452](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42168396452): 31 proveedores activos auditados antes de desactivar TukiPlay, **3 intentos por proveedor**, HLS/MP4 acotados. TukiPlay fue el único con 403 de la playlist en los tres; otros 403 pertenecían a búsqueda/puertas y no demuestran bloqueo del medio. La mayoría no produjo un HLS/MP4 comprobable para el título de muestra y quedó sin clasificación de reproducción.
-- [Segunda auditoría en Actions, run 42169133435](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42169133435): los **30 proveedores activos** recibieron otros **3 intentos cada uno**. Ninguno reunió los tres 403 en medios HLS/MP4; no se retiró ningún proveedor adicional. AnimeAV1 y CineHax devolvieron muestras de medio accesibles; en la mayoría no se encontró un HLS/MP4 para el título de prueba, por lo que su reproducción quedó **sin determinar**, no aprobada.
+- [Segunda auditoría en Actions, run 42169133435](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42169133435): los **30 proveedores activos de entonces** recibieron otros **3 intentos cada uno**. Ninguno reunió los tres 403 en medios HLS/MP4; no se retiró ningún proveedor adicional. AnimeAV1 y CineHax devolvieron muestras de medio accesibles; en la mayoría no se encontró un HLS/MP4 para el título de prueba, por lo que su reproducción quedó **sin determinar**, no aprobada.
+- [Auditoría de los dos sitios nuevos en Actions, run 42290547535](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42290547535): **3 intentos por sitio**. Repelis24 encontró 3 URL de HLS/MP4 por intento para *Bram Stoker's Van Helsing*: la playlist Nupload respondió 200 pero los segmentos devolvieron HTML (63 bytes, HTTP 200); las dos fuentes Waaw se agotaron por timeout. Gnula One encontró 0 medios en los 3 intentos con *Money Fight*. **Ninguno tuvo 403 de medio confirmado y ninguno obtuvo reproducción validada**; no se desactivaron por el criterio de 403.
 - GitHub Actions, [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365): build de 32 bundles, 59 pruebas offline y lint Beamup correctos. La sonda live de Pelispedia no encontró un medio cuya firma pudiera validar; la ficha pública consultada muestra el player online bloqueado y enlaces de descarga, que se excluyen.
 - GitHub Actions, [run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): **25 bundles y 43 pruebas offline correctos** con los tres nuevos conectores registrados.
 - GitHub Actions, [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): el Voe real de Van Helsing decodificó el título correcto; su `master.m3u8` respondió **HTTP 200**, `application/vnd.apple.mpegurl`, 690 bytes y `#EXTM3U`. No se comprobaron segmentos ni reproducción en Nuvio.
