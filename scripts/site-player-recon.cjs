@@ -63,7 +63,8 @@ async function get(url, referer, post, depth = 0) {
       if (target.protocol === 'https:' && ALLOWED.has(target.hostname)) {
         const next = await get(target.href, referer, post, depth + 1);
         return { ...next, requested: safeUrl(url), redirectChain: [response.status, ...(next.redirectChain || [])],
-          redirectLocations: [safeUrl(target.href), ...(next.redirectLocations || [])] };
+          redirectLocations: [safeUrl(target.href), ...(next.redirectLocations || [])],
+          redirectSame: [target.href === url, ...(next.redirectSame || [])] };
       }
       return { status: response.status, contentType: response.headers.get('content-type') || '', html: '', url, location: safeUrl(location, url) };
     }
@@ -206,6 +207,15 @@ async function repelis() {
               .slice(0, 12).map((m) => safeUrl(m[1], hoster.url || embedded)),
             signals: ['jwplayer', 'hls', 'base64', 'atob(', 'plyr', 'playerjs', 'fetch(', 'eval(', 'iframe', 'source:']
               .filter((marker) => hoster.html.toLowerCase().includes(marker)),
+            base64Literals: [...hoster.html.matchAll(/atob\(\s*["']([a-zA-Z0-9+/=_-]{12,5000})["']\s*\)/gi)]
+              .slice(0, 8).map((m) => {
+                const decoded = Buffer.from(m[1], 'base64').toString('utf8');
+                return { length: m[1].length, decodedMedia: safeUrl(decoded),
+                  hls: (decoded.match(/\.m3u8/gi) || []).length, mp4: (decoded.match(/\.mp4/gi) || []).length,
+                  scriptKeys: ['file', 'source', 'sources', 'playlist', 'jwplayer', 'fetch', 'iframe']
+                    .filter((key) => decoded.toLowerCase().includes(key)),
+                };
+              }),
           };
         }
       }
@@ -244,7 +254,7 @@ async function gnula() {
         url: safeUrl(frameUrl.href, base), paramLength: param.length,
         paramKind: /^\d+$/.test(param) ? 'numeric' : external ? 'external-url' : 'other',
         paramTarget: safeUrl(external), redirectChain: frame.redirectChain, redirectLocations: frame.redirectLocations,
-        location: frame.location, finalUrl: safeUrl(frame.url || frameUrl.href),
+        redirectSame: frame.redirectSame, location: frame.location, finalUrl: safeUrl(frame.url || frameUrl.href),
         title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(frame.html)?.[1]),
         iframes: iframeInfo(frame.html, frame.url || frameUrl.href),
         media: mediaHints(frame.html), response: responseInfo(frame.html, frame.url || frameUrl.href),
