@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: "Proveedor para la prueba real"
+        description: "Proveedor para prueba real; 'audit-media' audita medios HLS/MP4 de todos (3 intentos cada uno)"
         required: true
         default: cinehax
         type: string
@@ -59,6 +59,8 @@ jobs:
           node --check server.cjs
           node --check stremio/server.cjs
           node --check scripts/live-check.cjs
+          node --check scripts/media-audit.cjs
+          node --check scripts/media-audit-lib.cjs
           bash -n scripts/deploy-beamup.sh
       - name: Comprobar servidor local Nuvio
         run: |
@@ -148,9 +150,33 @@ jobs:
           path: live-${{ matrix.provider }}.json
           if-no-files-found: warn
 
+  audit-media:
+    name: Auditar HLS/MP4 reales · tres intentos por proveedor
+    if: github.event_name == 'workflow_dispatch' && inputs.provider == 'audit-media'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver medios y comprobar playlist, variante, segmento o MP4 (sin descargar vídeos completos)
+        run: node scripts/media-audit.cjs --all --output media-audit.json
+      - name: Publicar informe (sin enlaces firmados ni secretos)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-audit-3-attempts
+          path: media-audit.json
+          if-no-files-found: warn
+
   live:
     name: Prueba real desde GitHub Actions
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[live]'))
+    if: (github.event_name == 'workflow_dispatch' && inputs.provider != 'audit-media') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[live]'))
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
