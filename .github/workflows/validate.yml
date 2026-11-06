@@ -62,6 +62,7 @@ jobs:
           node --check scripts/media-audit.cjs
           node --check scripts/media-audit-lib.cjs
           node --check scripts/site-recon.cjs
+          node --check scripts/site-player-recon.cjs
           bash -n scripts/deploy-beamup.sh
       - name: Comprobar servidor local Nuvio
         run: |
@@ -170,6 +171,27 @@ jobs:
         with:
           name: site-recon
           path: site-recon.json
+          if-no-files-found: warn
+
+  site-player:
+    name: Inspeccionar opciones de video de Repelis24 y Gnula
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[site-player]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Consultar fichas y opciones públicas sin descargar videos completos
+        run: node scripts/site-player-recon.cjs --output site-player.json
+      - name: Publicar contratos y estados (sin URLs firmadas ni HTML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-player-recon
+          path: site-player.json
           if-no-files-found: warn
 
   audit-media:
