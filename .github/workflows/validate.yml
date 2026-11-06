@@ -40,6 +40,130 @@ on:
         type: boolean
 
 jobs:
+  probe_beamup:
+    name: Diagnosticar Beamup en vivo
+    if: github.ref_name == 'arena/c7a4bba8-streamflix2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Probar Beamup desplegado, Cinemeta y proveedores
+        run: |
+          node - <<'EOF'
+          const { encodeConfig, ACTIVE_SCRAPERS } = require('./stremio/config.cjs');
+          const { resolveStremioMetadata, parseStremioId } = require('./stremio/metadata.cjs');
+
+          const BEAMUP = 'https://7e2a912be9c9-streamflix2.baby-beamup.club';
+
+          function emit(title, obj) {
+            const msg = JSON.stringify(obj).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+            console.log(`::notice title=${title}::${msg}`);
+          }
+
+          async function timedFetch(url, timeoutMs = 40000, headers = {}) {
+            const t0 = Date.now();
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+            try {
+              const res = await fetch(url, { signal: ctrl.signal, headers });
+              const text = await res.text();
+              let json = null;
+              try { json = JSON.parse(text); } catch (_) {}
+              return {
+                ok: res.ok,
+                status: res.status,
+                ms: Date.now() - t0,
+                cache: res.headers.get('x-cache-status') || res.headers.get('cf-cache-status') || '',
+                cors: res.headers.get('access-control-allow-origin') || '',
+                streamsCount: Array.isArray(json?.streams) ? json.streams.length : null,
+                sample: Array.isArray(json?.streams) ? json.streams.slice(0, 2) : (json || text.slice(0, 300)),
+              };
+            } catch (err) {
+              return { ok: false, error: err.message, ms: Date.now() - t0 };
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+
+          (async () => {
+            // 1. Probar endpoints en vivo de Beamup
+            const cinehaxSeg = encodeConfig({ providers: ['cinehax'] });
+            const beamupChecks = {};
+            beamupChecks.health = await timedFetch(`${BEAMUP}/health`, 15000);
+            beamupChecks.manifest = await timedFetch(`${BEAMUP}/manifest.json`, 15000);
+            beamupChecks.cinehaxFightClub = await timedFetch(`${BEAMUP}/${cinehaxSeg}/stream/movie/tt0137523.json`, 30000);
+            beamupChecks.allFightClub = await timedFetch(`${BEAMUP}/stream/movie/tt0137523.json`, 45000);
+            beamupChecks.allInsideOut2 = await timedFetch(`${BEAMUP}/stream/movie/tt22022452.json`, 45000);
+            beamupChecks.allBreakingBad = await timedFetch(`${BEAMUP}/stream/series/tt0903747:1:1.json`, 45000);
+            beamupChecks.encodedColonBreakingBad = await timedFetch(`${BEAMUP}/stream/series/tt0903747%3A1%3A1.json`, 45000);
+            emit('BEAMUP_LIVE', beamupChecks);
+
+            // 2. Probar qué devuelve Cinemeta realmente para varias películas y series
+            const cinemetaChecks = {};
+            for (const [type, id] of [['movie', 'tt0137523'], ['movie', 'tt22022452'], ['movie', 'tt6263850'], ['series', 'tt0903747'], ['series', 'tt0388629']]) {
+              const r = await fetch(`https://v3-cinemeta.strem.io/meta/${type}/${id}.json`).then((x) => x.json()).catch((e) => ({ err: e.message }));
+              cinemetaChecks[`${type}:${id}`] = {
+                name: r?.meta?.name,
+                moviedb_id: r?.meta?.moviedb_id,
+                aliases: r?.meta?.aliases,
+                year: r?.meta?.year || r?.meta?.releaseInfo,
+              };
+            }
+            emit('CINEMETA_META', cinemetaChecks);
+
+            // 3. Probar fuentes públicas sin API key para título en español + TMDB ID (IMDb suggestion + Wikidata)
+            const altMeta = {};
+            for (const id of ['tt0137523', 'tt22022452', 'tt6263850', 'tt0903747']) {
+              const imdbEs = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${id}.json`, {
+                headers: { 'Accept-Language': 'es-MX,es;q=0.9', 'User-Agent': 'Mozilla/5.0' },
+              }).then((x) => x.json()).catch((e) => ({ err: e.message }));
+              const sparql = `SELECT ?item ?tmdbMovie ?tmdbTv ?esLabel ?esMxLabel ?enLabel WHERE { ?item wdt:P345 "${id}". OPTIONAL { ?item wdt:P4947 ?tmdbMovie. } OPTIONAL { ?item wdt:P4983 ?tmdbTv. } SERVICE wikibase:label { bd:serviceParam wikibase:language "es-419,es,en". ?item rdfs:label ?esLabel. } } LIMIT 5`;
+              const wd = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(sparql)}`, {
+                headers: { 'User-Agent': 'STREAMFLIX2-Stremio-Addon/1.0 (https://github.com/noe359866-code/STREAMFLIX2)' },
+              }).then((x) => x.json()).catch((e) => ({ err: e.message }));
+              altMeta[id] = {
+                imdbSuggestion: imdbEs?.d?.[0] ? { l: imdbEs.d[0].l, y: imdbEs.d[0].y, qid: imdbEs.d[0].qid } : imdbEs,
+                wikidata: wd?.results?.bindings?.[0] || null,
+              };
+            }
+            emit('PUBLIC_ES_META', altMeta);
+
+            // 4. Probar los 24 proveedores individualmente con título en español + tmdbId
+            const { runWithRequestContext } = require('./stremio/metadata.cjs');
+            const fakeMetaMovie = {
+              id: '1022789',
+              tmdbId: '1022789',
+              imdbId: 'tt22022452',
+              title: 'IntensaMente 2',
+              originalTitle: 'Inside Out 2',
+              titles: ['IntensaMente 2', 'Intensamente 2', 'Del revés 2', 'Inside Out 2'],
+              year: '2024',
+              mediaType: 'movie',
+            };
+            const provStats = {};
+            await runWithRequestContext({ tmdbApiKey: '', metadata: fakeMetaMovie }, async () => {
+              await Promise.all(ACTIVE_SCRAPERS.filter((s) => s.supportedTypes.includes('movie')).map(async (s) => {
+                const t0 = Date.now();
+                try {
+                  const mod = require(`./providers/${s.id}.js`);
+                  const p = mod.getStreams('tmdb:1022789', 'movie', null, null);
+                  const res = await Promise.race([
+                    p,
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout-12s')), 12000)),
+                  ]);
+                  provStats[s.id] = { count: Array.isArray(res) ? res.length : -1, ms: Date.now() - t0, sampleUrl: res?.[0]?.url?.slice(0, 80) };
+                } catch (e) {
+                  provStats[s.id] = { err: e.message, ms: Date.now() - t0 };
+                }
+              }));
+            });
+            emit('PROVIDER_MOVIE_STATS', provStats);
+          })();
+          EOF
+
   validate:
     name: Build y pruebas offline (Nuvio + Stremio Beamup)
     runs-on: ubuntu-latest
