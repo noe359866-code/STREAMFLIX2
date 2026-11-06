@@ -89,6 +89,28 @@ function iframeInfo(html, base) {
     safeUrl(attr(tag, 'src') || attr(tag, 'data-src') || attr(tag, 'data-embed'), base),
   ).filter(Boolean).slice(0, 10);
 }
+function nuploadCodeInfo(html) {
+  const loop = /\b([a-z_$][\w$]*)\.forEach\(function\s+[a-z_$][\w$]*\(value\)\s*\{\s*([a-z_$][\w$]*)\s*\+=\s*String\.fromCharCode\(parseInt\(atob\(value\)\.replace\(\/\\D\/g\s*,\s*["']["']\)\)\s*-\s*(\d+)\)/i.exec(html);
+  if (!loop) return { loopFound: false };
+  const [, arrayName, outputName, offset] = loop;
+  const escapedArray = arrayName.replace(/[$]/g, '\\$&');
+  const declaration = new RegExp(`\\b${escapedArray}\\s*=\\s*(\\[[\\s\\S]{1,140000}?\\])`, 'i').exec(html);
+  const arrayText = declaration?.[1] || '';
+  const entries = [...arrayText.matchAll(/["']([a-zA-Z0-9+/=_-]{8,100})["']/g)].map((match) => match[1]);
+  const decoded = entries.map((entry) => {
+    const digits = Buffer.from(entry, 'base64').toString('utf8').replace(/\D/g, '');
+    const code = Number(digits) - Number(offset);
+    return Number.isInteger(code) && code >= 0 && code <= 255 ? String.fromCharCode(code) : '';
+  }).join('');
+  const file = /\bfile\s*:\s*([a-z_$][\w$]*)\s*\+\s*(["'])([^"']*)\2\s*\+\s*([a-z_$][\w$]*)\s*\+\s*(["'])([^"']*)\5/i.exec(html);
+  const tokenName = file?.[4] || '';
+  const token = tokenName && new RegExp(`\\b${tokenName}\\s*=\\s*(["'])([^"']*)\\1`, 'i').exec(html)?.[2] || '';
+  const full = file?.[1] === outputName && token && decoded ? decoded + file[3] + token + file[6] : '';
+  return { loopFound: true, arrayFound: Boolean(arrayText), arrayChars: arrayText.length, entries: entries.length,
+    firstLengths: entries.slice(0, 4).map((entry) => entry.length), decodedLength: decoded.length,
+    decodedUrl: safeUrl(decoded), fileExpressionFound: Boolean(file), tokenLength: token.length,
+    result: safeUrl(full), isHls: /\.m3u8(?:[?#]|$)/i.test(full), isMp4: /\.mp4(?:[?#]|$)/i.test(full) };
+}
 function mediaHints(html) {
   return {
     hls: [...html.matchAll(/\.m3u8(?:[?"'\s]|$)/gi)].length,
@@ -204,6 +226,7 @@ async function repelis() {
             redirectLocations: hoster.redirectLocations, location: hoster.location, contentType: hoster.contentType,
             title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(hoster.html)?.[1]),
             iframes: iframeInfo(hoster.html, hoster.url || embedded), media: mediaHints(hoster.html),
+            numericPlayer: nuploadCodeInfo(hoster.html),
             scripts: [...hoster.html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)]
               .slice(0, 12).map((m) => safeUrl(m[1], hoster.url || embedded)),
             signals: ['jwplayer', 'hls', 'base64', 'atob(', 'plyr', 'playerjs', 'fetch(', 'eval(', 'iframe', 'source:']
