@@ -311,6 +311,27 @@
       ]
     },
     {
+      "id": "pelisjuanita",
+      "name": "Pelis Juanita",
+      "description": "Películas y series desde la búsqueda pública, con selección del episodio y extracción de medios HLS/MP4 declarados.",
+      "version": "1.0.0",
+      "filename": "providers/pelisjuanita.js",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "es"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4",
+        "mkv",
+        "webm"
+      ]
+    },
+    {
       "id": "pelisflixhd",
       "name": "PelisflixHD",
       "description": "Películas y series con reproductores Base64.",

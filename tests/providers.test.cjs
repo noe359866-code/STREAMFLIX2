@@ -529,3 +529,32 @@ test('RepelisPlus: búsqueda y selección del episodio solicitado antes de resol
   assert.deepEqual(missing.streams, []);
   assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/4')));
 });
+
+test('Pelis Juanita: búsqueda de películas y resolución de iframe a HLS', async () => {
+  const result = await run('pelisjuanita', {
+    mediaType: 'movie',
+    routes: [
+      ['pelisjuanita.org/?s=Contenido%20Demo', card('/pelicula/contenido-demo-2024')],
+      ['pelisjuanita.org/pelicula/contenido-demo-2024', '<iframe data-src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === 'https://pelisjuanita.org/?s=Contenido%20Demo'));
+  assert.ok(!result.streams.some((stream) => /pelisjuanita\.org\/pelicula\//.test(stream.url)));
+});
+
+test('Pelis Juanita: selecciona solo el episodio solicitado antes de resolver el player', async () => {
+  const episodeUrl = 'https://pelisjuanita.org/serie/contenido-demo-2024/episodio/3';
+  const routes = [
+    ['pelisjuanita.org/?s=Contenido%20Demo', card('/serie/contenido-demo-2024')],
+    [/https:\/\/pelisjuanita\.org\/serie\/contenido-demo-2024$/, `<a href="${episodeUrl}">T2 · E3</a>`],
+    [episodeUrl, '<iframe src="https://sw.example/e/demo"></iframe>'],
+  ];
+  const result = await run('pelisjuanita', { routes });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === episodeUrl));
+
+  const missing = await run('pelisjuanita', { episode: 4, routes: routes.slice(0, 2) });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/4')));
+});

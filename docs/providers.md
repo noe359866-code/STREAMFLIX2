@@ -21,6 +21,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 | `latanime` | Latanime — `latanime.org` | Película/TV | Activo | ✅ | `data-player` Base64 y episodio comprobado en la ficha. |
 | `pelisforte` | PelisForte — `www2.pelisforte.se` | Película/TV | Activo | ✅ | ToroFilm, temporadas AJAX, episodio exacto y `r.php`. La cadena real Byse/n1mwq observada requiere attestation/fingerprint/PoW y no tiene extractor compatible; sin medio real validado. |
 | `pelisgo` | PelisGo — `pelisgo.online` | Película/TV | Activo | ✅ | `/search?q=…`, slug devuelto, episodio exacto y servidores HTML/RSC con idioma/calidad. Descargas/Pixeldrain excluidos. Cloudflare impidió validar el player actual en vivo. |
+| `pelisjuanita` | Pelis Juanita — `pelisjuanita.org` | Película/TV | Activo | ✅ | Búsqueda pública `/?s=…`, fichas `/pelicula/` y `/serie/`, episodio exacto e iframes/medios declarados; disponibilidad live pendiente. |
 | `pelisflixhd` | PelisflixHD — `pelisflixhd.win` | Película/TV | Activo | ✅ | Reproductores `data-server` Base64. |
 | `playlatinsrc` | PlayLatinSRC — `playlatinsrc.co` | Película/TV | Activo | ✅ | Genera player personalizado por IMDb y episodio; devuelve solo medios directos expuestos al resolver HTML. El embed consultado no mostró una fuente activa durante esta inspección. |
 | `poseidonhd2` | PoseidonHD2 — `www.poseidonhd2.co` | Película/TV | Activo | ✅ | `__NEXT_DATA__`, latino/castellano/subtitulado y bridges de player. |
@@ -37,10 +38,10 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 
 ## Resultado de validación
 
-- Compilación esbuild/CommonJS: **30/30** (validación local de esta revisión).
-- Export `getStreams`: **30/30**.
-- Recorrido offline con fixtures: validado para los cinco adaptadores nuevos; no equivale a disponibilidad real.
-- Suite completa en esta revisión: **55/55** pruebas offline.
+- Compilación esbuild/CommonJS: **31/31** (validación local de esta revisión).
+- Export `getStreams`: **31/31**.
+- Recorrido offline con fixtures: validado para los seis adaptadores nuevos; no equivale a disponibilidad real.
+- Suite completa en esta revisión: **57/57** pruebas offline.
 - GitHub Actions, [run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): **25 bundles y 43 pruebas offline correctos** con los tres nuevos conectores registrados.
 - GitHub Actions, [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): el Voe real de Van Helsing decodificó el título correcto; su `master.m3u8` respondió **HTTP 200**, `application/vnd.apple.mpegurl`, 690 bytes y `#EXTM3U`. No se comprobaron segmentos ni reproducción en Nuvio.
 - GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **CineHax descubrió al menos un stream real y un medio superó la comprobación de firma**.
