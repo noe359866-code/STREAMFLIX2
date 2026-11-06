@@ -1,5 +1,5 @@
 import { fetchJson, fetchText, mapLimit, origin, requestHeaders, USER_AGENT } from './http.js';
-import { absoluteUrl, anchors, decodeHtml, extractBalanced, hostName, unique } from './text.js';
+import { absoluteUrl, anchors, attributes, decodeHtml, extractBalanced, hostName, unique } from './text.js';
 import { decodeBase64, decodeBase64Binary, decodeBase64Url, decodeTokenLink } from './base64.js';
 import { isPlayableUrl, makeStream } from './streams.js';
 
@@ -280,15 +280,21 @@ async function resolveOne(candidate, context, depth) {
     if (nested.length) return nested.map((item) => ({ ...item, language: item.language || candidate.language }));
   }
 
-  // Seguir únicamente iframes de vídeo, no enlaces publicitarios ni páginas HTML como streams.
-  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1]
-    || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1]
+  // Sigue opciones públicas de iframe/hoster (incluidos data-src lazy) sin devolver el HTML como stream.
+  // Se limita el fan-out para mantener rápidas las consultas concurrentes del addon.
+  const nested = embedCandidatesFromHtml(html, pageUrl, { ...candidate, referer: pageUrl })
+    .map((item) => ({ ...candidate, ...item, referer: pageUrl }))
+    .filter((item) => item.url && item.url !== candidate.url);
+  const redirect = html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1]
     || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1]
     || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1]
     || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : '');
-  const next = absoluteUrl(iframe || '', pageUrl);
-  if (next && next !== candidate.url && depth < 2) {
-    return resolveOne({ ...candidate, url: next, referer: pageUrl }, context, depth + 1);
+  const redirectUrl = absoluteUrl(redirect || '', pageUrl);
+  if (redirectUrl && redirectUrl !== candidate.url) nested.push({ ...candidate, url: redirectUrl, referer: pageUrl });
+  const nextCandidates = unique(nested, (item) => item.url).slice(0, context.maxNestedCandidates || 4);
+  if (nextCandidates.length && depth < 2) {
+    const resolved = await mapLimit(nextCandidates, context.parallel || 3, (item) => resolveOne(item, context, depth + 1));
+    return resolved.flat();
   }
   return [];
 }
@@ -311,17 +317,35 @@ export async function resolveCandidates(candidates, context = {}, depth = 0) {
   return resolved.flat().filter(Boolean);
 }
 
+const SUPPORTED_EMBED_HOST = /streamwish|voe\.|filemoon|vidhide|mixdrop|mp4upload|streamtape|dood|yourupload|uqload|vidmoly|ok\.ru|vimeos?|goodstream|zilla|vk\.com|mail\.ru|dropload|unlimplay|earnvids|streamhg|videoapp/i;
+
+function isSupportedEmbedUrl(url) {
+  const host = String(url || '').match(/^https?:\/\/([^/:?#]+)/i)?.[1] || '';
+  return SUPPORTED_EMBED_HOST.test(host);
+}
+
 export function embedCandidatesFromHtml(html, base, defaults = {}) {
-  const output = dataLinkCandidates(html, base);
-  const iframeRegex = /<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/gi;
-  let match;
-  while ((match = iframeRegex.exec(String(html || '')))) {
-    const url = absoluteUrl(match[1], base);
+  const source = String(html || '');
+  const output = dataLinkCandidates(source, base);
+  // Algunos catálogos cargan el player al seleccionar el servidor, usando data-src en lugar de src.
+  for (const match of source.matchAll(/<iframe\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    const raw = attrs.src || attrs['data-src'] || attrs['data-lazy-src'] || attrs['data-embed'] || attrs['data-url'];
+    const url = absoluteUrl(raw || '', base);
     if (url) output.push({ ...defaults, url });
   }
-  for (const anchor of anchors(html)) {
-    if (!/streamwish|voe\.|filemoon|vidhide|mixdrop|mp4upload|streamtape|dood|yourupload|uqload|vidmoly|ok\.ru|vimeos|goodstream|zilla|vk\.com|mail\.ru/i.test(anchor.href)) continue;
-    output.push({ ...defaults, url: absoluteUrl(anchor.href, base), title: anchor.title || defaults.title });
+  for (const anchor of anchors(source)) {
+    const url = absoluteUrl(anchor.href, base);
+    if (!url || !isSupportedEmbedUrl(url)) continue;
+    output.push({ ...defaults, url, title: anchor.title || defaults.title });
   }
-  return output;
+  // Los botones de idioma/servidor suelen guardar el embed en atributos de datos.
+  for (const match of source.matchAll(/<(?:a|button|div|li)\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    const raw = attrs['data-server-url'] || attrs['data-embed'] || attrs['data-src'] || attrs['data-link'] || attrs['data-url'];
+    const url = absoluteUrl(raw || '', base);
+    if (!url || (!isPlayableUrl(url) && !isSupportedEmbedUrl(url))) continue;
+    output.push({ ...defaults, url, title: attrs.title || attrs['data-server'] || defaults.title });
+  }
+  return unique(output, (item) => item.url);
 }

@@ -5,9 +5,9 @@ Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**
 1. **Pack de plugins para el runtime QuickJS/CommonJS de Nuvio** (`manifest.json` + `providers/*.js` en la raíz).
 2. **Addon de Stremio (`org.streamflix2.es`) listo para Beamup** (`stremio/`, `Procfile`, `scripts/deploy-beamup.sh`), con resolución automática de IDs IMDb (`tt…`) mediante Cinemeta, clave TMDB opcional, selector interactivo en `/configure` y entrega de cabeceras mediante `behaviorHints.proxyHeaders`.
 
-Incluye **24 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
+Incluye **31 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
 
-> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **25 bundles** y **49 pruebas offline** pasa localmente y en GitHub Actions ([run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146)). El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **32 bundles** y **59 pruebas offline** pasa localmente. El [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365) pasó la validación offline actual (32 bundles, 59 pruebas y lint del addon Beamup); la sonda live de Pelispedia no validó un medio reproducible en el título consultado. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
 
 ## Addon de Stremio (Beamup)
 
@@ -55,7 +55,7 @@ El servidor de Nuvio escucha en `0.0.0.0:3000` y publica `/manifest.json` y `/pr
 
 | Grupo | Conectores |
 |---|---|
-| Películas y series | CineCalidad, Cine24H, CineHax/MovieMaster, Cuevana 3, Fanpelis, FlixLatam, PelisForte, PelisGo, PelisflixHD, PoseidonHD2, SoloLatino y TioPlus/Pelisplusto |
+| Películas y series | CineCalidad, Cine24H, CineHax/MovieMaster, Cuevana 3, Embed69, Fanpelis, FlixLatam, PlayLatinSRC, RepelisPlus, TukiPlay, VideoAPI, PelisForte, PelisGo, PelisflixHD, PoseidonHD2, SoloLatino y TioPlus/Pelisplusto |
 | Películas solamente | HDFull y VerPeliculasOnline |
 | Doramas | Doramasflix |
 | Series solamente | Danimados (animadas), SeriesFlix, Series Turcas y LaCartoons |
@@ -107,7 +107,7 @@ Requisito: **Node.js 20 o superior**.
 
 ```bash
 npm ci
-npm run check       # compila 25 bundles + ejecuta las 43 pruebas offline
+npm run check       # compila 32 bundles + ejecuta las pruebas offline
 npm run build       # solo compila src/providers/*/index.js y manifest.json
 npm test            # no hace peticiones externas
 ```
@@ -119,7 +119,7 @@ npm test            # no hace peticiones externas
 - `manifest.json`: manifiesto generado para instalar.
 - `tests/fixtures/`: respuestas sintéticas y una captura Voe minimizada para regresión; ninguna prueba offline accede a la red.
 
-Las pruebas validan el recorrido TMDB → búsqueda → episodio → reproductor → medio para los 25 conectores, el formato del manifiesto, la ausencia de builtins de Node y utilidades como Base64URL, Voe F7 y su defensa contra vídeos de muestra, `__NEXT_DATA__`, datos Svelte, `dataLink`, AES-CBC/PoW y JavaScript empaquetado sin `eval`.
+Las pruebas validan el recorrido TMDB → búsqueda → episodio → reproductor → medio para los 32 conectores, el formato del manifiesto, la ausencia de builtins de Node y utilidades como Base64URL, Voe F7 y su defensa contra vídeos de muestra, `__NEXT_DATA__`, datos Svelte, `dataLink`, AES-CBC/PoW y JavaScript empaquetado sin `eval`.
 
 ### Descubrimiento y reproducción reales
 
@@ -128,6 +128,9 @@ Son pruebas separadas y opcionales:
 ```bash
 TMDB_API_KEY=... npm run test:live -- \
   --provider cuevana --tmdb 550 --type movie
+
+# Para Embed69/PlayLatinSRC/RepelisPlus sin TMDB_API_KEY: usa un IMDb ID y Cinemeta
+npm run test:live -- --provider embed69 --tmdb tt0137523 --type movie
 
 TMDB_API_KEY=... npm run test:playback -- \
   --provider animeav1 --tmdb 37854 --type tv --season 1 --episode 1
@@ -142,7 +145,7 @@ TMDB_API_KEY=... npm run test:playback -- \
 
 El workflow **Validate Nuvio plugins** ejecuta `npm ci`, `npm run check`, valida el servidor y publica un artifact con el paquete instalable. Puede lanzarse manualmente con proveedor, ID TMDB, tipo, temporada, episodio y opción de playback; para proveedores que resuelven metadatos necesita el secreto `TMDB_API_KEY` del repositorio.
 
-También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Resultados:
+También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Para sondear en paralelo los siete adaptadores añadidos, usa `[live-providers]`; la Actions ejecuta descubrimiento y validación de hasta 4 KiB por URL y publica un informe por proveedor. En la opción manual de workflow se puede elegir un proveedor y pasar TMDb o IMDb (Cinemeta). Resultados:
 
 - [Run 41983314335](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983314335): validación offline inicial correcta.
 - [Run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): validación offline y prueba real de CineHax correctas; al menos un stream descubierto y un medio con firma válida.
@@ -153,6 +156,8 @@ También se puede activar la prueba predeterminada de CineHax con un commit cuyo
 
 ## Limitaciones conocidas
 
+- Los adaptadores nuevos de TukiPlay, VideoAPI y PlayLatinSRC parten de sus embeds públicos y solo entregan medios directos que estén expuestos en HTML estático; no ejecutan reproductores JavaScript, no suplantan orígenes permitidos ni usan claves API privadas. Su disponibilidad en Beamup no está validada en vivo. VideoAPI puede aplicar restricciones de origen; TukiPlay documenta `resolve` con una clave configurada en su panel.
+- RepelisPlus y las rutas directas IMDb de Embed69 están cubiertos por fixtures offline, no por pruebas end-to-end en sus webs. Embed69 ya se empleaba como hoster de fallback dentro de SoloLatino.
 - Cloudflare/WebView, CAPTCHA y retos que exijan un navegador completo no se pueden resolver de forma fiable en QuickJS. Anime Online Ninja es especialmente dependiente de Cloudflare. PelisGo mostró verificación interactiva durante esta validación y HDFull respondió 403 a búsqueda/medio desde Actions; no se intentó eludir ninguno de los dos controles.
 - Danimados solo declara TV; PelisGo admite película/TV; HDFull solo declara películas. Ninguno de los tres cambia de temporada ni sustituye un episodio ausente por otro. Sus recorridos offline están cubiertos, pero el `live-check` end-to-end externo no se ejecutó porque falta el secreto `TMDB_API_KEY` del repositorio; Nuvio usa la clave efectiva de la app, no ese secreto de CI.
 - Las variantes modernas de Filemoon con attestation, hosters con JavaScript cambiante y enlaces DRM pueden no producir streams. En particular, Byse/n1mwq requiere attestation, fingerprint, challenge/PoW y configuración cifrada que este runtime no resuelve.

@@ -12,6 +12,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 | `cuevana` | Cuevana 3 — `cuevana.gs` | Película/TV | Activo | ✅ | `wp-api/v1`, lista de episodios y player por ID. |
 | `danimados` | Danimados — `danimados.cc` | **TV** | Activo | ✅ | Solo series animadas; episodio exacto y cuatro opciones `doo_player_ajax` reales. Colección `movies` vacía; extracción final depende de VidHide/Filemoon/Voe/StreamWish. |
 | `doramasflix` | Doramasflix — `doramasflix.in` + Fluxcedene | Película/TV | Activo | ✅ | GraphQL, `links_online` y token opcional de FKPlayer. |
+| `embed69` | Embed69 — `embed69.org` | Película/TV | Activo | ✅ | Ruta por IMDb y episodio; parsea `dataLink` público y pasa los resultados por los extractores comunes. También se usa como hoster en SoloLatino. |
 | `fanpelis` | Fanpelis — `fanpelis.to` | Película/TV | Activo | ✅ | REST `search`, `episodes`, `player`; compara números de episodio. |
 | `flixlatam` | FlixLatam — `flixlatam.com` | Película/TV | Activo | ✅ | `dataLink`, JWT/Base64, AES/PoW y `go_to_playerVast`; omite descargas. |
 | `hdfull` | HDFull — `hdfull.company` | **Película** | Activo | ✅ | `search-route` + `VideoObject.contentUrl`/`video` cuyo path coincide con el slug. Clip genérico/publicitario rechazado; TV no declarada. Firma del título sin validar por HTTP 403. |
@@ -20,22 +21,29 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 | `latanime` | Latanime — `latanime.org` | Película/TV | Activo | ✅ | `data-player` Base64 y episodio comprobado en la ficha. |
 | `pelisforte` | PelisForte — `www2.pelisforte.se` | Película/TV | Activo | ✅ | ToroFilm, temporadas AJAX, episodio exacto y `r.php`. La cadena real Byse/n1mwq observada requiere attestation/fingerprint/PoW y no tiene extractor compatible; sin medio real validado. |
 | `pelisgo` | PelisGo — `pelisgo.online` | Película/TV | Activo | ✅ | `/search?q=…`, slug devuelto, episodio exacto y servidores HTML/RSC con idioma/calidad. Descargas/Pixeldrain excluidos. Cloudflare impidió validar el player actual en vivo. |
+| `pelisjuanita` | Pelis Juanita — `pelisjuanita.org` | Película/TV | Activo | ✅ | Búsqueda pública `/?s=…`, fichas `/pelicula/` y `/serie/`, episodio exacto e iframes/medios declarados; disponibilidad live pendiente. |
+| `pelispedia` | Pelispedia — `pelispedia.is` | Película/TV | Activo | ✅ | Búsqueda WordPress `/?s=…`, fichas `/pelicula/` y `/serie/`, episodio exacto; admite solo players/medios expuestos y excluye enlaces de descarga. Player online reportado como bloqueado en la consulta pública. |
 | `pelisflixhd` | PelisflixHD — `pelisflixhd.win` | Película/TV | Activo | ✅ | Reproductores `data-server` Base64. |
+| `playlatinsrc` | PlayLatinSRC — `playlatinsrc.co` | Película/TV | Activo | ✅ | Genera player personalizado por IMDb y episodio; devuelve solo medios directos expuestos al resolver HTML. El embed consultado no mostró una fuente activa durante esta inspección. |
 | `poseidonhd2` | PoseidonHD2 — `www.poseidonhd2.co` | Película/TV | Activo | ✅ | `__NEXT_DATA__`, latino/castellano/subtitulado y bridges de player. |
+| `repelisplus` | RepelisPlus — `repelisplus.asia` | Película/TV | Activo | ✅ | Búsqueda y episodio exacto; extrae enlaces de players visibles en la respuesta pública sin inventar streams. End-to-end sin validar. |
 | `seriesflix` | SeriesFlix — `seriesflixhd.lol` | TV | Activo | ✅ | Solo series; carga temporadas, desenvuelve `data-url`/`url=` y conserva el idioma. |
 | `seriesturcas` | Series Turcas — `tbg.seriesturcastv.to` | TV | Activo | ✅ | Solo series; Vidmoly/Voe/Esprinahy y otros hosters conocidos. |
 | `sololatino` | SoloLatino — `sololatino.net` + Embed69 | Película/TV | Activo | ✅ | `player-url`, XSRF, `dataLink`, AES/PoW y fallback IMDb Embed69. |
 | `tioanime` | TioAnime — `tioanime.com` | Película/TV | Activo | ✅ | Verifica `var episodes`; usa únicamente Voe/YourUpload como el origen. |
 | `tioplus` | TioPlus/Pelisplusto — `tioplus.app` | Película/TV | Activo | ✅ | Valida `seasonsJson`; URLs `season/{s}/episode/{e}` y `.bg-tabs` Base64. |
+| `tukiplay` | TukiPlay — `tukiplay.com` | Película/TV | Activo | ✅ | Construye el embed público TMDb/IMDb y sigue solo fuentes/iframes directos expuestos. No usa `/api/v1/resolve` porque requiere una clave configurada en el panel. |
+| `videoapi` | VideoAPI — `videoapi.la` | Película/TV | Activo | ✅ | Consulta el endpoint público `exists`, acepta solo rutas `/e/...` del mismo dominio y busca un medio directo en el embed. No suplanta Origin/Referer ni usa endpoints privados. |
 | `verpeliculasonline` | VerPeliculasOnline — `verpeliculasonline.net` | **Película** | Activo | ✅ | DooPlayer `admin-ajax.php`, ESP/LAT/SUB, sin tráiler/descargas. Decodifica Voe F7 y rechaza el señuelo Big Buck Bunny; HLS real validado a nivel de playlist, no de reproducción. |
 | `animebum` | AnimeBum — `www.animebum.net` | Película/TV | **Inactivo** | ✅ | Presente pero deshabilitado en Streamflix; `video[]` y pCloud. No activar esperando disponibilidad. |
 
 ## Resultado de validación
 
-- Compilación esbuild/CommonJS: **25/25**.
-- Export `getStreams`: **25/25**.
-- Recorrido offline con fixtures: **25/25**.
-- Suite completa: **43/43** pruebas.
+- Compilación esbuild/CommonJS: **32/32** (validación local de esta revisión).
+- Export `getStreams`: **32/32**.
+- Recorrido offline con fixtures: validado para los siete adaptadores nuevos; no equivale a disponibilidad real.
+- Suite completa en esta revisión: **59/59** pruebas offline.
+- GitHub Actions, [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365): build de 32 bundles, 59 pruebas offline y lint Beamup correctos. La sonda live de Pelispedia no encontró un medio cuya firma pudiera validar; la ficha pública consultada muestra el player online bloqueado y enlaces de descarga, que se excluyen.
 - GitHub Actions, [run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): **25 bundles y 43 pruebas offline correctos** con los tres nuevos conectores registrados.
 - GitHub Actions, [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): el Voe real de Van Helsing decodificó el título correcto; su `master.m3u8` respondió **HTTP 200**, `application/vnd.apple.mpegurl`, 690 bytes y `#EXTM3U`. No se comprobaron segmentos ni reproducción en Nuvio.
 - GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **CineHax descubrió al menos un stream real y un medio superó la comprobación de firma**.
@@ -50,7 +58,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 
 ## Formatos y hosters
 
-La capa común sigue iframes hasta dos niveles, interpreta declaraciones directas HLS/MP4, JavaScript Dean Edwards empaquetado sin `eval`, Streamtape, MixDrop, Voe, Zilla, pCloud y MovieMaster. Un nombre de hoster en esta lista no garantiza compatibilidad con todas sus variantes.
+La capa común sigue hasta cuatro opciones públicas de iframe/hoster por página, con concurrencia limitada y profundidad máxima de dos; reconoce `src` y atributos lazy (`data-src`, `data-embed`, `data-url`), enlaces DropLoad/UnlimPlay/StreamHG/Earnvids y formatos HLS/MP4 declarados directamente, además de JavaScript Dean Edwards empaquetado sin `eval`, Streamtape, MixDrop, Voe, Zilla, pCloud y MovieMaster. Un nombre de hoster en esta lista no garantiza compatibilidad con todas sus variantes.
 
 Para el payload Voe F7 observado se aplican transformaciones deterministas (ROT13, marcadores, Base64, desplazamiento e inversión) sin ejecutar el loader del hoster. Se prioriza `source`; `fallback` solo se usa si falta una fuente válida. `direct_access_url` se excluye por ser una descarga y cualquier medio de `test-videos.co.uk` se rechaza como señuelo. Las URLs firmadas caducan y pueden depender de la red que las generó.
 

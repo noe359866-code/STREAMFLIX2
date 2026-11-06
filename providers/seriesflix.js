@@ -781,13 +781,17 @@ async function resolveOne(candidate, context, depth) {
   }
   const nestedServers = protectedDataLinkCandidates(html, pageUrl);
   if (nestedServers.length && depth < 2) {
-    const nested = await resolveCandidates(nestedServers, { ...context, referer: pageUrl }, depth + 1);
-    if (nested.length) return nested.map((item) => ({ ...item, language: item.language || candidate.language }));
+    const nested2 = await resolveCandidates(nestedServers, { ...context, referer: pageUrl }, depth + 1);
+    if (nested2.length) return nested2.map((item) => ({ ...item, language: item.language || candidate.language }));
   }
-  const iframe = html.match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1] || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : "");
-  const next = absoluteUrl(iframe || "", pageUrl);
-  if (next && next !== candidate.url && depth < 2) {
-    return resolveOne({ ...candidate, url: next, referer: pageUrl }, context, depth + 1);
+  const nested = embedCandidatesFromHtml(html, pageUrl, { ...candidate, referer: pageUrl }).map((item) => ({ ...candidate, ...item, referer: pageUrl })).filter((item) => item.url && item.url !== candidate.url);
+  const redirect = html.match(/var\s+url\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || html.match(/window\.location\.replace\(["'](https?:\/\/[^"']+)["']\)/i)?.[1] || html.match(/window\.location(?:\.href)?\s*=\s*["'](https?:\/\/[^"']+)["']/i)?.[1] || (/window\.onload/i.test(html) ? html.match(/["'](https?:\/\/[^"']+)["']/i)?.[1] : "");
+  const redirectUrl = absoluteUrl(redirect || "", pageUrl);
+  if (redirectUrl && redirectUrl !== candidate.url) nested.push({ ...candidate, url: redirectUrl, referer: pageUrl });
+  const nextCandidates = unique(nested, (item) => item.url).slice(0, context.maxNestedCandidates || 4);
+  if (nextCandidates.length && depth < 2) {
+    const resolved = await mapLimit(nextCandidates, context.parallel || 3, (item) => resolveOne(item, context, depth + 1));
+    return resolved.flat();
   }
   return [];
 }
@@ -806,6 +810,34 @@ async function resolveCandidates(candidates, context = {}, depth = 0) {
     })).filter(Boolean);
   });
   return resolved.flat().filter(Boolean);
+}
+var SUPPORTED_EMBED_HOST = /streamwish|voe\.|filemoon|vidhide|mixdrop|mp4upload|streamtape|dood|yourupload|uqload|vidmoly|ok\.ru|vimeos?|goodstream|zilla|vk\.com|mail\.ru|dropload|unlimplay|earnvids|streamhg|videoapp/i;
+function isSupportedEmbedUrl(url) {
+  const host = String(url || "").match(/^https?:\/\/([^/:?#]+)/i)?.[1] || "";
+  return SUPPORTED_EMBED_HOST.test(host);
+}
+function embedCandidatesFromHtml(html, base, defaults = {}) {
+  const source = String(html || "");
+  const output = dataLinkCandidates(source, base);
+  for (const match of source.matchAll(/<iframe\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    const raw = attrs.src || attrs["data-src"] || attrs["data-lazy-src"] || attrs["data-embed"] || attrs["data-url"];
+    const url = absoluteUrl(raw || "", base);
+    if (url) output.push({ ...defaults, url });
+  }
+  for (const anchor of anchors(source)) {
+    const url = absoluteUrl(anchor.href, base);
+    if (!url || !isSupportedEmbedUrl(url)) continue;
+    output.push({ ...defaults, url, title: anchor.title || defaults.title });
+  }
+  for (const match of source.matchAll(/<(?:a|button|div|li)\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    const raw = attrs["data-server-url"] || attrs["data-embed"] || attrs["data-src"] || attrs["data-link"] || attrs["data-url"];
+    const url = absoluteUrl(raw || "", base);
+    if (!url || !isPlayableUrl(url) && !isSupportedEmbedUrl(url)) continue;
+    output.push({ ...defaults, url, title: attrs.title || attrs["data-server"] || defaults.title });
+  }
+  return unique(output, (item) => item.url);
 }
 
 // src/providers/seriesflix/index.js

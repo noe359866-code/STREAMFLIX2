@@ -8,9 +8,9 @@ const { ROOT, provider } = require('./helpers.cjs');
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
 const ids = manifest.scrapers.map((item) => item.id);
 
-test('el manifiesto tiene 25 IDs únicos y rutas de bundle válidas', () => {
-  assert.equal(manifest.scrapers.length, 25);
-  assert.equal(new Set(ids).size, 25);
+test('el manifiesto tiene 32 IDs únicos y rutas de bundle válidas', () => {
+  assert.equal(manifest.scrapers.length, 32);
+  assert.equal(new Set(ids).size, 32);
   assert.ok(manifest.name && manifest.version);
   for (const scraper of manifest.scrapers) {
     assert.ok(scraper.id && scraper.name && scraper.version && scraper.filename);
@@ -32,7 +32,7 @@ test('los proveedores solo de series y AnimeBum están marcados correctamente', 
     assert.deepEqual(manifest.scrapers.find((item) => item.id === id).supportedTypes, ['movie', 'tv']);
   }
   assert.equal(manifest.scrapers.find((item) => item.id === 'animebum').enabled, false);
-  assert.equal(manifest.scrapers.filter((item) => item.enabled).length, 24);
+  assert.equal(manifest.scrapers.filter((item) => item.enabled).length, 31);
 });
 
 test('cada bundle exporta getStreams y no depende de builtins de Node', async () => {

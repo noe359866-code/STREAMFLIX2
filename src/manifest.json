@@ -93,6 +93,17 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "embed69",
+      "name": "Embed69",
+      "description": "Embed69 por IMDb; lee enlaces públicos dataLink y pasa cada candidato por validación de medio.",
+      "version": "1.0.0",
+      "filename": "providers/embed69.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
       "id": "fanpelis",
       "name": "Fanpelis",
       "description": "Películas y series mediante la API REST de fanpelis.to.",
@@ -159,6 +170,39 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "pelispedia",
+      "name": "Pelispedia",
+      "description": "Películas y series desde la búsqueda pública; selecciona el episodio y resuelve solo players/medios expuestos, no enlaces de descarga.",
+      "version": "1.0.0",
+      "filename": "providers/pelispedia.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "pelisjuanita",
+      "name": "Pelis Juanita",
+      "description": "Películas y series desde la búsqueda pública, con selección del episodio y extracción de medios HLS/MP4 declarados.",
+      "version": "1.0.0",
+      "filename": "providers/pelisjuanita.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "pelisflixhd",
+      "name": "PelisflixHD",
+      "description": "Películas y series con reproductores Base64.",
+      "version": "1.0.0",
+      "filename": "providers/pelisflixhd.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
       "id": "pelisforte",
       "name": "PelisForte",
       "description": "Películas y series ToroFilm; episodios exactos. Byse/n1mwq con attestation no resuelto.",
@@ -181,11 +225,11 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
-      "id": "pelisflixhd",
-      "name": "PelisflixHD",
-      "description": "Películas y series con reproductores Base64.",
+      "id": "playlatinsrc",
+      "name": "PlayLatinSRC",
+      "description": "Player personalizado por IMDb y episodio; solo acepta URLs directas de medio extraídas de la página pública.",
       "version": "1.0.0",
-      "filename": "providers/pelisflixhd.js",
+      "filename": "providers/playlatinsrc.js",
       "supportedTypes": ["movie", "tv"],
       "enabled": true,
       "contentLanguage": ["es"],
@@ -197,6 +241,17 @@
       "description": "Películas y series desde __NEXT_DATA__, con latino, castellano y subtítulos.",
       "version": "1.0.0",
       "filename": "providers/poseidonhd2.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "repelisplus",
+      "name": "RepelisPlus",
+      "description": "Búsqueda de películas/series, selección del episodio exacto y resolución de fuentes públicas.",
+      "version": "1.0.0",
+      "filename": "providers/repelisplus.js",
       "supportedTypes": ["movie", "tv"],
       "enabled": true,
       "contentLanguage": ["es"],
@@ -258,12 +313,34 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "tukiplay",
+      "name": "TukiPlay",
+      "description": "Embed público por TMDb/IMDb; solo devuelve medios directos si el player los expone sin depender de una API privada.",
+      "version": "1.0.0",
+      "filename": "providers/tukiplay.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
       "id": "verpeliculasonline",
       "name": "VerPeliculasOnline",
       "description": "Películas; DooPlayer AJAX por idioma y Voe F7 con HLS firmado, sin descargas.",
       "version": "1.0.0",
       "filename": "providers/verpeliculasonline.js",
       "supportedTypes": ["movie"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "videoapi",
+      "name": "VideoAPI",
+      "description": "Comprueba disponibilidad con el endpoint público y resuelve únicamente rutas de embed públicas/directas.",
+      "version": "1.0.0",
+      "filename": "providers/videoapi.js",
+      "supportedTypes": ["movie", "tv"],
       "enabled": true,
       "contentLanguage": ["es"],
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]

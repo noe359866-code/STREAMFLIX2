@@ -24,12 +24,29 @@ if (!providerId || !tmdbId || !['movie', 'tv'].includes(mediaType)) {
   process.exitCode = 2;
   return;
 }
-if (providerId !== 'cinehax' && !process.env.TMDB_API_KEY) {
-  console.error('Falta TMDB_API_KEY. Nuvio la inyecta desde ajustes; este script la lee del entorno.');
+const imdbId = /^tt\d+$/i.test(String(tmdbId || '')) ? String(tmdbId) : '';
+const metadataKeyOptional = new Set(['cinehax', 'tukiplay', 'videoapi']).has(providerId);
+if (!metadataKeyOptional && !process.env.TMDB_API_KEY && !imdbId) {
+  console.error('Falta TMDB_API_KEY. Alternativamente, pasa un IMDb ID (tt...) para resolver metadatos con Cinemeta.');
   process.exitCode = 2;
   return;
 }
 global.TMDB_API_KEY = process.env.TMDB_API_KEY || '';
+if (imdbId) {
+  const { resolveStremioMetadata } = require('../stremio/metadata.cjs');
+  const parsed = {
+    mediaType: mediaType === 'movie' ? 'movie' : 'tv',
+    imdbId,
+    tmdbId: '',
+    season: mediaType === 'tv' ? season : null,
+    episode: mediaType === 'tv' ? episode : null,
+  };
+  global.__STREAMFLIX_METADATA_HOOK = async () => {
+    const metadata = await resolveStremioMetadata(parsed, { useCache: false });
+    if (!metadata) throw new Error(`Cinemeta no devolvió metadatos para ${imdbId}.`);
+    return { ...metadata, id: metadata.tmdbId || imdbId, mediaType: parsed.mediaType };
+  };
+}
 const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 const registration = manifest.scrapers.find((item) => item.id === providerId);
@@ -113,6 +130,23 @@ async function probe(stream) {
   }
   const serialized = `${JSON.stringify(result, null, 2)}\n`;
   if (output) fs.writeFileSync(path.resolve(output), serialized);
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (summaryPath) {
+    const playbackSummary = (result.playback || []).map((item, index) =>
+      `| ${index + 1} | ${item.valid ? 'válido' : 'no válido'} | ${item.kind} | ${item.status || 'sin HTTP'} | ${item.bytesRead || 0} |`,
+    );
+    const summary = [
+      `## Prueba real: ${providerId}`,
+      '',
+      `- Contenido: ${mediaType} ${tmdbId}`,
+      `- Streams descubiertos: ${streams.length}`,
+      `- Tiempo: ${result.elapsedMs} ms`,
+      `- Advertencias del conector: ${warnings.length}`,
+      ...(playback ? ['', '| # | Resultado | Firma | HTTP | Bytes |', '| - | - | - | -: | -: |', ...(playbackSummary.length ? playbackSummary : ['| — | sin candidato | — | — | 0 |'])] : []),
+      '',
+    ].join('\n');
+    fs.appendFileSync(summaryPath, summary);
+  }
   console.log(serialized);
   if (!streams.length || (playback && !result.playback.some((item) => item.valid))) process.exitCode = 1;
 })().catch((error) => {

@@ -13,7 +13,7 @@ on:
         default: cinehax
         type: string
       tmdb:
-        description: "ID TMDB para la prueba real"
+        description: "ID TMDB o IMDb para la prueba real"
         required: true
         default: "550"
         type: string
@@ -99,6 +99,54 @@ jobs:
             manifest.json
             providers/
           if-no-files-found: error
+
+  live-requested-providers:
+    name: Prueba real · ${{ matrix.provider }}
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[live-providers]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - provider: embed69
+            content_id: tt0137523
+          - provider: tukiplay
+            content_id: "550"
+          - provider: videoapi
+            content_id: "550"
+          - provider: playlatinsrc
+            content_id: tt0137523
+          - provider: repelisplus
+            content_id: tt0137523
+          - provider: pelisjuanita
+            content_id: tt0137523
+          - provider: pelispedia
+            content_id: tt0137523
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Descubrir y validar HLS/MP4 real
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: >-
+          node scripts/live-check.cjs
+          --provider "${{ matrix.provider }}"
+          --tmdb "${{ matrix.content_id }}"
+          --type movie --season 1 --episode 1 --playback
+          --output "live-${{ matrix.provider }}.json"
+      - name: Publicar informe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-${{ matrix.provider }}
+          path: live-${{ matrix.provider }}.json
+          if-no-files-found: warn
 
   live:
     name: Prueba real desde GitHub Actions
