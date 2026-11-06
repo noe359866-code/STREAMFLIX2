@@ -31,7 +31,7 @@ La referencia de compatibilidad QuickJS/CommonJS se comprobó en el proyecto Nuv
   https://github.com/MMUU6699/nuvio
 
 Nuvio proporciona crypto-js en su runtime para los conectores que necesitan
-SHA-256/AES. crypto-js se declara como dependencia de desarrollo únicamente para
-reproducir esas pruebas en Node.js; se mantiene externo en los bundles.
+SHA-256/AES. crypto-js se declara como dependencia para reproducir las
+pruebas en Node.js; se mantiene externo en los bundles destinados a Nuvio.
 
 El texto completo de la licencia Apache 2.0 se encuentra en LICENSE.

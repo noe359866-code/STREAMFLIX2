@@ -1,5 +1,7 @@
 # Revisión integral de los 34 scrapers — 6 de noviembre de 2026
 
+> Esta tabla conserva los resultados de la auditoría `42295795690`. La comparación posterior con el proyecto Android, los cambios portados y la nueva auditoría `42298326175` se documentan en [porte-streamflix-reborn2.md](porte-streamflix-reborn2.md); no interpretar los resultados históricos de Zilla/CineHax como el estado actual de esas fuentes.
+
 ## Alcance y criterio
 
 Se revisaron los **34 adaptadores** de `src/providers/` frente a los manifiestos Nuvio y Stremio, la capa compartida (`src/core/`) y las pruebas offline. Hay **32 activos**; `animebum` y `tukiplay` siguen inactivos. Los 34 compilan y tienen pruebas offline de sus rutas principales, pero los fixtures no demuestran disponibilidad real ni reproducción en un dispositivo.

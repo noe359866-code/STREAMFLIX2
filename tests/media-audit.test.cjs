@@ -144,6 +144,25 @@ test('HLS: detecta 403 en las dos muestras del segmento o la clave AES-128', asy
   assert.equal(key.calls.length, 2);
 });
 
+test('HLS Zilla: un mapa de inicialización 403 bloquea esa fuente, no otra fuente accesible', async () => {
+  const playlist = 'https://player.zilla-networks.com/m3u8/episode123';
+  const init = 'https://player.zilla-networks.com/m3u8/header.mp4';
+  const mock = mockFetch({
+    [playlist]: { body: '#EXTM3U\n#EXT-X-MAP:URI="header.mp4"\n#EXTINF:4,\npart.m4s\n' },
+    [init]: { status: 403 },
+  });
+  const blocked = await checkMedia(hls(playlist), mock);
+  assert.equal(blocked.outcome, 'http403');
+  assert.equal(blocked.stage, 'inicializacion');
+  assert.equal(blocked.host, 'player.zilla-networks.com');
+  assert.equal(mock.calls.length, 3, 'Range y GET normal confirmaron el 403 del recurso indispensable');
+
+  const available = { outcome: 'ok', stage: 'segmento', status: 206 };
+  const attempt = { mediaCount: 2, otherFormats: 0, media: [blocked, available] };
+  assert.equal(classifyProvider([attempt, attempt, attempt]), 'medio-accesible',
+    'un hoster bloqueado no justifica retirar todo AnimeAV1 si otro medio funciona');
+});
+
 test('no considera válida playlist HTML ni retira por 403 de una variante si otra devuelve 404', async () => {
   const url = 'https://cdn.example/master.m3u8';
   const html = mockFetch({ [url]: { body: '<html>no video</html>', contentType: 'text/html' } });

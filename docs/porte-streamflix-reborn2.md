@@ -65,4 +65,16 @@ Los cambios se aplican a la capa común y se regeneran los **34 bundles**. Las p
 
 `npm run check` compila los 34 bundles y ejecuta las pruebas offline. La comprobación real se hace exclusivamente desde **GitHub Actions**, con **tres intentos por cada proveedor activo** y distinción entre 403 de descubrimiento y 403 de HLS/MP4. Las pruebas con mocks no son prueba de reproducción en Nuvio ni de disponibilidad del hoster Maxstream.
 
+[GitHub Actions 42298326175](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42298326175) auditó el código de `f1e0b32`: **32 proveedores × 3 = 96 intentos**, 34 bundles y **90/90 pruebas offline** entonces. Cuatro proveedores (`animeav1`, `cinehax`, `embed69`, `videoapi`) tuvieron **alguna** firma de medio válida; 28 fueron no concluyentes. **Cero proveedores cumplen el criterio de retirada por 403 de todos sus medios**. El test añadido después sobre el 403 de inicialización deja la suite en **91 pruebas**.
+
+| Caso de interés | Resultado desde Actions | Consecuencia |
+|---|---|---|
+| AnimeAV1/Zilla | Se encontró la playlist, pero su **recurso HLS de inicialización dio 403/403/403** (Range y GET normal) para la muestra. Otros HLS y MP4 del mismo episodio devolvieron firma MPEG-TS/MP4 **206 en los tres intentos**. | No se considera reparado Zilla ni se elimina AnimeAV1 por un hoster fallido: conserva alternativas accesibles desde Actions. No equivale a reproducción completa en Nuvio. |
+| CineHax/MovieMaster | Cinco URL HLS por intento. Hubo un segmento MPEG-TS **206 en uno de los tres intentos**; otras respuestas fueron PNG de publicidad, 504 o timeout. | UA coherente confirmado en el código; disponibilidad variable, sin afirmar mejora de reproducción por el cambio de UA. |
+| Danimados/VidHide | Se consultó `minochinos.com` con HTTP 200, pero no se resolvió un HLS/MP4 de la muestra (un formato distinto no auditado). | Alias reconocido ≠ medio validado. |
+| Repelis24/PelisflixHD | Playlists disponibles, pero segmentos **HTML 200 de 63 bytes**, no vídeo. | No ampliar falsamente los extractores Nupload. |
+| Maxstream | Los títulos muestreados no expusieron ese hoster. | Fallback `/castv` probado con fixtures, **sin validación en vivo**. |
+
+La auditoría sanitizada conserva hosts, firmas, estados y etapas, **sin publicar URL firmadas, tokens ni cuerpos**; ver también [procedimiento y criterio de retirada](auditoria-medios.md). No se retira un proveedor por 403 de su búsqueda o por un solo hoster cuando hay otros medios accesibles.
+
 El origen está publicado bajo [Apache-2.0](https://git.gay/streamflix-reborn2/streamflix/src/branch/main/LICENSE); este repositorio mantiene [LICENSE](../LICENSE) y [NOTICE](../NOTICE). Las reglas JS anteriores son adaptaciones de los archivos Kotlin enlazados, no una copia de código Android, activos cifrados o datos multimedia. Los nombres y servicios de terceros pertenecen a sus respectivos titulares.

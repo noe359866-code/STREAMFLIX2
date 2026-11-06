@@ -12,7 +12,13 @@ La acción compila los proveedores activos y ejecuta **tres intentos por proveed
 
 El artefacto `media-audit-3-attempts` contiene `media-audit.json` con los tres intentos, los estados HTTP del **medio** y un resumen. El job también publica `media-resumen` y fragmentos `media-datos-N-de-T` (JSON comprimido en gzip+base64), consultables mediante la API de *check runs* de GitHub si no se puede descargar el artefacto. No expone URLs firmadas, cookies ni claves. `discovery403` indica bloqueos *durante el descubrimiento* y **no** es criterio de retirada. `discoveryEvents` agrupa host, etapa (`busqueda`, `ficha`, `player-api`, `posible-medio` u `otro`) y estado HTTP o error de red, **sin rutas ni parámetros**; ayuda a separar catálogo, player y HLS/MP4. Cada intento limita el informe a 24 combinaciones de estado/host/etapa.
 
-## Revisión integral de los 34 scrapers
+## Comprobación tras el porte selectivo del origen
+
+[Actions 42298326175](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42298326175), commit `f1e0b32`: **32 proveedores × 3 = 96 intentos**; 34 bundles y 90/90 pruebas offline en ese commit. Cuatro proveedores (`animeav1`, `cinehax`, `embed69` y `videoapi`) tuvieron **al menos una** firma de medio válida; 28 quedaron no concluyentes. **Ninguna propuesta de retirada**: no se dio el caso de que todos los HLS/MP4 de un proveedor respondieran 403 en los tres intentos. Después se añadió la prueba de regresión de inicialización HLS 403, hasta **91 pruebas offline**.
+
+En AnimeAV1, la playlist de Zilla pasó de un resultado 404 anterior a una respuesta con un **recurso de inicialización HLS 403/403/403** (GET con y sin Range confirmado en cada intento). Otros HLS y MP4 del episodio devolvieron MPEG-TS y `ftyp` **206 en los tres intentos**. Por tanto, **no se arregló Zilla**, pero **no se elimina AnimeAV1**. CineHax sirvió MPEG-TS en solo uno de tres intentos; las otras variantes de esa muestra incluyeron PNG de publicidad y 504/timeout. Repelis24 y PelisflixHD siguieron sirviendo segmentos HTML 200 de 63 bytes. Maxstream no apareció en la muestra: su fallback `/castv` solo está validado con fixtures. Ver [comparación del código del origen](porte-streamflix-reborn2.md) para los cambios y límites.
+
+## Revisión integral de los 34 scrapers (auditoría histórica)
 
 [Auditoría final desde Actions 42295795690](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42295795690), commit `5eabaf1`: los **32 activos** completaron **96 intentos** (3 por web). `animeav1` confirmó HLS MPEG-TS 206 y MP4 `ftyp` 206; `cinehax`, `embed69` y `videoapi` confirmaron al menos un segmento MPEG-TS 206 cada uno. **Cuatro proveedores con alguna muestra accesible, 28 no concluyentes y ninguna propuesta de retirada por 403 de medio.** Los 34 bundles y 86/86 pruebas offline pasaron CI. La [tabla de los 34 y próximos pasos](revision-scrapers.md) separa bloqueos de búsqueda, fallos de ficha/player y resultados del medio.
 
