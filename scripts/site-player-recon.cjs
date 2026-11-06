@@ -12,7 +12,7 @@ const HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.7',
   'Accept-Language': 'es-MX,es;q=0.9,en;q=0.6',
 };
-const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one']);
+const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one', 'nupload.me']);
 const MAX = 260000;
 
 function clean(text) {
@@ -43,7 +43,7 @@ async function readBounded(response) {
   } finally { await reader.cancel().catch(() => {}); }
   return body.slice(0, MAX);
 }
-async function get(url, referer, post) {
+async function get(url, referer, post, depth = 0) {
   const target = new URL(url);
   if (target.protocol !== 'https:' || !ALLOWED.has(target.hostname)) return { status: null, error: 'fuera-de-dominio', html: '' };
   try {
@@ -56,7 +56,23 @@ async function get(url, referer, post) {
       },
       redirect: 'manual', signal: AbortSignal.timeout(16000),
     });
-    return { status: response.status, contentType: response.headers.get('content-type') || '', html: await readBounded(response), url };
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location && depth < 2) {
+      if (response.body) await response.body.cancel().catch(() => {});
+      const target = new URL(location, url);
+      if (target.protocol === 'https:' && ALLOWED.has(target.hostname)) {
+        const next = await get(target.href, referer, post, depth + 1);
+        return { ...next, requested: safeUrl(url), redirectChain: [response.status, ...(next.redirectChain || [])] };
+      }
+      return { status: response.status, contentType: response.headers.get('content-type') || '', html: '', url, location: safeUrl(location, url) };
+    }
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType && !/text|json|javascript|xml/i.test(contentType)) {
+      if (response.body) await response.body.cancel().catch(() => {});
+      return { status: response.status, contentType, html: '', url, location: safeUrl(location, url) };
+    }
+    return { status: response.status, contentType, html: await readBounded(response), url,
+      location: safeUrl(location, url) };
   } catch (error) { return { status: null, error: error?.name || 'red', html: '', url }; }
 }
 function anchors(html, base, pattern) {
@@ -118,6 +134,9 @@ async function repelis() {
       playMethod: /["']play_method["']\s*:\s*["']([^"']+)/i.exec(page.html)?.[1] || '',
       iframes: iframeInfo(page.html, url), media: mediaHints(page.html),
       episodeLinks: anchors(page.html, url, /episodios?|temporada|season|capitulo/i).slice(0, 20).map((a) => ({ label: a.label, url: a.safe })),
+      seasonTags: [...page.html.matchAll(/<(?:div|section|ul|li)\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:seasons?|episodios?|temporada)[^"']*["'][^>]*>/gi)]
+        .slice(0, 14).map(([tag]) => ({ tag: tag.match(/^<\w+/)?.[0]?.slice(1), class: attr(tag, 'class'), id: attr(tag, 'id'),
+          dataKeys: [...tag.matchAll(/\b(data-[a-z-]+)=/gi)].map((m) => m[1]).slice(0, 10) })),
       options: dooplayOptions(page.html).map(({ post, ...option }) => ({ ...option, postIsNumber: /^\d+$/.test(post) })),
       players: [],
     };
@@ -140,10 +159,24 @@ async function repelis() {
         : `${base}/wp-admin/admin-ajax.php`;
       const reply = await get(endpoint, url, summary.playMethod === 'wp_json'
         ? undefined : { action: 'doo_player_ajax', post: option.post, type, nume: option.nume });
-      summary.players.push({ type, nume: option.nume, lang: option.title, server: option.server,
+      const item = { type, nume: option.nume, lang: option.title, server: option.server,
         endpoint: safeUrl(endpoint, base), status: reply.status, error: reply.error,
         response: responseInfo(reply.html, endpoint),
-      });
+      };
+      if (summary.players.length === 0 && item.response.embed?.host === 'nupload.me') {
+        let data;
+        try { data = JSON.parse(reply.html); } catch (_) { /* sin JSON, no hay embed */ }
+        const embedded = String(data?.embed_url || '').match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)/i)?.[1] || data?.embed_url;
+        if (typeof embedded === 'string' && /^https:\/\/nupload\.me\//i.test(embedded)) {
+          const hoster = await get(embedded, url);
+          item.hoster = { status: hoster.status, error: hoster.error, redirectChain: hoster.redirectChain,
+            location: hoster.location, contentType: hoster.contentType,
+            title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(hoster.html)?.[1]),
+            iframes: iframeInfo(hoster.html, embedded), media: mediaHints(hoster.html),
+          };
+        }
+      }
+      summary.players.push(item);
     }
     results.push(summary);
   }
@@ -171,8 +204,9 @@ async function gnula() {
       if (frameUrl.hostname !== 'ver.gnula.one' || !frameUrl.searchParams.has('trembed')) continue;
       const frame = await get(frameUrl.href, url);
       summary.frames.push({ status: frame.status, error: frame.error, contentType: frame.contentType,
-        url: safeUrl(frameUrl.href, base), iframes: iframeInfo(frame.html, frameUrl.href),
-        media: mediaHints(frame.html), response: responseInfo(frame.html, frameUrl.href),
+        url: safeUrl(frameUrl.href, base), redirectChain: frame.redirectChain, location: frame.location,
+        iframes: iframeInfo(frame.html, frame.url || frameUrl.href),
+        media: mediaHints(frame.html), response: responseInfo(frame.html, frame.url || frameUrl.href),
       });
     }
     results.push(summary);
