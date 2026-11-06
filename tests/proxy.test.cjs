@@ -95,6 +95,18 @@ function createTargetServer(getProxyPort) {
       return;
     }
 
+    if (url === '/list-429') {
+      res.writeHead(429, { 'Content-Type': 'text/plain', 'Retry-After': '60' });
+      res.end('too many requests');
+      return;
+    }
+
+    if (url === '/list-plain') {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(`10.0.0.9:8000\n127.0.0.1:${getProxyPort()}\n`);
+      return;
+    }
+
     if (url === '/list') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -337,6 +349,48 @@ test('el addon rescata por proxy los proveedores bloqueados en la IP del servido
     uninstallProxyFetchHook();
     resetProxyPool();
     clearResultCache();
+    await close(tunnel.server);
+    await close(target);
+  }
+});
+
+test('el listado tiene respaldo: si la primera fuente da 429 usa la siguiente', async () => {
+  let proxyPort = 0;
+  const target = createTargetServer(() => proxyPort);
+  await listen(target);
+  const targetPort = target.address().port;
+
+  const tunnel = createTunnelProxy();
+  await listen(tunnel.server);
+  proxyPort = tunnel.server.address().port;
+
+  resetProxyPool();
+  const env = {
+    // Primera fuente limitada (429), segunda en texto plano como TheSpeedX.
+    PROXY_LIST_URL: `http://127.0.0.1:${targetPort}/list-429,http://127.0.0.1:${targetPort}/list-plain`,
+    PROXY_CANARY_HOST: '127.0.0.1',
+    PROXY_CANARY_PORT: String(targetPort),
+    PROXY_CANARY_TLS: '0',
+    PROXY_POOL_SIZE: '2',
+    PROXY_CANDIDATES: '5',
+  };
+
+  const originalFetch = global.fetch;
+  try {
+    const healthy = await ensurePool(env, { force: true });
+    assert.ok(healthy.length >= 1, 'el respaldo aportó candidatos');
+    assert.ok(healthy.some((p) => p.id === `127.0.0.1:${proxyPort}`));
+    assert.equal(proxyStatus().lastError, '');
+
+    // Un refresco posterior que falla por completo conserva el pool anterior.
+    const brokenEnv = { ...env, PROXY_LIST_URL: `http://127.0.0.1:${targetPort}/list-429` };
+    const kept = await ensurePool(brokenEnv, { force: true });
+    assert.ok(kept.length >= 1, 'no se pierde un pool que ya funcionaba');
+    assert.match(proxyStatus().lastError, /conserva el pool anterior/);
+  } finally {
+    global.fetch = originalFetch;
+    resetProxyPool();
+    uninstallProxyFetchHook();
     await close(tunnel.server);
     await close(target);
   }
