@@ -26,6 +26,20 @@ const DEFAULT_LIST_URL = 'https://api.proxyscrape.com/v4/free-proxy-list/get'
   + '?request=display_proxies&protocol=http&ssl=yes&anonymity=elite'
   + '&timeout=5000&format=json&limit=150';
 
+/**
+ * Fuentes de listados, en orden. La primera puede devolver 429 desde la IP de
+ * Beamup (límite por IP compartida), así que se prueban las siguientes hasta
+ * reunir candidatos suficientes.
+ */
+const DEFAULT_LIST_URLS = [
+  DEFAULT_LIST_URL,
+  'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',
+  'https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt',
+  'https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=yes&anonymity=all',
+];
+
+const LIST_USER_AGENT = 'STREAMFLIX2/1.1 (+https://github.com/noe359866-code/STREAMFLIX2)';
+
 const DEFAULT_CANARY_HOST = 'v3-cinemeta.strem.io';
 const DEFAULT_CANARY_PORT = 443;
 
@@ -68,8 +82,13 @@ function intFrom(value, fallback, min, max) {
 }
 
 function resolveOptions(env = process.env) {
+  const custom = String(env.PROXY_LIST_URL || '').trim();
+  const listUrls = custom
+    ? custom.split(',').map((url) => url.trim()).filter(Boolean)
+    : [...DEFAULT_LIST_URLS];
   return {
-    listUrl: String(env.PROXY_LIST_URL || DEFAULT_LIST_URL),
+    listUrls,
+    listUrl: listUrls[0],
     poolSize: intFrom(env.PROXY_POOL_SIZE, 8, 1, 40),
     candidates: intFrom(env.PROXY_CANDIDATES, 40, 2, 400),
     probeTimeoutMs: intFrom(env.PROXY_PROBE_TIMEOUT_MS, 4000, 800, 15000),
@@ -245,36 +264,84 @@ async function probeBatch(candidates, options, wanted, sink) {
   return sink;
 }
 
+async function fetchProxySource(url, timeoutMs = 12000) {
+  const res = await unproxiedFetch(url, {
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      'User-Agent': LIST_USER_AGENT,
+    },
+    signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(timeoutMs) : undefined,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (_) {
+    return text;
+  }
+}
+
+/** Mezcla determinista por refresco: los listados de texto no traen métricas. */
+function shuffle(list) {
+  const copy = [...list];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
 async function refreshPool(env = process.env) {
   const options = resolveOptions(env);
   state.canary = `${options.canaryHost}:${options.canaryPort}`;
 
-  try {
-    const res = await unproxiedFetch(options.listUrl, {
-      headers: { Accept: 'application/json' },
-      signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(12000) : undefined,
-    });
-    if (!res.ok) throw new Error(`lista de proxies HTTP ${res.status}`);
-    const text = await res.text();
-    let payload = text;
+  const collected = [];
+  const seen = new Set();
+  const failures = [];
+  const wanted = Math.max(options.candidates, options.poolSize);
+
+  for (const url of options.listUrls) {
+    if (collected.length >= wanted) break;
     try {
-      payload = JSON.parse(text);
-    } catch (_) { /* formato texto */ }
-
-    const parsed = parseProxyList(payload);
-    state.candidates = parsed.length;
-    const candidates = parsed.slice(0, options.candidates);
-    const healthy = await probeBatch(candidates, options, options.poolSize, []);
-
-    state.healthy = healthy;
-    state.lastRefreshAt = Date.now();
-    state.lastError = healthy.length ? '' : 'ningún proxy del listado superó la prueba';
-    state.cursor = 0;
-  } catch (error) {
-    state.lastError = error && error.message ? error.message : 'error desconocido';
-    state.lastRefreshAt = Date.now();
+      const payload = await fetchProxySource(url);
+      const entries = parseProxyList(payload);
+      const ordered = entries.some((entry) => entry.uptime > 0) ? entries : shuffle(entries);
+      let added = 0;
+      for (const entry of ordered) {
+        if (seen.has(entry.id)) continue;
+        seen.add(entry.id);
+        collected.push(entry);
+        added += 1;
+        if (collected.length >= wanted) break;
+      }
+      if (!added) failures.push(`${new URL(url).host}: sin proxies utilizables`);
+    } catch (error) {
+      failures.push(`${new URL(url).host}: ${error && error.message ? error.message : 'error'}`);
+    }
   }
 
+  state.candidates = collected.length;
+
+  if (!collected.length) {
+    const detail = failures.join(' · ') || 'no se pudo obtener ningún listado';
+    state.lastError = state.healthy.length ? `${detail} · se conserva el pool anterior` : detail;
+    state.lastRefreshAt = Date.now();
+    return state;
+  }
+
+  const healthy = await probeBatch(collected, options, options.poolSize, []);
+
+  if (healthy.length) {
+    state.healthy = healthy;
+    state.cursor = 0;
+    state.lastError = '';
+  } else if (state.healthy.length) {
+    // Un refresco fallido no debe tirar un pool que ya funcionaba.
+    state.lastError = 'refresco sin proxies válidos; se conserva el pool anterior';
+  } else {
+    state.lastError = 'ningún candidato superó la prueba CONNECT+TLS';
+  }
+  state.lastRefreshAt = Date.now();
   return state;
 }
 

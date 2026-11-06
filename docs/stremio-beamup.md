@@ -183,3 +183,17 @@ proveedor, `via: "direct" | "proxy"`).
   credenciales, pero si no te convence, apágalo con `PROXY_SCRAPING=off`.
 - La alternativa definitiva es raspа desde una IP residencial (un mini-servidor en casa con
   `PROXY_LIST_URL` propio o un VPS no bloqueado).
+
+### Listados con respaldo
+
+`PROXY_LIST_URL` acepta **varias fuentes separadas por coma**. Por defecto se prueban en
+orden hasta reunir candidatos:
+
+1. ProxyScrape v4 (JSON, con métricas de uptime y latencia).
+2. `TheSpeedX/PROXY-List` → `http.txt` (texto plano, cientos de proxies).
+3. `monosans/proxy-list` → `http.txt`.
+4. ProxyScrape v2 (texto plano).
+
+Si una fuente responde **429** (límite por IP, frecuente desde Beamup) o no entrega ningún
+proxy utilizable, se pasa a la siguiente. Y si un refresco falla por completo **no se pierde
+el pool que ya funcionaba**: se conserva y `lastError` lo indica.
