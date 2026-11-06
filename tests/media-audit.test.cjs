@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { checkMedia, classifyProvider, playlistUris } = require('../scripts/media-audit-lib.cjs');
+const { checkMedia, classifyProvider, playlistUris, discoveryStage } = require('../scripts/media-audit-lib.cjs');
 
 const MP4 = Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(30)]);
 
@@ -24,6 +24,15 @@ function mockFetch(routes) {
 
 const movie = (url, headers = {}) => ({ type: 'mp4', url, headers });
 const hls = (url, headers = {}) => ({ type: 'hls', url, headers });
+
+test('clasifica el descubrimiento sin guardar rutas ni parámetros firmados', () => {
+  assert.equal(discoveryStage('https://site.example/?s=Película'), 'busqueda');
+  assert.equal(discoveryStage('https://site.example/search-route'), 'busqueda');
+  assert.equal(discoveryStage('https://site.example/pelicula/slug-secreto/'), 'ficha');
+  assert.equal(discoveryStage('https://site.example/wp-json/dooplayer/v2/123/movie/1'), 'player-api');
+  assert.equal(discoveryStage('https://cdn.example/path/playlist.m3u8?token=privado'), 'posible-medio');
+  assert.equal(discoveryStage('no es una URL'), 'otro');
+});
 
 test('MP4: GET acotado con Range y firma; 403 en Range + GET es bloqueo del medio', async () => {
   const url = 'https://cdn.example/movie.mp4?token=privado';

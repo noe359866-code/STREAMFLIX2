@@ -12,6 +12,20 @@ function hostOf(url) {
   try { return new URL(url).hostname; } catch (_) { return 'desconocido'; }
 }
 
+// Clasificación sin rutas, títulos, parámetros ni URLs firmadas: permite
+// distinguir una búsqueda bloqueada de una petición al vídeo en el informe.
+function discoveryStage(url) {
+  try {
+    const { pathname, searchParams } = new URL(url);
+    if (/\.(?:m3u8|mp4)(?:$|\.)|\/m3u8\//i.test(pathname)) return 'posible-medio';
+    if (/\/(?:search(?:-route)?|buscar|directorio|ajax_search)(?:\/|$)/i.test(pathname)
+      || ['s', 'q', 'query', 'Titulo'].some((key) => searchParams.has(key))) return 'busqueda';
+    if (/\/(?:wp-json|wp-admin|player|embed|e|video|source)(?:\/|$)|\/(?:api|ajax)(?:\/|$)/i.test(pathname)) return 'player-api';
+    if (/\/(?:pelicula|peliculas|movies|movie|serie|series|anime|ver|dorama|online)(?:\/|$)/i.test(pathname)) return 'ficha';
+    return 'otro';
+  } catch (_) { return 'otro'; }
+}
+
 function publicResult(outcome, stage, sample, format) {
   const bytes = sample?.bytes || Buffer.alloc(0);
   const prefix = bytes.toString('utf8', 0, 96).trimStart();
@@ -217,4 +231,4 @@ function classifyProvider(attempts, expected = 3) {
   return 'no-concluyente';
 }
 
-module.exports = { checkMedia, checkHls, checkMp4, classifyProvider, playlistUris, hostOf };
+module.exports = { checkMedia, checkHls, checkMp4, classifyProvider, playlistUris, hostOf, discoveryStage };

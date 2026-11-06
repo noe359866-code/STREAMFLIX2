@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const zlib = require('node:zlib');
-const { checkMedia, classifyProvider, hostOf } = require('./media-audit-lib.cjs');
+const { checkMedia, classifyProvider, hostOf, discoveryStage } = require('./media-audit-lib.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
@@ -95,13 +95,30 @@ async function auditOne(scraper) {
   let phase = 'descubrimiento';
   let controller;
   let discovery403;
+  let discoveryEvents;
+  function recordDiscovery(url, status, error) {
+    if (phase !== 'descubrimiento') return;
+    const host = hostOf(url);
+    const stage = discoveryStage(url);
+    const entry = discoveryEvents.find((item) => item.host === host && item.stage === stage
+      && item.status === status && item.error === error);
+    if (entry) entry.count += 1;
+    else if (discoveryEvents.length < 24) discoveryEvents.push({ host, stage, status, error, count: 1 });
+  }
   globalThis.__STREAMFLIX_METADATA_HOOK = async () => ({ ...sample });
   globalThis.fetch = async (input, init = {}) => {
     const signals = [AbortSignal.timeout(10000)];
     if (controller) signals.push(controller.signal);
     if (init.signal) signals.push(init.signal);
     const url = typeof input === 'string' ? input : input?.url || String(input);
-    const response = await rawFetch(input, { ...init, signal: AbortSignal.any(signals) });
+    let response;
+    try { response = await rawFetch(input, { ...init, signal: AbortSignal.any(signals) }); }
+    catch (error) {
+      recordDiscovery(url, null, error?.name === 'TimeoutError' ? 'timeout'
+        : error?.name === 'AbortError' ? 'abort' : 'red');
+      throw error;
+    }
+    recordDiscovery(url, response.status, '');
     if (phase === 'descubrimiento' && response.status === 403 && discovery403.length < 12) {
       discovery403.push(hostOf(response.url || url));
     }
@@ -117,6 +134,7 @@ async function auditOne(scraper) {
       if (i > 1) await wait(1200);
       controller = new AbortController();
       discovery403 = [];
+      discoveryEvents = [];
       warnings = 0;
       phase = 'descubrimiento';
       const deadline = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
@@ -133,6 +151,7 @@ async function auditOne(scraper) {
           mediaCount: candidates.length,
           otherFormats: streams.length - candidates.length,
           discovery403: [...new Set(discovery403)],
+          discoveryEvents,
           warnings,
           media: [],
         };
@@ -198,6 +217,7 @@ function annotateResults(results, proposedRemoval) {
       mediaCount: attempt.mediaCount,
       otherFormats: attempt.otherFormats,
       discovery403: attempt.discovery403,
+      discoveryEvents: attempt.discoveryEvents,
       timedOut: attempt.timedOut,
       media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host,
         outcome: media.outcome, bytesRead: media.bytesRead, signature: media.signature, mime: media.mime, error: media.error })),
