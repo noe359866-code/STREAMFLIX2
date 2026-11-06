@@ -18,6 +18,24 @@ test('normaliza títulos y penaliza un año/tipo incorrecto', () => {
   assert.equal(text.bestTitleMatch([wrong], metadata, 'tv'), null);
 });
 
+test('resuelve rutas relativas desde el origen, la ficha y el query sin inventar otro host', () => {
+  assert.equal(text.absoluteUrl('player/1', 'https://site.example'), 'https://site.example/player/1');
+  assert.equal(text.absoluteUrl('?trembed=2', 'https://site.example/movies/demo/?old=1'), 'https://site.example/movies/demo/?trembed=2');
+  assert.equal(text.absoluteUrl('../episode/3', 'https://site.example/series/demo/'), 'https://site.example/series/episode/3');
+  assert.equal(text.absoluteUrl('./video.mp4?token=abc', 'https://site.example/series/demo/'), 'https://site.example/series/demo/video.mp4?token=abc');
+  assert.equal(text.absoluteUrl('/player/1', 'https://site.example/series/demo/'), 'https://site.example/player/1');
+  assert.equal(text.absoluteUrl('javascript:alert(1)', 'https://site.example'), '');
+});
+
+test('las tarjetas duplicadas prefieren el título real al enlace genérico', () => {
+  const page = '<a href="/pelicula/contenido-demo/">Película <span>2024</span></a>'
+    + '<a href="/pelicula/contenido-demo/" title="Contenido Demo">Contenido Demo</a>';
+  const cards = html.cardsFromAnchors(page, 'https://site.example/', { mediaType: 'movie' });
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].title, 'Contenido Demo');
+  assert.equal(cards[0].year, '2024');
+});
+
 test('extrae exactamente temporada 2 episodio 3 y no otro par', () => {
   const source = '<a href="/episodio/demo-1x3">1x3</a><a href="/episodio/demo-2x3"><span>2-3</span></a><a href="/episodio/demo-2x4">2x4</a>';
   const found = html.episodeLinks(source, 'https://example.test/serie/demo', 2, 3);
@@ -38,6 +56,16 @@ test('extrae HLS y descarta páginas embed, DASH, clip genérico y javascript:',
   assert.equal(streams.isPlayableUrl('https://cdn.example/video/manifest.mpd'), false);
   assert.equal(streams.isPlayableUrl('javascript:alert(1)'), false);
   assert.equal(streams.mediaKind('https://cdn.example/video.m3u8'), 'hls');
+});
+
+test('no inventa MP4 ni HLS recortando el nombre de un hoster', () => {
+  const page = '<a href="https://www.mp4upload.com/e/demo">MP4Upload</a>'
+    + '<iframe src="https://a4.mp4upload.com/embed/demo"></iframe>'
+    + '<iframe src="https://cdn.m3u8host.com/watch/demo"></iframe>'
+    + '<script>file:"https://a4.mp4upload.com/video/real.mp4?token=abc"</script>';
+  assert.deepEqual(extractors.directMediaInHtml(page, 'https://site.example/movie'), [
+    'https://a4.mp4upload.com/video/real.mp4?token=abc',
+  ]);
 });
 
 test('Nupload: decodifica la expresión pública sin eval y solo sigue un Location de medio del mismo host', async () => {

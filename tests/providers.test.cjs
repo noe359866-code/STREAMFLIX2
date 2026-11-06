@@ -333,6 +333,13 @@ test('HDFull: search-route y contentUrl de la ficha, nunca el clip genérico del
     routes: [routes[0], ['hdfull.company/peliculas/weapons', fixture('hdfull-movie.html').replaceAll('/weapons.mp4?', '/otro-titulo.mp4?')]],
   });
   assert.deepEqual(mismatched.streams, []);
+
+  const hostile = await run('hdfull', {
+    mediaType: 'movie', metadata,
+    routes: [routes[0], ['hdfull.company/peliculas/weapons', fixture('hdfull-movie.html')
+      .replaceAll('https://hdfull.company/vod-movie/', 'https://hdfull.company.evil.example/vod-movie/')]],
+  });
+  assert.deepEqual(hostile.streams, [], 'nunca aceptar un host que solo empieza por hdfull.company');
 });
 
 test('HDFull TV: no inventa una fuente de episodio ni devuelve el player publicitario', async () => {

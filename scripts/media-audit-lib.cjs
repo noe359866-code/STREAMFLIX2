@@ -16,11 +16,12 @@ function hostOf(url) {
 // distinguir una búsqueda bloqueada de una petición al vídeo en el informe.
 function discoveryStage(url) {
   try {
-    const { pathname, searchParams } = new URL(url);
-    if (/\.(?:m3u8|mp4)(?:$|\.)|\/m3u8\//i.test(pathname)) return 'posible-medio';
-    if (/\/(?:search(?:-route)?|buscar|directorio|ajax_search)(?:\/|$)/i.test(pathname)
-      || ['s', 'q', 'query', 'Titulo'].some((key) => searchParams.has(key))) return 'busqueda';
-    if (/\/(?:wp-json|wp-admin|player|embed|e|video|source)(?:\/|$)|\/(?:api|ajax)(?:\/|$)/i.test(pathname)) return 'player-api';
+    const { pathname, searchParams, hostname } = new URL(url);
+    if (/\.(?:m3u8|mp4)(?:$|\.)|\/m3u8\//i.test(pathname)
+      || (/^sv\d+\.ibra\.lat$/i.test(hostname) && searchParams.has('s'))) return 'posible-medio';
+    if (/\/(?:search(?:-route)?|buscar|busqueda|catalogo|directorio|ajax_search)(?:\/|$)/i.test(pathname)
+      || ['s', 'q', 'query', 'search', 'buscar', 'Titulo'].some((key) => searchParams.has(key))) return 'busqueda';
+    if (/\/(?:wp-json|wp-admin|player|embed|custom|watch|e|f|video|source)(?:\/|$)|\/(?:api|ajax)(?:\/|$)/i.test(pathname)) return 'player-api';
     if (/\/(?:pelicula|peliculas|movies|movie|serie|series|anime|ver|dorama|online)(?:\/|$)/i.test(pathname)) return 'ficha';
     return 'otro';
   } catch (_) { return 'otro'; }
@@ -29,10 +30,13 @@ function discoveryStage(url) {
 function publicResult(outcome, stage, sample, format) {
   const bytes = sample?.bytes || Buffer.alloc(0);
   const prefix = bytes.toString('utf8', 0, 96).trimStart();
+  const box = bytes.toString('ascii', 4, 8);
   const signature = !bytes.length ? 'vacio' : prefix.startsWith('#EXTM3U') ? 'hls'
-    : bytes.toString('ascii', 4, 8) === 'ftyp' ? 'mp4'
-      : bytes[0] === 0x47 && bytes[188] === 0x47 ? 'mpeg-ts'
-        : /^<(?:!doctype|html|body|script)/i.test(prefix) ? 'html' : 'desconocida';
+    : bytes[0] === 0x47 && bytes[188] === 0x47 ? 'mpeg-ts'
+      : ['ftyp', 'styp', 'moof', 'mdat'].includes(box) && bytes.length >= 12 ? 'mp4'
+        : bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0 ? 'aac'
+          : bytes.toString('ascii', 0, 3) === 'ID3' ? 'id3-audio'
+            : /^<(?:!doctype|html|body|script)/i.test(prefix) ? 'html' : 'desconocida';
   const mime = String(sample?.contentType || '').split(';')[0].trim().toLowerCase();
   return {
     format,
@@ -145,8 +149,18 @@ function playlistUris(text) {
   return { variants, segments, encryption, init };
 }
 
+function looksLikeHlsSegment(sample) {
+  if (!sample || !sample.bytes || looksLikeHtml(sample)) return false;
+  const bytes = sample.bytes;
+  const box = bytes.toString('ascii', 4, 8);
+  return (bytes[0] === 0x47 && bytes[188] === 0x47)
+    || (bytes.length >= 12 && ['ftyp', 'styp', 'moof', 'mdat'].includes(box))
+    || (bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0)
+    || bytes.toString('ascii', 0, 3) === 'ID3';
+}
+
 function classifySamples(samples, stage, format) {
-  const valid = samples.find((item) => item.status >= 200 && item.status < 300 && item.bytes.length && !looksLikeHtml(item));
+  const valid = samples.find((item) => item.status >= 200 && item.status < 300 && looksLikeHlsSegment(item));
   if (valid) {
     return publicResult('ok', stage, valid, format);
   }
@@ -160,19 +174,25 @@ async function checkHls(url, options = {}, depth = 0) {
   const playlist = await sampleUrl(url, { ...options, maximum: MAX_PLAYLIST_BYTES });
   if (playlist.status === 403) return publicResult('http403', depth ? 'variante' : 'playlist', playlist, 'hls');
   if (!playlist.status || playlist.status < 200 || playlist.status >= 300
-      || playlist.truncated || !playlist.bytes.toString('utf8').replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) {
+      || !playlist.bytes.toString('utf8').replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) {
     return publicResult('otro', depth ? 'variante' : 'playlist', playlist, 'hls');
   }
-  const { variants, segments, encryption, init } = playlistUris(playlist.bytes.toString('utf8'));
+  // Una playlist VOD puede superar 128 KiB: inspeccionar solo líneas completas
+  // del prefijo y probar sus primeros segmentos, sin descargar la película.
+  const text = playlist.bytes.toString('utf8');
+  const prefix = playlist.truncated ? text.slice(0, text.lastIndexOf('\n') + 1) : text;
+  const { variants, segments, encryption, init } = playlistUris(prefix);
   if (variants.length) {
-    if (depth >= 2 || variants.length > MAX_VARIANTS) return publicResult('otro', 'variantes-sin-verificar', playlist, 'hls');
+    if (depth >= 2) return publicResult('otro', 'variantes-sin-verificar', playlist, 'hls');
     const results = [];
-    for (const ref of variants) {
+    for (const ref of variants.slice(0, MAX_VARIANTS)) {
       const variant = resolveUri(ref, playlist.url);
       if (!variant) return publicResult('otro', 'variante-invalida', playlist, 'hls');
       results.push(await checkHls(variant, options, depth + 1));
       if (results.at(-1).outcome === 'ok') return results.at(-1);
     }
+    // Nunca retirar por 403 de una selección parcial de variantes.
+    if (playlist.truncated || variants.length > MAX_VARIANTS) return publicResult('otro', 'variantes-sin-verificar', playlist, 'hls');
     if (results.every((item) => item.outcome === 'http403')) return results[0];
     return results.find((item) => item.outcome !== 'http403');
   }
@@ -181,7 +201,9 @@ async function checkHls(url, options = {}, depth = 0) {
     const keyUrl = resolveUri(firstUri(encryption), playlist.url);
     if (!keyUrl) return publicResult('otro', 'clave-invalida', playlist, 'hls');
     const key = await sampleUrl(keyUrl, { ...options, maximum: 32 });
-    if (key.status === 403) return publicResult('http403', 'clave', key, 'hls');
+    if (key.status === 403) return playlist.truncated
+      ? publicResult('otro', 'clave-parcial', key, 'hls')
+      : publicResult('http403', 'clave', key, 'hls');
     if (!key.status || key.status < 200 || key.status >= 300 || key.bytes.length < 16) {
       return publicResult('otro', 'clave', key, 'hls');
     }
@@ -190,7 +212,9 @@ async function checkHls(url, options = {}, depth = 0) {
     const initUrl = resolveUri(firstUri(init), playlist.url);
     if (!initUrl) return publicResult('otro', 'inicializacion-invalida', playlist, 'hls');
     const header = await sampleMedia(initUrl, options);
-    if (header.status === 403) return publicResult('http403', 'inicializacion', header, 'hls');
+    if (header.status === 403) return playlist.truncated
+      ? publicResult('otro', 'inicializacion-parcial', header, 'hls')
+      : publicResult('http403', 'inicializacion', header, 'hls');
     if (!header.status || header.status < 200 || header.status >= 300 || !header.bytes.length || looksLikeHtml(header)) {
       return publicResult('otro', 'inicializacion', header, 'hls');
     }
@@ -202,7 +226,9 @@ async function checkHls(url, options = {}, depth = 0) {
     if (!segment) return publicResult('otro', 'segmento-invalido', playlist, 'hls');
     sampled.push(await sampleMedia(segment, options));
   }
-  return classifySamples(sampled, 'segmento', 'hls');
+  const result = classifySamples(sampled, 'segmento', 'hls');
+  return playlist.truncated && result.outcome === 'http403'
+    ? publicResult('otro', 'segmentos-sin-verificar', playlist, 'hls') : result;
 }
 
 async function checkMp4(url, options = {}) {

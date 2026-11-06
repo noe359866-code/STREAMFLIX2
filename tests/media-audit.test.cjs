@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const { checkMedia, classifyProvider, playlistUris, discoveryStage } = require('../scripts/media-audit-lib.cjs');
 
 const MP4 = Buffer.concat([Buffer.alloc(4), Buffer.from('ftypisom'), Buffer.alloc(30)]);
+const TS = Buffer.alloc(376);
+TS[0] = TS[188] = 0x47;
 
 function mockFetch(routes) {
   const calls = [];
@@ -28,9 +30,13 @@ const hls = (url, headers = {}) => ({ type: 'hls', url, headers });
 test('clasifica el descubrimiento sin guardar rutas ni parámetros firmados', () => {
   assert.equal(discoveryStage('https://site.example/?s=Película'), 'busqueda');
   assert.equal(discoveryStage('https://site.example/search-route'), 'busqueda');
+  assert.equal(discoveryStage('https://site.example/busqueda/episodio'), 'busqueda');
+  assert.equal(discoveryStage('https://site.example/catalogo?search=serie'), 'busqueda');
   assert.equal(discoveryStage('https://site.example/pelicula/slug-secreto/'), 'ficha');
   assert.equal(discoveryStage('https://site.example/wp-json/dooplayer/v2/123/movie/1'), 'player-api');
+  assert.equal(discoveryStage('https://site.example/custom/movie/tt123'), 'player-api');
   assert.equal(discoveryStage('https://cdn.example/path/playlist.m3u8?token=privado'), 'posible-medio');
+  assert.equal(discoveryStage('https://sv4.ibra.lat/?s=firmado'), 'posible-medio');
   assert.equal(discoveryStage('no es una URL'), 'otro');
 });
 
@@ -74,12 +80,48 @@ test('HLS: sigue playlist master + variante + segmentos, detecta 403 de segmento
     [master]: { body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100\nblocked/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=200\ngood/index.m3u8\n' },
     [blocked]: { status: 403 },
     [available]: { body: '#EXTM3U\n#EXTINF:4,\npart.ts\n' },
-    [segment]: { status: 206, body: 'segmento-valido' },
+    [segment]: { status: 206, body: TS, contentType: 'video/mp2t' },
   });
   const result = await checkMedia(hls(master), mock);
   assert.equal(result.outcome, 'ok', 'si una variante sirve, no retirar el proveedor');
   assert.equal(result.stage, 'segmento');
   assert.ok(mock.calls.some((call) => call.url === segment && call.range === 'bytes=0-4095'));
+});
+
+test('HLS: un JSON 200 no es vídeo, pero un segmento MPEG-TS sí lo es', async () => {
+  const url = 'https://cdn.example/media.m3u8';
+  const segment = 'https://cdn.example/first.ts';
+  const playlist = '#EXTM3U\n#EXTINF:4,\nfirst.ts\n';
+  const error = mockFetch({
+    [url]: { body: playlist }, [segment]: { body: '{"error":"expired"}', contentType: 'application/json' },
+  });
+  const rejected = await checkMedia(hls(url), error);
+  assert.equal(rejected.outcome, 'otro');
+  assert.equal(rejected.signature, 'desconocida');
+  const valid = mockFetch({ [url]: { body: playlist }, [segment]: { body: TS, status: 206 } });
+  assert.equal((await checkMedia(hls(url), valid)).outcome, 'ok');
+});
+
+test('HLS: sonda el prefijo de una playlist larga, sin concluir retirada por un 403 parcial', async () => {
+  const url = 'https://cdn.example/large.m3u8';
+  const segment = 'https://cdn.example/first.ts';
+  const huge = '#EXTM3U\n#EXTINF:4,\nfirst.ts\n' + '# comentario\n'.repeat(12000);
+  assert.ok(Buffer.byteLength(huge) > 128 * 1024);
+  const valid = mockFetch({ [url]: { body: huge }, [segment]: { body: TS, status: 206 } });
+  const playable = await checkMedia(hls(url), valid);
+  assert.equal(playable.outcome, 'ok');
+  assert.equal(playable.signature, 'mpeg-ts');
+  assert.equal(valid.calls.length, 2);
+
+  const denied = mockFetch({ [url]: { body: huge }, [segment]: { status: 403 } });
+  const partial = await checkMedia(hls(url), denied);
+  assert.equal(partial.outcome, 'otro');
+  assert.equal(partial.stage, 'segmentos-sin-verificar');
+  assert.equal(denied.calls.length, 3);
+
+  const master = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nblocked.m3u8\n' + '# comentario\n'.repeat(12000);
+  const blocked = mockFetch({ [url]: { body: master }, 'https://cdn.example/blocked.m3u8': { status: 403 } });
+  assert.equal((await checkMedia(hls(url), blocked)).outcome, 'otro');
 });
 
 test('HLS: detecta 403 en las dos muestras del segmento o la clave AES-128', async () => {

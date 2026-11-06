@@ -59,8 +59,10 @@ export function directMediaInHtml(html, base) {
   const text = unpackAll(html);
   const output = [];
   const patterns = [
-    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?/gi,
-    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.mp4(?:\?[^\s"'<>\\]*)?/gi,
+    // El sufijo debe terminar en un separador real: mp4upload.com no es
+    // https://a4.mp4, ni m3u8host.com una playlist truncada.
+    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?(?![\w.-])/gi,
+    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.mp4(?:\?[^\s"'<>\\]*)?(?![\w.-])/gi,
     /(?:file|src|source|url|hls[1-4]?)\s*[:=]\s*["']([^"']+?\.(?:m3u8|mp4)(?:\?[^"']*)?)["']/gi,
     /["']([^"']*?\/m3u8\/[a-zA-Z0-9_-]+[^"']*)["']/g,
     /\bwurl\b[\s\S]{0,80}?["']([^"']+)["']/gi,

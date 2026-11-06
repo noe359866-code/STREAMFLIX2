@@ -213,15 +213,28 @@ function bestTitleMatch(candidates, metadata, mediaType, minimum = 60) {
   return (candidates || []).map((candidate, index) => ({ candidate, index, score: titleScore(candidate, metadata, mediaType) })).filter((entry) => entry.score >= minimum).sort((a, b) => b.score - a.score || a.index - b.index)[0]?.candidate || null;
 }
 function absoluteUrl(value, base) {
-  let url = decodeHtml(value).trim().replace(/&amp;/g, "&");
+  const url = decodeHtml(value).trim();
   if (!url || /^(about:|javascript:|data:|#)/i.test(url)) return "";
   if (/^https?:\/\//i.test(url)) return url;
   if (url.startsWith("//")) return `https:${url}`;
-  const originMatch = String(base || "").match(/^(https?:\/\/[^/]+)/i);
+  const originMatch = String(base || "").match(/^(https?:\/\/[^/?#]+)/i);
   if (!originMatch) return url;
-  if (url.startsWith("/")) return originMatch[1] + url;
-  const directory = String(base || "").split("?")[0].replace(/\/[^/]*$/, "/");
-  return directory + url;
+  const origin2 = originMatch[1];
+  if (url.startsWith("/")) return origin2 + url;
+  const page = String(base).split(/[?#]/)[0];
+  if (url.startsWith("?")) return page + url;
+  const directory = page === origin2 ? `${origin2}/` : page.replace(/\/[^/]*$/, "/");
+  const match = url.match(/^([^?#]*)([\s\S]*)$/);
+  const path = `${directory.slice(origin2.length)}${match[1]}`;
+  const segments = [];
+  for (const segment of path.split("/")) {
+    if (segment === ".") continue;
+    if (segment === "..") {
+      if (segments.length > 1) segments.pop();
+    } else segments.push(segment);
+  }
+  if (/\/(?:\.|\.\.)$/.test(path)) segments.push("");
+  return origin2 + segments.join("/") + match[2];
 }
 function hostName(url) {
   const host = String(url || "").match(/^https?:\/\/([^/]+)/i)?.[1] || "";
@@ -462,17 +475,24 @@ function createSiteProvider(config) {
 
 // src/core/html.js
 function cardsFromAnchors(html, base, options2 = {}) {
-  const seen = /* @__PURE__ */ new Set();
+  const seen = /* @__PURE__ */ new Map();
   const output = [];
   for (const anchor of anchors(html)) {
     const url = absoluteUrl(anchor.href, base);
-    if (!url || options2.path && !options2.path.test(url) || seen.has(url)) continue;
+    if (!url || options2.path && !options2.path.test(url)) continue;
     const title = anchor.imageAlt || anchor.anchorTitle || anchor.title;
     if (!title || title.length > 300) continue;
     const type = /\/(?:serie|series|anime|dorama|tvshows?)(?:\/|$)/i.test(url) ? "tv" : /\/(?:pelicula|peliculas|movie|movies)(?:\/|$)/i.test(url) ? "movie" : "";
     if (options2.mediaType === "movie" && type === "tv") continue;
     if (options2.mediaType === "tv" && type === "movie") continue;
-    seen.add(url);
+    const index = seen.get(url);
+    if (index !== void 0) {
+      if (!normalizeTitle(output[index].title) && normalizeTitle(title)) {
+        output[index] = { ...output[index], title, year: output[index].year || yearOf(anchor.raw), raw: anchor.raw };
+      }
+      continue;
+    }
+    seen.set(url, output.length);
     output.push({ url, title, year: yearOf(anchor.raw), type, raw: anchor.raw });
   }
   return output;
@@ -629,8 +649,10 @@ function directMediaInHtml(html, base) {
   const text = unpackAll(html);
   const output = [];
   const patterns = [
-    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?/gi,
-    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.mp4(?:\?[^\s"'<>\\]*)?/gi,
+    // El sufijo debe terminar en un separador real: mp4upload.com no es
+    // https://a4.mp4, ni m3u8host.com una playlist truncada.
+    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?(?![\w.-])/gi,
+    /https?:\\?\/\\?\/[^\s"'<>\\]+?\.mp4(?:\?[^\s"'<>\\]*)?(?![\w.-])/gi,
     /(?:file|src|source|url|hls[1-4]?)\s*[:=]\s*["']([^"']+?\.(?:m3u8|mp4)(?:\?[^"']*)?)["']/gi,
     /["']([^"']*?\/m3u8\/[a-zA-Z0-9_-]+[^"']*)["']/g,
     /\bwurl\b[\s\S]{0,80}?["']([^"']+)["']/gi,
