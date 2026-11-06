@@ -4,6 +4,10 @@ import { decodeBase64, decodeBase64Binary, decodeBase64Url, decodeTokenLink } fr
 import { isPlayableUrl, makeStream } from './streams.js';
 import { nuploadEndpointFromHtml, nuploadMediaRedirect } from './nupload.js';
 
+// MovieMaster usa el mismo User-Agent para el API y para el HLS (StreamFlix,
+// MovieMasterExtractor.kt, Apache-2.0). No cambiarlo solo para una de las dos fases.
+export const MOVIEMASTER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 function decodeJsString(value) {
   return String(value || '').replace(/\\(u[0-9a-f]{4}|x[0-9a-f]{2}|.)/gi, (_, escape) => {
     if (escape[0].toLowerCase() === 'u') return String.fromCharCode(parseInt(escape.slice(1), 16));
@@ -224,15 +228,49 @@ export function protectedDataLinkCandidates(html, base) {
 
 async function resolveMovieMaster(candidate) {
   if (!/moviemaster\.[^/]+\/video\?/i.test(candidate.url)) return null;
-  const response = await fetchJson(candidate.url, { referer: candidate.referer || 'https://api.moviemaster.lat/' });
+  const referer = candidate.referer || 'https://api.moviemaster.lat/';
+  const response = await fetchJson(candidate.url, { referer, extraHeaders: { 'User-Agent': MOVIEMASTER_USER_AGENT } });
   const url = response.data.url || response.data.source || '';
-  return isPlayableUrl(url) ? [{ ...candidate, url }] : [];
+  return isPlayableUrl(url) ? [{ ...candidate, url, headers: { 'User-Agent': MOVIEMASTER_USER_AGENT, Referer: referer } }] : [];
+}
+
+// Fallback público de MaxstreamExtractor.kt (StreamFlix, Apache-2.0): el
+// embed puede responder 404 o no incluir sources, pero /castv/{id} declara
+// la playlist en script#m3u8. No depende de UprotResolver/uprot.enc.
+function maxstreamCastvUrl(embedUrl) {
+  const match = String(embedUrl || '').match(/^https:\/\/(?:www\.)?maxstream\.video\/(?!castv(?:\/|$))[a-z0-9_-]+\/([a-z0-9_-]{4,128})(?:[/?#]|$)/i);
+  return match ? `${origin(embedUrl)}/castv/${match[1]}` : '';
+}
+
+async function maxstreamCastv(candidate, context) {
+  const castvUrl = maxstreamCastvUrl(candidate.url);
+  if (!castvUrl) return [];
+  try {
+    const response = await fetchText(castvUrl, { referer: candidate.url, timeoutMs: context.timeoutMs || 10000 });
+    const script = response.text.match(/<script\b(?=[^>]*\bid\s*=\s*["']m3u8["'])[^>]*>([\s\S]*?)<\/script>/i)?.[1];
+    const url = decodeHtml(script || '').trim().split('#')[0].trim();
+    // Un HTML 200, un enlace sin extensión o un hoster arbitrario NO es HLS.
+    if (!/^https:\/\//i.test(url) || !/\.m3u8(?:\?|$)/i.test(url) || !isPlayableUrl(url)) return [];
+    return [{ ...candidate, url, referer: response.url || castvUrl }];
+  } catch (_) { return []; }
 }
 
 function zilla(candidate) {
-  const match = candidate.url.match(/player\.zilla-networks\.com\/(?:watch\/)?([a-zA-Z0-9_-]+)/i);
+  // Una URL /m3u8/{id} ya es el medio: no construir /m3u8/m3u8.
+  if (/^https:\/\/player\.zilla-networks\.com\/m3u8\//i.test(candidate.url)) return null;
+  const match = candidate.url.match(/^https:\/\/player\.zilla-networks\.com\/(?:watch\/|embed\/|e\/)?([a-zA-Z0-9_-]+)\/?(?:[?#]|$)/i);
   if (!match) return null;
-  return [{ ...candidate, url: `https://player.zilla-networks.com/m3u8/${match[1]}`, referer: candidate.url }];
+  // Los reproductores de Zilla usan estas cabeceras para la playlist y sus
+  // segmentos (ZillaExtractor.kt, Apache-2.0); no enviar Sec-Fetch/Connection
+  // fijados, pues el bridge de Nuvio no es un navegador y pueden invalidarse.
+  return [{
+    ...candidate, url: `https://player.zilla-networks.com/m3u8/${match[1]}`, referer: candidate.url,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0',
+      Accept: '*/*', 'Accept-Language': 'es-MX,es-ES;q=0.9,es;q=0.8,en-US;q=0.7,en;q=0.6',
+      Referer: candidate.url, Origin: 'https://player.zilla-networks.com',
+    },
+  }];
 }
 
 async function resolveOne(candidate, context, depth) {
@@ -252,10 +290,16 @@ async function resolveOne(candidate, context, depth) {
   if (movieMaster) return movieMaster;
   if (depth > 2) return [];
 
-  const response = await fetchText(candidate.url, {
-    referer: candidate.referer || context.referer,
-    timeoutMs: context.timeoutMs || 10000,
-  });
+  let response;
+  try {
+    response = await fetchText(candidate.url, {
+      referer: candidate.referer || context.referer,
+      timeoutMs: context.timeoutMs || 10000,
+    });
+  } catch (error) {
+    if (error.response?.status === 404 && maxstreamCastvUrl(candidate.url)) return maxstreamCastv(candidate, context);
+    throw error;
+  }
   const html = response.text;
   const pageUrl = response.url || candidate.url;
   const direct = unique([
@@ -266,6 +310,10 @@ async function resolveOne(candidate, context, depth) {
     mixdropUrl(html, pageUrl),
   ].filter(Boolean));
   if (direct.length) return direct.map((url) => ({ ...candidate, url, referer: pageUrl, subtitles: subtitlesInHtml(html, pageUrl) }));
+  if (maxstreamCastvUrl(candidate.url)) {
+    const fallback = await maxstreamCastv(candidate, context);
+    if (fallback.length) return fallback;
+  }
 
   // Nupload: su URL /watch/ es HTML. La expresión numérica forma una puerta
   // temporal ?s=; solo la redirección a .m3u8/.mp4 del host observado es vídeo.
@@ -331,10 +379,13 @@ export async function resolveCandidates(candidates, context = {}, depth = 0) {
 }
 
 const SUPPORTED_EMBED_HOST = /streamwish|voe\.|filemoon|vidhide|mixdrop|mp4upload|streamtape|dood|yourupload|uqload|vidmoly|ok\.ru|vimeos?|goodstream|zilla|vk\.com|mail\.ru|dropload|unlimplay|earnvids|streamhg|videoapp/i;
+// Alias públicos de VidHide (VidHideExtractor.kt, StreamFlix, Apache-2.0).
+// Reconocer el dominio completo evita aceptar minochinos.com.evil como hoster.
+const VIDHIDE_ALIASES = /(?:^|\.)(?:minochinos\.com|moflix-stream\.click|filelions\.to|dhtpre\.com|peytonepre\.com|dingtezuni\.com|dintezuvio\.com|morencius\.com)$/i;
 
 function isSupportedEmbedUrl(url) {
   const host = String(url || '').match(/^https?:\/\/([^/:?#]+)/i)?.[1] || '';
-  return SUPPORTED_EMBED_HOST.test(host);
+  return SUPPORTED_EMBED_HOST.test(host) || VIDHIDE_ALIASES.test(host) || /(?:^|\.)maxstream\.video$/i.test(host);
 }
 
 export function embedCandidatesFromHtml(html, base, defaults = {}) {

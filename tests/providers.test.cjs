@@ -30,6 +30,12 @@ test('CineHax: PM_UI, servidores y vídeo MovieMaster', async () => {
   });
   assertStream(result);
   assert.equal(result.streams[0].language, 'es-LAT');
+  const movieMasterCalls = result.calls.filter((call) => call.url.startsWith('https://api.moviemaster.lat/'));
+  assert.equal(movieMasterCalls.length, 3);
+  assert.ok(movieMasterCalls.every((call) => call.init.headers['User-Agent'] === result.streams[0].headers['User-Agent']),
+    'embed, /servers, /video y HLS deben usar el mismo User-Agent');
+  assert.match(result.streams[0].headers['User-Agent'], /Chrome\/120\./);
+  assert.equal(result.streams[0].headers.Referer, 'https://api.moviemaster.lat/');
 });
 
 test('AnimeAV1: índices Svelte SUB/DUB y episodio solicitado', async () => {

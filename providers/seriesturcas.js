@@ -610,6 +610,7 @@ async function nuploadMediaRedirect(endpoint, referer, timeoutMs = 9e3) {
 }
 
 // src/core/extractors.js
+var MOVIEMASTER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 function decodeJsString(value) {
   return String(value || "").replace(/\\(u[0-9a-f]{4}|x[0-9a-f]{2}|.)/gi, (_, escape) => {
     if (escape[0].toLowerCase() === "u") return String.fromCharCode(parseInt(escape.slice(1), 16));
@@ -811,14 +812,44 @@ function protectedDataLinkCandidates(html, base) {
 }
 async function resolveMovieMaster(candidate) {
   if (!/moviemaster\.[^/]+\/video\?/i.test(candidate.url)) return null;
-  const response = await fetchJson(candidate.url, { referer: candidate.referer || "https://api.moviemaster.lat/" });
+  const referer = candidate.referer || "https://api.moviemaster.lat/";
+  const response = await fetchJson(candidate.url, { referer, extraHeaders: { "User-Agent": MOVIEMASTER_USER_AGENT } });
   const url = response.data.url || response.data.source || "";
-  return isPlayableUrl(url) ? [{ ...candidate, url }] : [];
+  return isPlayableUrl(url) ? [{ ...candidate, url, headers: { "User-Agent": MOVIEMASTER_USER_AGENT, Referer: referer } }] : [];
+}
+function maxstreamCastvUrl(embedUrl) {
+  const match = String(embedUrl || "").match(/^https:\/\/(?:www\.)?maxstream\.video\/(?!castv(?:\/|$))[a-z0-9_-]+\/([a-z0-9_-]{4,128})(?:[/?#]|$)/i);
+  return match ? `${origin(embedUrl)}/castv/${match[1]}` : "";
+}
+async function maxstreamCastv(candidate, context) {
+  const castvUrl = maxstreamCastvUrl(candidate.url);
+  if (!castvUrl) return [];
+  try {
+    const response = await fetchText(castvUrl, { referer: candidate.url, timeoutMs: context.timeoutMs || 1e4 });
+    const script = response.text.match(/<script\b(?=[^>]*\bid\s*=\s*["']m3u8["'])[^>]*>([\s\S]*?)<\/script>/i)?.[1];
+    const url = decodeHtml(script || "").trim().split("#")[0].trim();
+    if (!/^https:\/\//i.test(url) || !/\.m3u8(?:\?|$)/i.test(url) || !isPlayableUrl(url)) return [];
+    return [{ ...candidate, url, referer: response.url || castvUrl }];
+  } catch (_) {
+    return [];
+  }
 }
 function zilla(candidate) {
-  const match = candidate.url.match(/player\.zilla-networks\.com\/(?:watch\/)?([a-zA-Z0-9_-]+)/i);
+  if (/^https:\/\/player\.zilla-networks\.com\/m3u8\//i.test(candidate.url)) return null;
+  const match = candidate.url.match(/^https:\/\/player\.zilla-networks\.com\/(?:watch\/|embed\/|e\/)?([a-zA-Z0-9_-]+)\/?(?:[?#]|$)/i);
   if (!match) return null;
-  return [{ ...candidate, url: `https://player.zilla-networks.com/m3u8/${match[1]}`, referer: candidate.url }];
+  return [{
+    ...candidate,
+    url: `https://player.zilla-networks.com/m3u8/${match[1]}`,
+    referer: candidate.url,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
+      Accept: "*/*",
+      "Accept-Language": "es-MX,es-ES;q=0.9,es;q=0.8,en-US;q=0.7,en;q=0.6",
+      Referer: candidate.url,
+      Origin: "https://player.zilla-networks.com"
+    }
+  }];
 }
 async function resolveOne(candidate, context, depth) {
   if (/u\.pcloud\.link\/publink\/show/i.test(candidate.url)) {
@@ -836,10 +867,16 @@ async function resolveOne(candidate, context, depth) {
   const movieMaster = await resolveMovieMaster(candidate);
   if (movieMaster) return movieMaster;
   if (depth > 2) return [];
-  const response = await fetchText(candidate.url, {
-    referer: candidate.referer || context.referer,
-    timeoutMs: context.timeoutMs || 1e4
-  });
+  let response;
+  try {
+    response = await fetchText(candidate.url, {
+      referer: candidate.referer || context.referer,
+      timeoutMs: context.timeoutMs || 1e4
+    });
+  } catch (error) {
+    if (error.response?.status === 404 && maxstreamCastvUrl(candidate.url)) return maxstreamCastv(candidate, context);
+    throw error;
+  }
   const html = response.text;
   const pageUrl = response.url || candidate.url;
   const direct = unique([
@@ -850,6 +887,10 @@ async function resolveOne(candidate, context, depth) {
     mixdropUrl(html, pageUrl)
   ].filter(Boolean));
   if (direct.length) return direct.map((url) => ({ ...candidate, url, referer: pageUrl, subtitles: subtitlesInHtml(html, pageUrl) }));
+  if (maxstreamCastvUrl(candidate.url)) {
+    const fallback = await maxstreamCastv(candidate, context);
+    if (fallback.length) return fallback;
+  }
   if (/^https:\/\/nupload\.(?:my|me)\/watch\/[^/?#]+/i.test(pageUrl)) {
     const endpoint = nuploadEndpointFromHtml(html);
     if (endpoint) {
@@ -897,9 +938,10 @@ async function resolveCandidates(candidates, context = {}, depth = 0) {
   return resolved.flat().filter(Boolean);
 }
 var SUPPORTED_EMBED_HOST = /streamwish|voe\.|filemoon|vidhide|mixdrop|mp4upload|streamtape|dood|yourupload|uqload|vidmoly|ok\.ru|vimeos?|goodstream|zilla|vk\.com|mail\.ru|dropload|unlimplay|earnvids|streamhg|videoapp/i;
+var VIDHIDE_ALIASES = /(?:^|\.)(?:minochinos\.com|moflix-stream\.click|filelions\.to|dhtpre\.com|peytonepre\.com|dingtezuni\.com|dintezuvio\.com|morencius\.com)$/i;
 function isSupportedEmbedUrl(url) {
   const host = String(url || "").match(/^https?:\/\/([^/:?#]+)/i)?.[1] || "";
-  return SUPPORTED_EMBED_HOST.test(host);
+  return SUPPORTED_EMBED_HOST.test(host) || VIDHIDE_ALIASES.test(host) || /(?:^|\.)maxstream\.video$/i.test(host);
 }
 function embedCandidatesFromHtml(html, base, defaults = {}) {
   const source = String(html || "");

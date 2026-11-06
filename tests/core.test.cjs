@@ -185,3 +185,87 @@ test('candidates embed: descubre iframes lazy y hosts anunciados por los cinco p
     'https://cdn.example/video/master.m3u8',
   ]);
 });
+
+test('Zilla: conserva las cabeceras HLS del origen sin rehacer una playlist ya directa', async () => {
+  const embed = 'https://player.zilla-networks.com/watch/episode123';
+  const result = await extractors.resolveCandidates([{ url: embed }], { provider: 'AnimeAV1' });
+  assert.equal(result[0].url, 'https://player.zilla-networks.com/m3u8/episode123');
+  assert.equal(result[0].type, 'hls');
+  assert.equal(result[0].headers.Referer, embed);
+  assert.equal(result[0].headers.Origin, 'https://player.zilla-networks.com');
+  assert.match(result[0].headers['User-Agent'], /Firefox\/148/);
+  const direct = 'https://player.zilla-networks.com/m3u8/episode123';
+  const directResult = await extractors.resolveCandidates([{ url: direct }]);
+  assert.equal(directResult[0].url, direct);
+});
+
+test('Maxstream: descubre enlaces del catálogo y fallback castv si el embed responde 404', async () => {
+  const embed = 'https://maxstream.video/emilpy0n/abc123';
+  const castv = 'https://maxstream.video/castv/abc123';
+  const html = `<a href="${embed}">Ver</a><button data-src="https://minochinos.com/e/episode01">VidHide</button>`;
+  assert.deepEqual(extractors.embedCandidatesFromHtml(html, 'https://catalog.example/movie').map((item) => item.url), [
+    embed, 'https://minochinos.com/e/episode01',
+  ]);
+  assert.deepEqual(extractors.embedCandidatesFromHtml('<a href="https://minochinos.com.evil/e/1">Falso VidHide</a>', 'https://catalog.example/'), []);
+
+  const mock = mockFetch([
+    [embed, { __response: true, body: 'Not Found', status: 404 }],
+    [castv, '<script type="application/vnd.apple.mpegurl" id="m3u8">\nhttps://cdn.example/video/alternate.m3u8?token=fixture&amp;v=1#ignored\n</script>'],
+  ]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: embed, server: 'Maxstream' }], { provider: 'Prueba' });
+    assert.equal(result.length, 1);
+    assert.equal(result[0].url, 'https://cdn.example/video/alternate.m3u8?token=fixture&v=1');
+    assert.equal(result[0].type, 'hls');
+    assert.equal(result[0].headers.Referer, castv);
+    assert.equal(mock.calls.length, 2);
+    assert.equal(mock.calls[1].init.headers.Referer, embed);
+  } finally { mock.restore(); }
+});
+
+test('Maxstream: usa sources si existen, o castv si el embed 200 está vacío', async () => {
+  const embed = 'https://maxstream.video/e/abc123';
+  const castv = 'https://maxstream.video/castv/abc123';
+  const mock = mockFetch([
+    [embed, '<script>player.setup({sources:[{src:"https://cdn.example/video/primary.m3u8"}]})</script>'],
+    [castv, '<script id="m3u8">https://cdn.example/video/alternate.m3u8</script>'],
+  ]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: embed }], { provider: 'Prueba' });
+    assert.equal(result[0].url, 'https://cdn.example/video/primary.m3u8');
+    assert.equal(mock.calls.length, 1, 'no pedir castv cuando ya se encontró medio');
+  } finally { mock.restore(); }
+  const missing = mockFetch([[embed, '<h1>Sin sources</h1>'], [castv, '<script id="m3u8">https://cdn.example/video/alternate.m3u8</script>']]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: embed }], { provider: 'Prueba' });
+    assert.equal(result[0].url, 'https://cdn.example/video/alternate.m3u8');
+    assert.equal(missing.calls.length, 2);
+  } finally { missing.restore(); }
+});
+
+test('Maxstream: no inventa medios ni consulta castv en hosts parecidos o IDs inválidos', async () => {
+  const cases = [
+    ['<script id="m3u8">https://cdn.example/video/false.mp4</script>', []],
+    ['<script id="m3u8">http://cdn.example/video/false.m3u8</script>', []],
+    ['<script id="m3u8">https://cdn.example/video/false.m3u8.html</script>', []],
+    ['<html>200 pero sin vídeo</html>', []],
+  ];
+  for (const [body, expected] of cases) {
+    const mock = mockFetch([
+      ['https://maxstream.video/e/abc123', '<h1>Vacío</h1>'],
+      ['https://maxstream.video/castv/abc123', body],
+    ]);
+    try {
+      assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://maxstream.video/e/abc123' }]), expected);
+    } finally { mock.restore(); }
+  }
+  const mock = mockFetch([
+    ['https://maxstream.video.evil/e/abc123', '<h1>Vacío</h1>'],
+    ['https://maxstream.video/e/%2e%2e', '<h1>Vacío</h1>'],
+  ]);
+  try {
+    assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://maxstream.video.evil/e/abc123' }]), []);
+    assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://maxstream.video/e/%2e%2e' }]), []);
+    assert.equal(mock.calls.length, 2);
+  } finally { mock.restore(); }
+});
