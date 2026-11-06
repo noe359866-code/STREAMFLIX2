@@ -797,7 +797,7 @@ async function maxstreamCastv(candidate, context) {
 }
 function zilla(candidate) {
   if (/^https:\/\/player\.zilla-networks\.com\/m3u8\//i.test(candidate.url)) return null;
-  const match = candidate.url.match(/^https:\/\/player\.zilla-networks\.com\/(?:watch\/|embed\/|e\/)?([a-zA-Z0-9_-]+)\/?(?:[?#]|$)/i);
+  const match = candidate.url.match(/^https:\/\/player\.zilla-networks\.com\/(?:[a-zA-Z0-9_-]+\/){0,3}([a-zA-Z0-9_-]{4,128})\/?(?:[?#]|$)/i);
   if (!match) return null;
   return [{
     ...candidate,

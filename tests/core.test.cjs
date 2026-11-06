@@ -194,6 +194,8 @@ test('Zilla: conserva las cabeceras HLS del origen sin rehacer una playlist ya d
   assert.equal(result[0].headers.Referer, embed);
   assert.equal(result[0].headers.Origin, 'https://player.zilla-networks.com');
   assert.match(result[0].headers['User-Agent'], /Firefox\/148/);
+  const nested = await extractors.resolveCandidates([{ url: 'https://player.zilla-networks.com/player/embed/episode456?lang=es' }]);
+  assert.equal(nested[0].url, 'https://player.zilla-networks.com/m3u8/episode456', 'usar el ID final, no /m3u8/player');
   const direct = 'https://player.zilla-networks.com/m3u8/episode123';
   const directResult = await extractors.resolveCandidates([{ url: direct }]);
   assert.equal(directResult[0].url, direct);

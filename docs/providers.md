@@ -4,13 +4,13 @@ Estado al **6 de noviembre de 2026**. “Fixture” significa que el recorrido s
 
 | ID | Nombre y dominio portado | Tipos | Manifiesto | Fixture | Implementación / limitación principal |
 |---|---|---|---|---|---|
-| `animeav1` | AnimeAV1 — `animeav1.com` | TV | Activo | ✅ | Índices Svelte `__data.json`, SUB/DUB; solo se declara TV en este pack. |
+| `animeav1` | AnimeAV1 — `animeav1.com` | TV | Activo | ✅ | Índices Svelte `__data.json`, SUB/DUB; cabeceras Zilla actualizadas, **sin suponer que reparan el HLS 404**. Solo TV. |
 | `animeonlineninja` | Anime Online Ninja — `ww3.animeonline.ninja` | Película/TV | Activo | ✅ | DooPlayer `/wp-json/dooplayer/v1/post`; Cloudflare puede impedir la lectura. |
 | `cine24h` | Cine24H — `cine24h.online` | Película/TV | Activo | ✅ | Episodios por par temporada/episodio y servidores Base64. |
 | `cinecalidad` | CineCalidad — `www.cinecalidad.am` | Película/TV | Activo | ✅ | `data-option`; filtra trailers y páginas no reproducibles. |
-| `cinehax` | CineHax/MovieMaster — `api.moviemaster.lat` | Película/TV | Activo | ✅ | ID TMDB directo, `PM_UI`, `/servers`, `/video`; conserva Referer HLS. |
+| `cinehax` | CineHax/MovieMaster — `api.moviemaster.lat` | Película/TV | Activo | ✅ | ID TMDB directo, `PM_UI`, `/servers`, `/video`; mismo User-Agent para API y HLS, conserva Referer. |
 | `cuevana` | Cuevana 3 — `cuevana.gs` | Película/TV | Activo | ✅ | `wp-api/v1`, lista de episodios y player por ID. |
-| `danimados` | Danimados — `danimados.cc` | **TV** | Activo | ✅ | Solo series animadas; episodio exacto y cuatro opciones `doo_player_ajax` reales. Colección `movies` vacía; extracción final depende de VidHide/Filemoon/Voe/StreamWish. |
+| `danimados` | Danimados — `danimados.cc` | **TV** | Activo | ✅ | Solo series animadas; episodio exacto y cuatro opciones `doo_player_ajax`. Se reconocen alias de VidHide (p. ej. `minochinos.com`), **sin validar su reproducción**. Colección `movies` vacía; extracción final depende de los hosters. |
 | `doramasflix` | Doramasflix — `doramasflix.in` + Fluxcedene | Película/TV | Activo | ✅ | GraphQL, `links_online` y token opcional de FKPlayer. |
 | `embed69` | Embed69 — `embed69.org` | Película/TV | Activo | ✅ | Ruta por IMDb y episodio; parsea `dataLink` público y pasa los resultados por los extractores comunes. También se usa como hoster en SoloLatino. |
 | `fanpelis` | Fanpelis — `fanpelis.to` | Película/TV | Activo | ✅ | REST `search`, `episodes`, `player`; compara números de episodio. |
@@ -44,7 +44,7 @@ Estado al **6 de noviembre de 2026**. “Fixture” significa que el recorrido s
 - Compilación esbuild/CommonJS: **34/34** (validación local y Actions).
 - Export `getStreams`: **34/34**.
 - Recorrido offline con fixtures: incluye las dos búsquedas nuevas, DooPlayer REST, decodificación de Nupload, opciones Gnula y rechazo de la portada; no equivale a disponibilidad real.
-- Suite completa en esta revisión: **86/86** pruebas offline; **32 proveedores activos** (Repelis24 y Gnula One experimentales; TukiPlay y AnimeBum inactivos).
+- Suite completa tras [el porte selectivo de extractores del origen](porte-streamflix-reborn2.md): **90/90** pruebas offline; **32 proveedores activos** (Repelis24 y Gnula One experimentales; TukiPlay y AnimeBum inactivos).
 - [Auditoría integral en Actions, run 42295795690](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42295795690): **32 activos × 3 intentos = 96**. Cuatro (`animeav1`, `cinehax`, `embed69` y `videoapi`) sirvieron al menos un segmento/MP4 con firma válida; 28 resultados no concluyentes, **cero retiradas por 403 de medio**. Repelis24 y PelisflixHD sirvieron HLS con segmentos HTML 200 (63 bytes), Gnula no obtuvo medio. [Resultados y acciones para los 34 adaptadores](revision-scrapers.md). Esto no prueba reproducción en el dispositivo.
 - [Auditoría de medios en Actions, run 42168396452](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42168396452): 31 proveedores activos auditados antes de desactivar TukiPlay, **3 intentos por proveedor**, HLS/MP4 acotados. TukiPlay fue el único con 403 de la playlist en los tres; otros 403 pertenecían a búsqueda/puertas y no demuestran bloqueo del medio. La mayoría no produjo un HLS/MP4 comprobable para el título de muestra y quedó sin clasificación de reproducción.
 - [Segunda auditoría en Actions, run 42169133435](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42169133435): los **30 proveedores activos de entonces** recibieron otros **3 intentos cada uno**. Ninguno reunió los tres 403 en medios HLS/MP4; no se retiró ningún proveedor adicional. AnimeAV1 y CineHax devolvieron muestras de medio accesibles; en la mayoría no se encontró un HLS/MP4 para el título de prueba, por lo que su reproducción quedó **sin determinar**, no aprobada.
@@ -64,7 +64,7 @@ Estado al **6 de noviembre de 2026**. “Fixture” significa que el recorrido s
 
 ## Formatos y hosters
 
-La capa común sigue hasta cuatro opciones públicas de iframe/hoster por página, con concurrencia limitada y profundidad máxima de dos; reconoce `src` y atributos lazy (`data-src`, `data-embed`, `data-url`), enlaces DropLoad/UnlimPlay/StreamHG/Earnvids y formatos HLS/MP4 declarados directamente, además de JavaScript Dean Edwards empaquetado sin `eval`, Streamtape, MixDrop, Voe, Zilla, pCloud y MovieMaster. Un nombre de hoster en esta lista no garantiza compatibilidad con todas sus variantes.
+La capa común sigue hasta cuatro opciones públicas de iframe/hoster por página, con concurrencia limitada y profundidad máxima de dos; reconoce `src` y atributos lazy (`data-src`, `data-embed`, `data-url`), enlaces DropLoad/UnlimPlay/StreamHG/Earnvids y formatos HLS/MP4 declarados directamente, además de JavaScript Dean Edwards empaquetado sin `eval`, Streamtape, MixDrop, Voe, Zilla, pCloud, MovieMaster y fallback público `castv` de Maxstream. Un nombre de hoster en esta lista no garantiza compatibilidad con todas sus variantes: ver [comparación del origen y exclusiones](porte-streamflix-reborn2.md).
 
 Para el payload Voe F7 observado se aplican transformaciones deterministas (ROT13, marcadores, Base64, desplazamiento e inversión) sin ejecutar el loader del hoster. Se prioriza `source`; `fallback` solo se usa si falta una fuente válida. `direct_access_url` se excluye por ser una descarga y cualquier medio de `test-videos.co.uk` se rechaza como señuelo. Las URLs firmadas caducan y pueden depender de la red que las generó.
 

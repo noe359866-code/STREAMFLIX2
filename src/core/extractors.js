@@ -258,7 +258,9 @@ async function maxstreamCastv(candidate, context) {
 function zilla(candidate) {
   // Una URL /m3u8/{id} ya es el medio: no construir /m3u8/m3u8.
   if (/^https:\/\/player\.zilla-networks\.com\/m3u8\//i.test(candidate.url)) return null;
-  const match = candidate.url.match(/^https:\/\/player\.zilla-networks\.com\/(?:watch\/|embed\/|e\/)?([a-zA-Z0-9_-]+)\/?(?:[?#]|$)/i);
+  // El extractor Kotlin usa el ÚLTIMO componente de la ruta del embed;
+  // el primero puede ser /player/, /embed/ o cualquier variante de UI.
+  const match = candidate.url.match(/^https:\/\/player\.zilla-networks\.com\/(?:[a-zA-Z0-9_-]+\/){0,3}([a-zA-Z0-9_-]{4,128})\/?(?:[?#]|$)/i);
   if (!match) return null;
   // Los reproductores de Zilla usan estas cabeceras para la playlist y sus
   // segmentos (ZillaExtractor.kt, Apache-2.0); no enviar Sec-Fetch/Connection
