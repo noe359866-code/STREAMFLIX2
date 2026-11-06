@@ -11,6 +11,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const zlib = require('node:zlib');
 const { checkMedia, classifyProvider, hostOf } = require('./media-audit-lib.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -175,25 +176,28 @@ function runChild(id, output) {
 
 function annotateResults(results, proposedRemoval) {
   if (process.env.GITHUB_ACTIONS !== 'true') return;
-  // Las anotaciones se pueden consultar con la API de GitHub incluso cuando
-  // el almacenamiento externo de artefactos/logs no está disponible.
-  for (const item of results) {
-    const evidence = {
-      provider: item.provider,
-      decision: item.decision,
-      ...(item.error ? { error: item.error } : {}),
-      attempts: item.attempts.map((attempt) => ({
-        discovered: attempt.discovered,
-        mediaCount: attempt.mediaCount,
-        otherFormats: attempt.otherFormats,
-        discovery403: attempt.discovery403,
-        timedOut: attempt.timedOut,
-        media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host, outcome: media.outcome })),
-      })),
-    };
-    console.log(`::notice file=scripts/media-audit.cjs,title=media-${item.provider}::${JSON.stringify(evidence)}`);
+  // GitHub solo expone las primeras 10 anotaciones de un step. Comprimimos la
+  // evidencia sanitizada en pocos fragmentos, accesibles por su API de checks
+  // aunque el almacenamiento externo de artefactos/logs no esté disponible.
+  const evidence = results.map((item) => ({
+    provider: item.provider,
+    decision: item.decision,
+    ...(item.error ? { error: item.error } : {}),
+    attempts: item.attempts.map((attempt) => ({
+      discovered: attempt.discovered,
+      mediaCount: attempt.mediaCount,
+      otherFormats: attempt.otherFormats,
+      discovery403: attempt.discovery403,
+      timedOut: attempt.timedOut,
+      media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host, outcome: media.outcome })),
+    })),
+  }));
+  const encoded = zlib.gzipSync(JSON.stringify(evidence)).toString('base64');
+  const chunks = encoded.match(/.{1,4000}/g) || [];
+  console.log(`::notice file=scripts/media-audit.cjs,title=media-resumen::${JSON.stringify({ audited: results.length, attempts: ATTEMPTS, proposedRemoval, encoding: 'gzip+base64', parts: chunks.length })}`);
+  for (let i = 0; i < chunks.length; i += 1) {
+    console.log(`::notice file=scripts/media-audit.cjs,title=media-datos-${i + 1}-de-${chunks.length}::${chunks[i]}`);
   }
-  console.log(`::notice file=scripts/media-audit.cjs,title=media-resumen::${JSON.stringify({ audited: results.length, attempts: ATTEMPTS, proposedRemoval })}`);
 }
 
 function appendSummary(results, output) {
