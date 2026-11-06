@@ -65,7 +65,7 @@ Los cambios se aplican a la capa común y se regeneran los **34 bundles**. Las p
 
 `npm run check` compila los 34 bundles y ejecuta las pruebas offline. La comprobación real se hace exclusivamente desde **GitHub Actions**, con **tres intentos por cada proveedor activo** y distinción entre 403 de descubrimiento y 403 de HLS/MP4. Las pruebas con mocks no son prueba de reproducción en Nuvio ni de disponibilidad del hoster Maxstream.
 
-[GitHub Actions 42298326175](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42298326175) auditó el código de `f1e0b32`: **32 proveedores × 3 = 96 intentos**, 34 bundles y **90/90 pruebas offline** entonces. Cuatro proveedores (`animeav1`, `cinehax`, `embed69`, `videoapi`) tuvieron **alguna** firma de medio válida; 28 fueron no concluyentes. **Cero proveedores cumplen el criterio de retirada por 403 de todos sus medios**. El test añadido después sobre el 403 de inicialización deja la suite en **91 pruebas**.
+[GitHub Actions 42298326175](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42298326175) auditó el código de `f1e0b32`: **32 proveedores × 3 = 96 intentos**, 34 bundles y **90/90 pruebas offline** entonces. Cuatro proveedores (`animeav1`, `cinehax`, `embed69`, `videoapi`) tuvieron **alguna** firma de medio válida; 28 fueron no concluyentes. **Cero proveedores cumplen el criterio de retirada por 403 de todos sus medios**. El test añadido después sobre el 403 de inicialización dejaba la suite entonces en **91 pruebas** (suite actual tras el [filtro de medios](filtro-medios-runtime.md): **106 pruebas**).
 
 | Caso de interés | Resultado desde Actions | Consecuencia |
 |---|---|---|
