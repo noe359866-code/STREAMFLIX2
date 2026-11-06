@@ -227,7 +227,8 @@ jobs:
             mediaCount: item.mediaCount,
             discovery403: item.discovery403,
             timedOut: item.timedOut,
-            media: item.media.map(({ format, stage, status, host, outcome }) => ({ format, stage, status, host, outcome })),
+            media: item.media.map(({ format, stage, status, host, outcome, bytesRead, signature, mime, error }) =>
+              ({ format, stage, status, host, outcome, bytesRead, signature, mime, error })),
           }));
           console.log(`::notice file=scripts/media-audit.cjs,title=audit-new-${id}::${JSON.stringify({ provider: id, sample: report.sample, decision: report.decision, attempts })}`);
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,

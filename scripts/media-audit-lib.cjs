@@ -13,12 +13,23 @@ function hostOf(url) {
 }
 
 function publicResult(outcome, stage, sample, format) {
+  const bytes = sample?.bytes || Buffer.alloc(0);
+  const prefix = bytes.toString('utf8', 0, 96).trimStart();
+  const signature = !bytes.length ? 'vacio' : prefix.startsWith('#EXTM3U') ? 'hls'
+    : bytes.toString('ascii', 4, 8) === 'ftyp' ? 'mp4'
+      : bytes[0] === 0x47 && bytes[188] === 0x47 ? 'mpeg-ts'
+        : /^<(?:!doctype|html|body|script)/i.test(prefix) ? 'html' : 'desconocida';
+  const mime = String(sample?.contentType || '').split(';')[0].trim().toLowerCase();
   return {
     format,
     outcome,
     stage,
     host: hostOf(sample?.url),
     status: sample?.status || null,
+    bytesRead: bytes.length,
+    signature,
+    mime: /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(mime) ? mime : '',
+    ...(sample?.error ? { error: sample.error } : {}),
   };
 }
 
@@ -121,8 +132,9 @@ function playlistUris(text) {
 }
 
 function classifySamples(samples, stage, format) {
-  if (samples.some((item) => item.status >= 200 && item.status < 300 && item.bytes.length && !looksLikeHtml(item))) {
-    return publicResult('ok', stage, samples.find((item) => item.status >= 200 && item.status < 300), format);
+  const valid = samples.find((item) => item.status >= 200 && item.status < 300 && item.bytes.length && !looksLikeHtml(item));
+  if (valid) {
+    return publicResult('ok', stage, valid, format);
   }
   if (samples.length && samples.every((item) => item.status === 403)) {
     return publicResult('http403', stage, samples[0], format);

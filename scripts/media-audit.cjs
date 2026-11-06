@@ -199,7 +199,8 @@ function annotateResults(results, proposedRemoval) {
       otherFormats: attempt.otherFormats,
       discovery403: attempt.discovery403,
       timedOut: attempt.timedOut,
-      media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host, outcome: media.outcome })),
+      media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host,
+        outcome: media.outcome, bytesRead: media.bytesRead, signature: media.signature, mime: media.mime, error: media.error })),
     })),
   }));
   const encoded = zlib.gzipSync(JSON.stringify(evidence)).toString('base64');

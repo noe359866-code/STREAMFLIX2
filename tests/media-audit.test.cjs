@@ -32,6 +32,9 @@ test('MP4: GET acotado con Range y firma; 403 en Range + GET es bloqueo del medi
   assert.equal(playable.outcome, 'ok');
   assert.equal(playable.status, 206);
   assert.equal(playable.host, 'cdn.example');
+  assert.equal(playable.signature, 'mp4');
+  assert.equal(playable.bytesRead, MP4.length);
+  assert.equal(playable.mime, 'application/octet-stream');
   assert.ok(!JSON.stringify(playable).includes('token=privado'), 'el informe no filtra URLs firmadas');
   assert.equal(good.calls[0].range, 'bytes=0-4095');
 
