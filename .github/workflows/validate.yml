@@ -120,6 +120,8 @@ jobs:
             content_id: tt0137523
           - provider: pelisjuanita
             content_id: tt0137523
+          - provider: pelispedia
+            content_id: tt0137523
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

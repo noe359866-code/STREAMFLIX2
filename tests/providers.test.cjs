@@ -558,3 +558,32 @@ test('Pelis Juanita: selecciona solo el episodio solicitado antes de resolver el
   assert.deepEqual(missing.streams, []);
   assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/4')));
 });
+
+test('Pelispedia: busca películas y extrae el reproductor, no enlaces de descarga', async () => {
+  const result = await run('pelispedia', {
+    mediaType: 'movie',
+    routes: [
+      ['pelispedia.is/?s=Contenido%20Demo', card('/pelicula/contenido-demo-2024/')],
+      ['pelispedia.is/pelicula/contenido-demo-2024/', '<a href="https://cdn.example/download.mp4" download>Descargar</a><iframe data-src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === 'https://pelispedia.is/?s=Contenido%20Demo'));
+  assert.ok(!result.streams.some((stream) => /pelispedia\.is|download\.mp4/.test(stream.url)));
+});
+
+test('Pelispedia: no mezcla episodios de otra temporada', async () => {
+  const episodeUrl = 'https://pelispedia.is/serie/contenido-demo/temporada/2/episodio/3/';
+  const routes = [
+    ['pelispedia.is/?s=Contenido%20Demo', card('/serie/contenido-demo/')],
+    [/https:\/\/pelispedia\.is\/serie\/contenido-demo\/$/, `<a href="${episodeUrl}">S02E03</a>`],
+    [episodeUrl, '<iframe src="https://sw.example/e/demo"></iframe>'],
+  ];
+  const result = await run('pelispedia', { routes });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === episodeUrl));
+
+  const missing = await run('pelispedia', { episode: 4, routes: routes.slice(0, 2) });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/4')));
+});
