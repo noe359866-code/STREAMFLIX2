@@ -128,3 +128,58 @@ beamup secrets PUBLIC_BASE_URL https://7e2a912be9c9-streamflix2.baby-beamup.club
   (`/configure` → **Instalar en Stremio**).
 - Comprueba `/health`: `activeProviders` debe coincidir con los proveedores que ves en
   `/configure`.
+
+---
+
+## 4. Raspado por proxy (para los sitios que bloquean la IP de Beamup)
+
+El diagnóstico del punto 3 demuestra el problema de fondo: desde el contenedor de Beamup
+**26 proveedores responden, pero solo 2 devuelven enlaces** — el resto contesta 0 en
+74–180 ms porque el sitio rechaza la IP del datacenter. Nuvio no lo sufre porque raspа
+desde tu dispositivo.
+
+Para eso está el **pool de proxies** (`stremio/proxy-pool.cjs`, sin dependencias nuevas):
+
+1. Descarga un listado público de proxies (por defecto **ProxyScrape v4**,
+   `api.proxyscrape.com/v4/free-proxy-list/get`, protocolo HTTP con `ssl=yes`).
+2. **Verifica cada uno** abriendo un túnel `CONNECT` real y completando el handshake TLS
+   contra un canario (`v3-cinemeta.strem.io:443`). Los que no sirven se descartan.
+3. Guarda los sanos en memoria (8 por defecto, refresco cada 10 min).
+4. `proxyFetch()` implementa un cliente HTTP/1.1 completo sobre el túnel
+   (chunked, gzip/deflate/br, redirecciones y POST) y devuelve una `Response` nativa.
+5. `installProxyFetchHook()` hace que `globalThis.fetch` de los 31 proveedores use el
+   proxy **solo dentro del contexto asíncrono** en el que se pidió (`AsyncLocalStorage`),
+   sin tocar ni un archivo de `providers/`.
+
+### Cómo se usa por defecto (`PROXY_SCRAPING=auto`)
+
+- Primera pasada **directa** (rápida) → se responde a Stremio dentro del plazo.
+- Después, en segundo plano, se reintentan **por proxy solo los proveedores que
+  devolvieron 0 enlaces** (`PROXY_MAX_RETRIES`, 8 por defecto).
+- Cuando termina, el resultado completo queda en la caché de 10 min, así que la siguiente
+  apertura del título en Stremio ya trae lo rescatado.
+
+### Variables
+
+```bash
+beamup secrets PROXY_SCRAPING auto        # auto (defecto) | off | only
+beamup secrets PROXY_MAX_RETRIES 8        # proveedores reintentados por proxy
+beamup secrets PROXY_TIMEOUT_MS 8000      # timeout por intento vía proxy
+beamup secrets PROXY_BUDGET_MS 20000      # presupuesto total de la 2ª pasada
+beamup secrets PROXY_CONCURRENCY 2        # intentos simultáneos
+beamup secrets PROXY_POOL_SIZE 8          # proxies sanos que se conservan
+beamup secrets PROXY_LIST_URL "<otra lista compatible>"
+```
+
+Comprueba el estado en `/health` (campo `proxy`: `healthy`, `candidates`, `lastError`) y en
+`/diagnostico/stream/...` (campo `proxyMode`, `proxy`, `providersRescuedByProxy` y, por
+proveedor, `via: "direct" | "proxy"`).
+
+### Avisos honestos
+
+- Los proxies gratuitos son **inestables y lentos**: rescatan una parte, no todos. Si el
+  pool queda en 0 (`lastError`), el addon sigue funcionando igual que antes.
+- Todo el tráfico de raspado pasa por hosts de terceros: son páginas públicas sin
+  credenciales, pero si no te convence, apágalo con `PROXY_SCRAPING=off`.
+- La alternativa definitiva es raspа desde una IP residencial (un mini-servidor en casa con
+  `PROXY_LIST_URL` propio o un VPS no bloqueado).

@@ -13,6 +13,13 @@ const {
   parseStremioId,
   resolveStremioMetadata,
 } = require('./metadata.cjs');
+const {
+  ensurePool,
+  getHealthyProxy,
+  proxyStatus,
+  runWithProxy,
+  installProxyFetchHook,
+} = require('./proxy-pool.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const providerModules = new Map();
@@ -377,6 +384,25 @@ function selectStreams(accumulator, context) {
   return flat.slice(0, MAX_STREAMS).map((item) => toStremioStream(item, context));
 }
 
+/**
+ * Modo de uso de proxies para el raspado:
+ *  - `off`  nunca
+ *  - `auto` (por defecto) segunda pasada solo con los proveedores que fallaron
+ *  - `only` todos los proveedores salen por proxy desde el principio
+ */
+function proxyMode(env = process.env) {
+  const raw = String(env.PROXY_SCRAPING || 'auto').trim().toLowerCase();
+  if (['0', 'off', 'false', 'no', 'disabled', 'none'].includes(raw)) return 'off';
+  if (['only', 'always', 'strict'].includes(raw)) return 'only';
+  return 'auto';
+}
+
+function clampInt(value, fallback, min, max) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(num)));
+}
+
 function pushFoundStreams(accumulator, found) {
   if (!Array.isArray(found)) return;
   for (const item of found) {
@@ -400,6 +426,8 @@ function runProviders(options) {
     perProviderTimeoutMs,
     concurrency,
     accumulator,
+    proxyFor,
+    phase,
   } = options;
 
   const ordered = [...eligible].sort((a, b) => averageLatency(a.id) - averageLatency(b.id));
@@ -412,15 +440,17 @@ function runProviders(options) {
       const startedAt = Date.now();
       let found = [];
       let error = '';
+      const proxy = typeof proxyFor === 'function' ? proxyFor(scraper) : null;
       try {
         const mod = getProvider(scraper.id);
         if (!mod || typeof mod.getStreams !== 'function') {
           throw new Error('Proveedor no disponible');
         }
+        const scrape = () => mod.getStreams(providerInputId, parsed.mediaType, parsed.season, parsed.episode);
         found = await withTimeout(
-          mod.getStreams(providerInputId, parsed.mediaType, parsed.season, parsed.episode),
+          proxy ? runWithProxy(proxy, scrape) : scrape(),
           perProviderTimeoutMs,
-          scraper.id,
+          proxy ? `${scraper.id} vía proxy` : scraper.id,
         );
         if (!Array.isArray(found)) found = [];
       } catch (err) {
@@ -430,7 +460,15 @@ function runProviders(options) {
       const elapsed = Date.now() - startedAt;
       recordLatency(scraper.id, elapsed);
       pushFoundStreams(accumulator, found);
-      accumulator.stats.push({ id: scraper.id, ms: elapsed, count: found.length, error });
+      accumulator.stats.push({
+        id: scraper.id,
+        ms: elapsed,
+        count: found.length,
+        error,
+        via: proxy ? 'proxy' : 'direct',
+        proxy: proxy ? proxy.id : '',
+        phase: phase || 'direct',
+      });
       accumulator.pending -= 1;
     }
   };
@@ -440,6 +478,78 @@ function runProviders(options) {
     () => worker(),
   );
   return Promise.all(workers);
+}
+
+/**
+ * Segunda pasada: reintenta por proxy solo los proveedores que no devolvieron
+ * nada en la pasada directa. Se ejecuta en segundo plano (después de haber
+ * respondido a Stremio) para que el resultado cacheado ya incluya lo rescatado.
+ */
+async function retryFailedWithProxy(params) {
+  const { accumulator, eligible, providerInputId, parsed, getProvider, env, config } = params;
+  const maxRetries = clampInt(env.PROXY_MAX_RETRIES, 8, 0, 31);
+  if (maxRetries <= 0) return;
+
+  const failedIds = [];
+  for (const stat of accumulator.stats) {
+    if (stat.count > 0 || stat.phase === 'proxy') continue;
+    if (!failedIds.includes(stat.id)) failedIds.push(stat.id);
+  }
+  if (!failedIds.length) return;
+
+  const proxies = await ensurePool(env);
+  if (!proxies.length) return;
+
+  const targets = failedIds
+    .slice(0, maxRetries)
+    .map((id) => eligible.find((scraper) => scraper.id === id))
+    .filter(Boolean);
+  if (!targets.length) return;
+
+  const budgetMs = clampInt(env.PROXY_BUDGET_MS, 20000, 3000, 120000);
+  const deadline = Date.now() + budgetMs;
+  const perProviderTimeoutMs = clampInt(env.PROXY_TIMEOUT_MS, 8000, 2000, 25000);
+  const concurrency = clampInt(env.PROXY_CONCURRENCY, 2, 1, 6);
+
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < targets.length && Date.now() < deadline) {
+      const scraper = targets[cursor];
+      cursor += 1;
+      const proxy = getHealthyProxy();
+      if (!proxy) return;
+      const startedAt = Date.now();
+      let found = [];
+      let error = '';
+      try {
+        const mod = getProvider(scraper.id);
+        if (!mod || typeof mod.getStreams !== 'function') throw new Error('Proveedor no disponible');
+        const scrape = () => mod.getStreams(providerInputId, parsed.mediaType, parsed.season, parsed.episode);
+        found = await withTimeout(runWithProxy(proxy, scrape), perProviderTimeoutMs, `${scraper.id} vía proxy`);
+        if (!Array.isArray(found)) found = [];
+      } catch (err) {
+        error = err && err.message ? err.message : 'Error desconocido';
+        found = [];
+      }
+      const elapsed = Date.now() - startedAt;
+      recordLatency(scraper.id, elapsed);
+      pushFoundStreams(accumulator, found);
+      accumulator.stats.push({
+        id: scraper.id,
+        ms: elapsed,
+        count: found.length,
+        error,
+        via: 'proxy',
+        proxy: proxy.id,
+        phase: 'proxy',
+      });
+    }
+  };
+
+  await Promise.all(Array.from(
+    { length: Math.max(1, Math.min(concurrency, targets.length)) },
+    () => worker(),
+  ));
 }
 
 function startJob(options) {
@@ -464,15 +574,48 @@ function startJob(options) {
 
   job.done = runWithRequestContext(
     { tmdbApiKey: config.tmdbKey, metadata },
-    () => runProviders({
-      eligible,
-      providerInputId,
-      parsed,
-      getProvider,
-      perProviderTimeoutMs,
-      concurrency,
-      accumulator,
-    }),
+    async () => {
+      const mode = proxyMode(env);
+      if (mode !== 'off') installProxyFetchHook();
+
+      if (mode === 'only') {
+        await ensurePool(env);
+        await runProviders({
+          eligible,
+          providerInputId,
+          parsed,
+          getProvider,
+          perProviderTimeoutMs,
+          concurrency,
+          accumulator,
+          proxyFor: () => getHealthyProxy(),
+          phase: 'proxy',
+        });
+        return;
+      }
+
+      await runProviders({
+        eligible,
+        providerInputId,
+        parsed,
+        getProvider,
+        perProviderTimeoutMs,
+        concurrency,
+        accumulator,
+      });
+
+      if (mode === 'auto') {
+        await retryFailedWithProxy({
+          accumulator,
+          eligible,
+          providerInputId,
+          parsed,
+          getProvider,
+          env,
+          config,
+        });
+      }
+    },
   ).then(() => {
     // El trabajo terminó (puede ser después de haber respondido ya): guardamos
     // el resultado completo para que la siguiente petición sea instantánea.
@@ -571,13 +714,10 @@ async function getStremioStreams(params = {}) {
   const deadlineMs = Number.isFinite(requestedDeadline) && requestedDeadline > 0
     ? Math.max(50, Math.min(MAX_DEADLINE_MS, Math.round(requestedDeadline)))
     : resolveDeadlineMs(env);
-  let finished = true;
-  if (job.accumulator.pending > 0) {
-    finished = await Promise.race([
-      job.done.then(() => true, () => true),
-      delay(deadlineMs).then(() => false),
-    ]);
-  }
+  const finished = await Promise.race([
+    job.done.then(() => true, () => true),
+    delay(deadlineMs).then(() => false),
+  ]);
 
   const streams = selectStreams(job.accumulator, context);
 
@@ -629,6 +769,9 @@ async function diagnoseStremioStreams(params = {}) {
   const accumulator = { streams: [], stats: [], pending: eligible.length };
   const concurrency = Math.max(1, Math.min(Number(env.ADDON_CONCURRENCY) || 10, 24));
 
+  const mode = proxyMode(env);
+  if (mode !== 'off') installProxyFetchHook();
+
   await runWithRequestContext({ tmdbApiKey: config.tmdbKey, metadata }, () => runProviders({
     eligible,
     providerInputId,
@@ -637,7 +780,15 @@ async function diagnoseStremioStreams(params = {}) {
     perProviderTimeoutMs: config.timeoutSec * 1000,
     concurrency,
     accumulator,
+    proxyFor: mode === 'only' ? () => getHealthyProxy() : undefined,
+    phase: mode === 'only' ? 'proxy' : 'direct',
   }));
+
+  if (mode === 'auto') {
+    await retryFailedWithProxy({
+      accumulator, eligible, providerInputId, parsed, getProvider, env, config,
+    });
+  }
 
   const streams = selectStreams(accumulator, context);
   accumulator.stats.sort((a, b) => b.ms - a.ms);
@@ -654,9 +805,12 @@ async function diagnoseStremioStreams(params = {}) {
     elapsedMs: Date.now() - startedAt,
     deadlineMs: resolveDeadlineMs(env),
     providerTimeoutSeconds: config.timeoutSec,
+    proxyMode: proxyMode(env),
+    proxy: proxyStatus(),
     providersQueried: eligible.length,
-    providersWithResults: accumulator.stats.filter((s) => s.count > 0).length,
-    providersFailed: accumulator.stats.filter((s) => s.count === 0).length,
+    providersWithResults: new Set(accumulator.stats.filter((s) => s.count > 0).map((s) => s.id)).size,
+    providersRescuedByProxy: accumulator.stats.filter((s) => s.phase === 'proxy' && s.count > 0).length,
+    providersFailed: new Set(accumulator.stats.filter((s) => s.count === 0).map((s) => s.id)).size,
     streams: streams.length,
     slowest: accumulator.stats.filter((s) => !s.error).slice(0, 5),
     failed: accumulator.stats.filter((s) => s.error).map(({ id, ms, error }) => ({ id, ms, error })),

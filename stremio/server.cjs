@@ -16,6 +16,7 @@ const {
   normalizeBaseUrl,
 } = require('./addon.cjs');
 const { LOGO_SVG, renderConfigurePage } = require('./landing.cjs');
+const { ensurePool, proxyStatus } = require('./proxy-pool.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -119,6 +120,7 @@ function createAddonServer(options = {}) {
           id: ADDON_ID,
           version: ADDON_VERSION,
           activeProviders: ACTIVE_SCRAPERS.length,
+          proxy: proxyStatus(),
         }, 'no-store');
         return;
       }
@@ -259,6 +261,8 @@ function createAddonServer(options = {}) {
 if (require.main === module) {
   const port = Number(process.env.PORT || 7000);
   const host = process.env.HOST || '0.0.0.0';
+  // Calienta el pool de proxies en segundo plano (no bloquea el arranque).
+  ensurePool().catch(() => {});
   const server = createAddonServer();
   server.listen(port, host, () => {
     const addr = server.address();
