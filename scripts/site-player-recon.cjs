@@ -12,7 +12,7 @@ const HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.7',
   'Accept-Language': 'es-MX,es;q=0.9,en;q=0.6',
 };
-const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one', 'nupload.me', 'nupload.my', 'waaw.tv']);
+const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one', 'nupload.me', 'nupload.my', 'waaw.tv', 'waaw.to']);
 const MAX = 260000;
 
 function clean(text) {
@@ -64,7 +64,8 @@ async function get(url, referer, post, depth = 0) {
         const next = await get(target.href, referer, post, depth + 1);
         return { ...next, requested: safeUrl(url), redirectChain: [response.status, ...(next.redirectChain || [])],
           redirectLocations: [safeUrl(target.href), ...(next.redirectLocations || [])],
-          redirectSame: [target.href === url, ...(next.redirectSame || [])] };
+          redirectSame: [target.href === url, ...(next.redirectSame || [])],
+          redirectParam: [target.searchParams.get('trembed') === new URL(url).searchParams.get('trembed'), ...(next.redirectParam || [])] };
       }
       return { status: response.status, contentType: response.headers.get('content-type') || '', html: '', url, location: safeUrl(location, url) };
     }
@@ -216,6 +217,14 @@ async function repelis() {
                     .filter((key) => decoded.toLowerCase().includes(key)),
                 };
               }),
+            atobShapes: [...hoster.html.matchAll(/.{0,45}atob\(.{0,60}/gi)].slice(0, 4).map(([snippet]) => snippet
+              .replace(/https?:\/\/[^\s"']+/gi, '<url>')
+              .replace(/(["'`])[^"'`]{0,250}\1/g, '<string>')
+              .replace(/[a-z0-9_-]{20,}/gi, '<token>').slice(0, 130)),
+            jwShapes: [...hoster.html.matchAll(/.{0,45}jwplayer\(.{0,100}/gi)].slice(0, 4).map(([snippet]) => snippet
+              .replace(/https?:\/\/[^\s"']+/gi, '<url>')
+              .replace(/(["'`])[^"'`]{0,250}\1/g, '<string>')
+              .replace(/[a-z0-9_-]{20,}/gi, '<token>').slice(0, 150)),
           };
         }
       }
@@ -254,7 +263,8 @@ async function gnula() {
         url: safeUrl(frameUrl.href, base), paramLength: param.length,
         paramKind: /^\d+$/.test(param) ? 'numeric' : external ? 'external-url' : 'other',
         paramTarget: safeUrl(external), redirectChain: frame.redirectChain, redirectLocations: frame.redirectLocations,
-        redirectSame: frame.redirectSame, location: frame.location, finalUrl: safeUrl(frame.url || frameUrl.href),
+        redirectSame: frame.redirectSame, redirectParam: frame.redirectParam,
+        location: frame.location, finalUrl: safeUrl(frame.url || frameUrl.href),
         title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(frame.html)?.[1]),
         iframes: iframeInfo(frame.html, frame.url || frameUrl.href),
         media: mediaHints(frame.html), response: responseInfo(frame.html, frame.url || frameUrl.href),
