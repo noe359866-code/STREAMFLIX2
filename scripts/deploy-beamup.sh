@@ -65,8 +65,29 @@ if [ -n "${TMDB_API_KEY:-}" ]; then
   ssh -o StrictHostKeyChecking=accept-new "dokku@${BEAMUP_HOST}" config:set "${USER_HASH}/${PROJECT_NAME}" "TMDB_API_KEY=${TMDB_API_KEY}"
 fi
 
+# Pasarela de vídeo (opt-in). Sin STREAM_GATEWAY_SECRET el addon firmaría los
+# tickets con un secreto aleatorio por proceso y dejarían de valer tras cada
+# reinicio, así que si se activa la pasarela se genera uno si falta.
+if [ -n "${STREAM_GATEWAY:-}" ] && [ "${STREAM_GATEWAY}" != "off" ]; then
+  SECRET_VALUE="${STREAM_GATEWAY_SECRET:-}"
+  if [ -z "$SECRET_VALUE" ]; then
+    SECRET_VALUE="$(openssl rand -hex 24 2>/dev/null || printf '%s%s' "$(date +%s)" "$RANDOM$RANDOM" | shasum -a 256 | cut -c1-48)"
+    echo "==> Generando STREAM_GATEWAY_SECRET nuevo (no se imprime)."
+  fi
+  echo "==> Configurando pasarela de vídeo (${STREAM_GATEWAY}) en Beamup..."
+  ssh -o StrictHostKeyChecking=accept-new "dokku@${BEAMUP_HOST}" config:set "${USER_HASH}/${PROJECT_NAME}" \
+    "STREAM_GATEWAY=${STREAM_GATEWAY}" \
+    "STREAM_GATEWAY_SECRET=${SECRET_VALUE}" \
+    "STREAM_GATEWAY_DAILY_MB=${STREAM_GATEWAY_DAILY_MB:-4096}" \
+    "STREAM_GATEWAY_MAX_CONCURRENT=${STREAM_GATEWAY_MAX_CONCURRENT:-6}" \
+    "PUBLIC_BASE_URL=https://${PUBLIC_HOST}"
+fi
+
 echo ""
 echo "✓ Addon desplegado en Beamup:"
 echo "  Manifiesto:  https://${PUBLIC_HOST}/manifest.json"
 echo "  Configurar:  https://${PUBLIC_HOST}/configure"
 echo "  Stremio URI: stremio://${PUBLIC_HOST}/manifest.json"
+echo "  Salud:       https://${PUBLIC_HOST}/health"
+echo ""
+echo "  Verificación de transporte: npm run verify:proxy -- https://${PUBLIC_HOST}"

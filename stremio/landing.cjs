@@ -6,6 +6,8 @@ const {
   ACTIVE_SCRAPERS,
   ACTIVE_IDS,
 } = require('./config.cjs');
+const { resolveGatewayOptions } = require('./stream-gateway.cjs');
+const { resolveMediaFlowOptions } = require('./mediaflow.cjs');
 
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
   <defs>
@@ -55,7 +57,13 @@ function renderConfigurePage(options = {}) {
     lang: userConfig.lang || 'all',
     tmdbKey: userConfig.tmdbKey || '',
     timeoutSec: Number(userConfig.timeoutSec) || 10,
+    gateway: userConfig.gateway || 'auto',
   };
+
+  // Estado de la pasarela en el servidor, para explicar en la UI por qué el
+  // selector puede quedar inactivo (el servidor siempre manda).
+  const gatewayServer = resolveGatewayOptions(env);
+  const mediaflowServer = resolveMediaFlowOptions(env);
 
   const scrapersData = ACTIVE_SCRAPERS.map((item) => ({
     id: item.id,
@@ -322,6 +330,18 @@ function renderConfigurePage(options = {}) {
           <input type="number" id="timeoutSec" min="4" max="25" step="1" value="10">
         </label>
         <label class="field" style="grid-column: 1 / -1;">
+          <span class="lbl">Transporte de vídeo (proxy)</span>
+          <select id="gateway">
+            <option value="auto">Automático · usar lo que el servidor tenga configurado</option>
+            <option value="off">Siempre directo / cabeceras locales · nunca gastar datos del anfitrión</option>
+            <option value="on">Preferir proxy del addon si el servidor lo tiene activo</option>
+          </select>
+          <span class="hint" style="margin-top:6px">
+            Estado del servidor: <strong>${mediaflowServer.enabled ? 'MediaFlow delegado' : gatewayServer.mode}</strong>${mediaflowServer.enabled ? ` · ${mediaflowServer.baseUrl}` : (gatewayServer.enabled ? ` · presupuesto ${Math.round(gatewayServer.dailyBudgetBytes / (1024 * 1024))} MB/día` : ' · retransmisión desactivada (coste 0)')}.
+            Por defecto los enlaces con <code>Referer</code> se reproducen con <code>proxyHeaders</code>, sin usar ancho de banda del addon.
+          </span>
+        </label>
+        <label class="field" style="grid-column: 1 / -1;">
           <span class="lbl">Clave API de TMDB v3 (opcional)</span>
           <input type="password" id="tmdbKey" autocomplete="off" placeholder="${hasServerTmdbKey ? '✓ TMDB_API_KEY activa en el servidor (deja vacío para usarla)' : 'Opcional · p. ej. a1b2c3d4e5f6...'}">
         </label>
@@ -374,6 +394,7 @@ function renderConfigurePage(options = {}) {
       const langEl = document.getElementById('lang');
       const timeoutEl = document.getElementById('timeoutSec');
       const tmdbEl = document.getElementById('tmdbKey');
+      const gatewayEl = document.getElementById('gateway');
 
       const selected = new Set(INITIAL.providers && INITIAL.providers.length ? INITIAL.providers : ALL_IDS);
 
@@ -420,6 +441,7 @@ function renderConfigurePage(options = {}) {
         if (cleanTmdb) payload.t = cleanTmdb;
         const tSec = Math.max(4, Math.min(25, Math.round(Number(timeoutEl.value) || 10)));
         if (tSec !== 10) payload.s = tSec;
+        if (gatewayEl && gatewayEl.value !== 'auto') payload.g = gatewayEl.value;
 
         if (Object.keys(payload).length === 0) return '';
         return 'cfg_' + toBase64Url(JSON.stringify(payload));
@@ -441,8 +463,9 @@ function renderConfigurePage(options = {}) {
       langEl.value = INITIAL.lang || 'all';
       timeoutEl.value = String(INITIAL.timeoutSec || 10);
       tmdbEl.value = INITIAL.tmdbKey || '';
+      if (gatewayEl) gatewayEl.value = INITIAL.gateway || 'auto';
 
-      [langEl, timeoutEl, tmdbEl].forEach((el) => {
+      [langEl, timeoutEl, tmdbEl, gatewayEl].filter(Boolean).forEach((el) => {
         el.addEventListener('input', updateUrls);
         el.addEventListener('change', updateUrls);
       });

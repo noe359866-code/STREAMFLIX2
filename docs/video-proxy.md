@@ -23,6 +23,7 @@ Con el protocolo de Stremio hay cuatro caminos posibles para ese tráfico:
 | **A. URL directa** | El CDN al reproductor del usuario | 0 bytes | Stremio Web/Desktop/Móvil/TV, Nuvio |
 | **B. `behaviorHints.proxyHeaders`** (`notWebReady: true`) | El *streaming server* local de Stremio en el dispositivo | 0 bytes | Desktop y Android/TV. Stremio Web e iOS lo ignoran |
 | **C. Pasarela propia (este repo, opt-in)** | El contenedor del addon → reenvía al reproductor | Todo el vídeo | Universal (también Stremio Web) |
+| **C2. MediaFlow Proxy (instancia aparte)** | Tu VPS/NAS/casa → reenvía al reproductor | 0 bytes en Beamup (paga tu VPS) | Universal, y además DASH/ClearKey |
 | **D. Reproductor externo (`externalUrl`)** | El navegador/embed del proveedor | 0 bytes | Sale de Stremio; peor experiencia |
 
 La conclusión es la misma que la de la comunidad (ver el hilo de r/StremioAddons
@@ -182,7 +183,99 @@ Stremio vuelve a pedir la lista, que ahora saldrá con `proxyHeaders`.
 
 ---
 
-## 5. Alternativas (y cuándo conviene cada una)
+## 5. MediaFlow Proxy: ¿mejor que la pasarela de este repo?
+
+Instalé/investigué [mhdzumair/mediaflow-proxy](https://github.com/mhdzumair/mediaflow-proxy) (MIT, Python/FastAPI)
+y su reescritura en Rust [mediaflow-proxy-light](https://github.com/mhdzumair/mediaflow-proxy-light).
+**Respuesta corta: sí, es mejor motor — pero no puede vivir en Beamup.** Por eso lo correcto no es
+"reemplazar", sino **delegar en MediaFlow cuando exista y dejar la pasarela interna como respaldo sin
+infraestructura**. Eso es lo que quedó implementado (`stremio/mediaflow.cjs`).
+
+### Comparación
+
+| | **MediaFlow Proxy** | **Pasarela de este repo** |
+| --- | --- | --- |
+| Lenguaje / despliegue | Python 3.10 + FastAPI (Docker) o Rust ("Light") | Node, dentro del proceso del addon |
+| RAM mínima real | ~2 GB (Python) · ~512 MB (Rust) | Unos pocos MB |
+| Cabe en Beamup | **No** | Sí |
+| HLS (reescritura, claves, prebuffer) | Sí, con prebuffer configurable | Sí (reescritura, sin prebuffer) |
+| DASH / MPD | Sí, y **DASH→HLS** con ClearKey (cenc/cens/cbc1/cbcs) | No |
+| Selección de resolución, skip de intro, `start_offset` | Sí | No |
+| Proxy upstream HTTP/SOCKS5, reglas por dominio | Sí | No |
+| URLs protegidas | Cifradas con `token`, caducidad y **binding por IP**; `api_password`; rate limit con Redis | HMAC con caducidad (sin binding de IP) |
+| Presupuesto de bytes / cortes | No de serie (sí Redis rate-limit) | Sí, con corte a mitad de segmento |
+| Anti-SSRF | No de serie (`no_proxy`/rutas se configuran) | Sí por defecto |
+| Mantenimiento | Proyecto activo, mucha comunidad (AIOStreams, StreamAsia, MediaFusion) | Código propio, ~500 líneas |
+| Coste | VPS (~4–5 €/mes, 512 MB basta con Light) o ElfHosted **9 $/mes** (2×4K) / 18 $ / 36 $ | 0 € |
+| Riesgo | Otro servicio que mantener/parchear; el `api_password` viaja en las URLs | Superficie pequeña, pero código propio |
+
+### Lo que MediaFlow hace y esta pasarela no
+
+- **DASH/ClearKey**: convierte MPD cifrado con ClearKey a HLS al vuelo. Es la razón por la que
+  MediaFusion y AIOStreams lo usan. Este repo **descarta MPD** (`isPlayableUrl` rechaza `.mpd`), así que
+  si algún proveedor sirve DASH, MediaFlow abre una puerta que hoy está cerrada.
+- **Prebuffer** (5 segmentos por defecto) y `start_offset` para directos: menos cortes, especialmente en TV.
+- **`max_res`/`resolution`**: fuerza 1080p o 720p aunque el master ofrezca varias calidades.
+- **URLs con binding de IP y caducidad**: si alguien copia el enlace, no le sirve desde otra IP.
+- **Rust Light**: 7–8× menos RAM, 1.7–3.4× menos CPU y hasta 4× más throughput. Mismo API.
+
+### Lo que esta pasarela hace mejor (para *nuestro* caso)
+
+- **Cabe en Beamup**: cero infraestructura, cero coste.
+- **Presupuesto diario de bytes con corte a mitad de segmento** y límite de conexiones: freno explícito
+  contra el abuso, que es justo lo que pedías.
+- **Anti-SSRF por defecto** y tickets firmados con `timingSafeEqual` (MediaFlow confía en `api_password`
+  en la URL y en sus reglas de rutas).
+- **Kill switch por usuario** (`/configure` → transporte `off`) y por operador (`STREAM_GATEWAY=off`).
+- **Un solo proceso**: no hay otro contenedor que actualizar ni otra contraseña que rotar.
+
+### Decisión práctica
+
+```
+1. ¿El CDN no pide cabeceras?            → URL directa            (coste 0)
+2. ¿Pide Referer y el cliente es desktop/Android? → proxyHeaders   (coste 0)
+3. ¿Tienes VPS/NAS/casa con 512 MB?      → MediaFlow (Light)      (mejor motor)
+4. ¿No quieres infraestructura y es poco volumen? → pasarela interna (opt-in, con presupuesto)
+```
+
+### Cómo se activa la delegación (ya implementada)
+
+```bash
+beamup secrets MEDIAFLOW_URL https://mediaflow.midominio.com   # instancia propia
+beamup secrets MEDIAFLOW_PASSWORD "contraseña_larga"
+beamup secrets MEDIAFLOW_INCLUDE_MP4 0                         # 1 = delegar también MP4 con cabeceras
+```
+
+Con eso, cada enlace HLS con cabeceras se entrega como
+`https://mediaflow.midominio.com/proxy/hls/manifest.m3u8?d=<cdn>&h_referer=…&api_password=…`
+y MediaFlow reescribe el playlist, inyecta las cabeceras y sirve los segmentos. En `/health` →
+`mediaflow` y en `/mediaflow?probe=1` se comprueba la instancia (IP pública y latencia vía `/proxy/ip`).
+El diagnóstico por título muestra `transports: { "mediaflow": N }`.
+
+Notas de seguridad:
+- `api_password` viaja en la URL (formato `encoded`). Si eso te incomoda, usa `/generate_url` con
+  `expiration` + `ip` (URL cifrada) y pon MediaFlow detrás de un dominio con TLS.
+- No publiques la instancia sin `API_PASSWORD`: es un proxy con salida a Internet.
+- MediaFlow **no filtra SSRF**; si lo expones, restringe `PROXY_URL`/rutas y el firewall de salida.
+
+### Código para levantarlo (fuera de Beamup)
+
+```yaml
+# docker-compose.yml en tu VPS/NAS
+services:
+  mediaflow-proxy:
+    image: mhdzumair/mediaflow-proxy:latest   # o ghcr.io/mhdzumair/mediaflow-proxy-light:latest
+    restart: unless-stopped
+    ports: ["8888:8888"]
+    environment:
+      - API_PASSWORD=${MEDIAFLOW_PASSWORD}
+      - ENABLE_HLS_PREBUFFER=true
+      - FORWARDED_ALLOW_IPS=*        # detrás de Nginx/Cloudflare
+```
+
+---
+
+## 6. Alternativas (y cuándo conviene cada una)
 
 | Opción | Coste | Cuota / límite real | Veredicto |
 | --- | --- | --- | --- |
@@ -214,7 +307,7 @@ sale de tu conexión — asumiendo sus límites de subida.
 
 ---
 
-## 6. Límites conocidos y riesgos
+## 7. Límites conocidos y riesgos
 
 - **Stremio Web** con `notWebReady: true`: el reproductor web espera a que su
   servidor local convierta el stream. La pasarela sirve las URIs ya reescritas,
@@ -235,7 +328,7 @@ sale de tu conexión — asumiendo sus límites de subida.
 
 ---
 
-## 7. Resumen ejecutivo
+## 8. Resumen ejecutivo
 
 1. **No necesitas proxy propio para la mayoría de reproducciones.** `notWebReady`
    + `proxyHeaders` hace que el servidor local de Stremio ponga el `Referer` y el
@@ -245,5 +338,9 @@ sale de tu conexión — asumiendo sus límites de subida.
    que implementa `stremio/stream-gateway.cjs`.
 3. **Beamup no es un CDN**: úsalo para resolver, no para servir. Para volumen,
    VPS barato o túnel a casa con IP residencial.
-4. **Mide antes de escalar**: `/health` (`bytesToday`, `budgetUsedPct`) y
-   `/diagnostico` (`transports`) dicen exactamente qué vía se está usando.
+4. **MediaFlow es mejor motor, pero no cabe en Beamup** (2 GB de RAM en Python, 512 MB en Rust):
+   si tienes VPS/NAS, delégalo con `MEDIAFLOW_URL` + `MEDIAFLOW_PASSWORD` y gana DASH/ClearKey,
+   prebuffer, selección de resolución y URLs con caducidad/IP. La pasarela interna queda como
+   respaldo de coste cero.
+5. **Mide antes de escalar**: `/health` (`bytesToday`, `budgetUsedPct`, `mediaflow`), `/mediaflow?probe=1`
+   y `/diagnostico` (`transports`) dicen exactamente qué vía se está usando.

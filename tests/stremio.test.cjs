@@ -21,6 +21,7 @@ const {
   getStremioStreams,
   diagnoseStremioStreams,
   clearResultCache,
+  toStremioStream,
 } = require('../stremio/addon.cjs');
 const { createAddonServer } = require('../stremio/server.cjs');
 const { ROOT, fixture, response } = require('./helpers.cjs');
@@ -305,6 +306,70 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
     assert.equal(blockedRes.status, 404);
   } finally {
     global.fetch = originalFetch;
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('la preferencia `gateway` viaja en cfg_ y la env del servidor manda como techo', () => {
+  // Codificar/decodificar la preferencia del usuario
+  const seg = encodeConfig({ gateway: 'off' });
+  assert.match(seg, /^cfg_/);
+  assert.equal(decodeConfig(seg, {}).gateway, 'off');
+  assert.equal(encodeConfig({ gateway: 'auto' }), '');
+  assert.equal(decodeConfig(encodeConfig({ gateway: 'on' }), {}).gateway, 'on');
+  // Un valor desconocido cae en `auto` en lugar de romper la configuración
+  assert.equal(decodeConfig('cfg_' + Buffer.from(JSON.stringify({ g: 'raro' })).toString('base64url'), {}).gateway, 'auto');
+
+  // Y el addon la aplica: servidor apagado + usuario pidiendo `on` → directo
+  const stream = {
+    name: 'P', provider: 'voe', url: 'https://cdn.example/master.m3u8', type: 'hls',
+    quality: '1080p', language: 'es-LAT', headers: { Referer: 'https://voe.sx/' },
+  };
+  const context = { metadata: { title: 'Demo' }, parsed: { mediaType: 'movie' }, baseUrl: 'https://addon.test' };
+  const userOff = toStremioStream(stream, {
+    ...context, gateway: { enabled: false, mode: 'off', serverMode: 'auto' },
+  });
+  assert.equal(userOff.behaviorHints.streamflix2Transport, 'proxy-headers');
+  assert.equal(userOff.url, 'https://cdn.example/master.m3u8');
+});
+
+test('el addon no activa la pasarela si el usuario la desactiva (config.gateway=off)', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt4444444.json')) {
+      return response({ meta: { id: 'tt4444444', moviedb_id: 555, name: 'SinProxy', releaseInfo: '2023' } }, url);
+    }
+    return originalFetch(input);
+  };
+  const fakeProvider = {
+    async getStreams() {
+      return [{
+        name: 'ProveedorFake', provider: 'voe', url: 'https://cdn.example/a/master.m3u8',
+        type: 'hls', quality: '1080p', language: 'es-LAT', headers: { Referer: 'https://voe.sx/' },
+      }];
+    },
+  };
+  const server = createAddonServer({
+    env: { STREAM_GATEWAY: 'auto' },
+    providerLoader: () => fakeProvider,
+    useMetadataCache: false,
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const userSeg = encodeConfig({ providers: ACTIVE_IDS, gateway: 'off' });
+    const res = await fetch(`${base}/${userSeg}/stream/movie/tt4444444.json`);
+    const json = await res.json();
+    assert.equal(json.streams.length, 1);
+    assert.equal(json.streams[0].url, 'https://cdn.example/a/master.m3u8');
+    assert.equal(json.streams[0].behaviorHints.streamflix2Transport, 'proxy-headers');
+    assert.equal(json.streams[0].behaviorHints.proxyHeaders.request.Referer, 'https://voe.sx/');
+  } finally {
+    global.fetch = originalFetch;
+    clearResultCache();
     await new Promise((resolve) => server.close(resolve));
   }
 });

@@ -218,6 +218,20 @@ destinos internos (anti-SSRF). Estado en `/health` → `gateway`
 **Desactivar:** `beamup secrets STREAM_GATEWAY off`. Los enlaces ya entregados
 caducan solos con el ticket (6 h).
 
+### Delegar en MediaFlow Proxy (opcional, recomendado si tienes VPS/NAS)
+
+```bash
+beamup secrets MEDIAFLOW_URL https://mediaflow.midominio.com
+beamup secrets MEDIAFLOW_PASSWORD "contraseña_larga"
+beamup secrets MEDIAFLOW_INCLUDE_MP4 0   # 1 = delegar también MP4 con cabeceras
+```
+
+Cuando está configurado, los HLS con cabeceras salen como
+`<MEDIAFLOW_URL>/proxy/hls/manifest.m3u8?d=…&h_referer=…&api_password=…` y MediaFlow
+hace el trabajo pesado (DASH/ClearKey, prebuffer, selección de resolución). Comprueba con
+`/health` → `mediaflow` y `/mediaflow?probe=1` (IP pública y latencia). Sin esas variables el
+addon no cambia nada.
+
 Razonamiento completo, límites de Beamup, cuentas de ancho de banda y
 alternativas (VPS, Cloudflare Workers, túnel a casa, MediaFlow):
 [`docs/video-proxy.md`](video-proxy.md).

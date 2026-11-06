@@ -18,6 +18,7 @@ const {
 const { LOGO_SVG, renderConfigurePage } = require('./landing.cjs');
 const { ensurePool, proxyStatus } = require('./proxy-pool.cjs');
 const { handleGatewayRequest, gatewayStatus } = require('./stream-gateway.cjs');
+const { mediaflowStatus, probeMediaFlow } = require('./mediaflow.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -130,6 +131,20 @@ function createAddonServer(options = {}) {
           activeProviders: ACTIVE_SCRAPERS.length,
           proxy: proxyStatus(),
           gateway: gatewayStatus(env),
+          mediaflow: mediaflowStatus(env),
+        }, 'no-store');
+        return;
+      }
+
+      if (pathname === '/mediaflow' || pathname === '/mediaflow/status') {
+        // Sonda bajo demanda: /mediaflow?probe=1 comprueba /proxy/ip ahora mismo.
+        const options = parsedUrl.searchParams.get('probe') === '1'
+          ? await probeMediaFlow(env, { force: true })
+          : undefined;
+        sendJson(req, res, 200, {
+          ...mediaflowStatus(env),
+          ...(options ? { probe: options } : {}),
+          uso: '/mediaflow?probe=1 comprueba la instancia; configura MEDIAFLOW_URL y MEDIAFLOW_PASSWORD',
         }, 'no-store');
         return;
       }

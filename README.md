@@ -41,6 +41,11 @@ beamup secrets STREAM_GATEWAY auto
 beamup secrets STREAM_GATEWAY_DAILY_MB 4096
 ```
 
+**¿Y MediaFlow Proxy?** Es un motor superior (DASH/ClearKey, prebuffer, URLs con caducidad e IP),
+pero necesita 512 MB–2 GB de RAM propios: no cabe en Beamup. Ya está integrado como opción:
+`MEDIAFLOW_URL` + `MEDIAFLOW_PASSWORD` y el addon delega en tu instancia, dejando la pasarela
+interna como respaldo. Comparativa honesta y despliegue en `docs/video-proxy.md` §5.
+
 Investigación, cuentas de ancho de banda, límites reales de Beamup y
 alternativas (VPS, Cloudflare Workers, túnel a casa, MediaFlow) en
 **[`docs/video-proxy.md`](docs/video-proxy.md)**.

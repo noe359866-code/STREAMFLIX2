@@ -25,6 +25,11 @@ const {
   buildGatewayUrl,
   isPlaylistUrl,
 } = require('./stream-gateway.cjs');
+const {
+  resolveMediaFlowOptions,
+  buildMediaFlowUrl,
+  canDelegate,
+} = require('./mediaflow.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const providerModules = new Map();
@@ -226,6 +231,7 @@ function matchesLanguageFilter(language, langMode) {
  */
 function resolveTransport(stream, context = {}) {
   const gateway = context.gateway || { enabled: false, mode: 'off' };
+  const mediaflow = context.mediaflow || { enabled: false };
   const headers = cleanRequestHeaders(stream.headers);
   const hasHeaders = Object.keys(headers).length > 0;
   const needsHeaders = needsHeaderProxy(stream);
@@ -234,6 +240,14 @@ function resolveTransport(stream, context = {}) {
     || isPlaylistUrl(stream.url);
 
   if (!needsHeaders) return { gateway: false, headers, transport: hls ? 'direct-hls' : 'direct' };
+
+  // MediaFlow (instancia propia, fuera de Beamup) es un motor completo: cuando
+  // está configurado se prefiere a la pasarela interna, que queda como respaldo
+  // sin infraestructura.
+  if (mediaflow.enabled && canDelegate(stream, mediaflow)) {
+    return { gateway: false, headers, transport: 'mediaflow' };
+  }
+
   if (!gateway.enabled) return { gateway: false, headers, transport: 'proxy-headers' };
 
   const gatewayEligible = gateway.mode === 'on'
@@ -267,7 +281,13 @@ function toStremioStream(stream, context) {
   };
 
   let url = stream.url;
-  if (route.gateway) {
+  if (route.transport === 'mediaflow') {
+    // El reproductor pide a MediaFlow, que aplica las cabeceras y reescribe el
+    // playlist. No hay `proxyHeaders`: las pone el proxy, no el cliente.
+    url = buildMediaFlowUrl(stream.url, headers, context.mediaflow) || stream.url;
+    behaviorHints.notWebReady = true;
+    behaviorHints.streamflix2Transport = route.transport;
+  } else if (route.gateway) {
     // HLS servido por nuestra pasarela: el reproductor no manda cabeceras, las
     // pone ella. Se mantiene `notWebReady` para que el servidor local no intente
     // un acceso directo al CDN (fallaría justo por las cabeceras).
@@ -716,7 +736,11 @@ async function resolveRequestContext(params) {
   if (!eligible.length) return null;
 
   const gateway = resolveGatewayOptions(env);
+  const mediaflow = resolveMediaFlowOptions(env);
   const baseUrl = normalizeBaseUrl(params.baseUrl);
+  // `config.gateway` es la preferencia del usuario; la env del operador es el
+  // techo de seguridad: si el servidor la apaga, `on` no la resucita.
+  const gatewayPreference = config.gateway === 'off' ? 'off' : gateway.mode;
 
   return {
     env,
@@ -731,8 +755,19 @@ async function resolveRequestContext(params) {
       config,
       baseUrl,
       // Con la pasarela apagada (predeterminado) `enabled` es false y todos los
-      // enlaces vuelven a la vía directa/`proxyHeaders`.
-      gateway: { enabled: gateway.enabled, mode: gateway.mode },
+      // enlaces vuelven a la vía directa/`proxyHeaders`. Un usuario puede
+      // apagarla para sí mismo con `gateway: 'off'` en `/configure`.
+      gateway: {
+        enabled: gateway.enabled && gatewayPreference !== 'off',
+        mode: gatewayPreference,
+        serverMode: gateway.mode,
+      },
+      // La instancia de MediaFlow es infraestructura del operador: el usuario
+      // sólo puede desactivarla para sí (gatewayPreference === 'off').
+      mediaflow: {
+        ...mediaflow,
+        enabled: mediaflow.enabled && gatewayPreference !== 'off',
+      },
     },
   };
 }
@@ -867,8 +902,15 @@ async function diagnoseStremioStreams(params = {}) {
     type: params.type,
     id: params.id,
     key: buildCacheKey(parsed, config, context.gateway.enabled ? context.gateway.mode : 'off'),
+    mediaflow: {
+      configured: context.mediaflow.enabled,
+      baseUrl: context.mediaflow.baseUrl || '',
+      includeMp4: Boolean(context.mediaflow.includeMp4),
+    },
     streamGateway: {
       mode: context.gateway.mode,
+      serverMode: context.gateway.serverMode,
+      userPreference: config.gateway,
       enabled: context.gateway.enabled,
       baseUrl: context.baseUrl || '',
     },

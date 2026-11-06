@@ -16,7 +16,8 @@
     "start": "node stremio/server.cjs",
     "start:stremio": "node stremio/server.cjs",
     "start:nuvio": "node server.cjs",
-    "deploy:beamup": "bash scripts/deploy-beamup.sh"
+    "deploy:beamup": "bash scripts/deploy-beamup.sh",
+    "verify:proxy": "node scripts/verify-proxy.cjs"
   },
   "dependencies": {
     "crypto-js": "^4.2.0"

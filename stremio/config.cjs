@@ -32,6 +32,17 @@ const ACTIVE_SCRAPERS = ALL_SCRAPERS.filter((scraper) => scraper.enabled);
 const ACTIVE_IDS = ACTIVE_SCRAPERS.map((scraper) => scraper.id);
 const ACTIVE_ID_SET = new Set(ACTIVE_IDS);
 
+/**
+ * Preferencia de transporte de vídeo POR USUARIO (viaja en el segmento de
+ * configuración, no en los secretos del servidor):
+ *  - `auto` (defecto) respeta lo que el operador configuró con STREAM_GATEWAY.
+ *  - `on`   pide la pasarela para sus HLS con cabeceras (el servidor puede
+ *           desactivarla igualmente: la env manda en seguridad).
+ *  - `off`  nunca quiere pasar por la pasarela de Beamup (coste 0 garantizado
+ *           para el anfitrión, aunque el servidor la tenga activa).
+ */
+const VALID_GATEWAY_MODES = new Set(['auto', 'on', 'off']);
+
 const VALID_LANG_MODES = new Set([
   'all',
   'prefer-es-LAT',
@@ -62,6 +73,7 @@ function defaultConfig(env = process.env) {
     lang: 'all',
     tmdbKey: sanitizeTmdbKey(env.TMDB_API_KEY || ''),
     timeoutSec: defaultTimeoutSec,
+    gateway: 'auto',
   };
 }
 
@@ -96,11 +108,14 @@ function normalizeConfig(input = {}, env = process.env) {
     ? clampTimeout(input.timeoutSec, defaults.timeoutSec)
     : defaults.timeoutSec;
 
+  const gateway = VALID_GATEWAY_MODES.has(input.gateway) ? input.gateway : defaults.gateway;
+
   return {
     providers,
     lang,
     tmdbKey,
     timeoutSec,
+    gateway,
   };
 }
 
@@ -118,6 +133,7 @@ function encodeConfig(input = {}) {
   if (clean.lang !== 'all') payload.l = clean.lang;
   if (clean.tmdbKey) payload.t = clean.tmdbKey;
   if (clean.timeoutSec !== 10) payload.s = clean.timeoutSec;
+  if (clean.gateway !== 'auto') payload.g = clean.gateway;
 
   if (Object.keys(payload).length === 0) return '';
   const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
@@ -131,6 +147,7 @@ function expandShortPayload(raw = {}) {
     lang: raw.lang !== undefined ? raw.lang : raw.l,
     tmdbKey: raw.tmdbKey !== undefined ? raw.tmdbKey : raw.t,
     timeoutSec: raw.timeoutSec !== undefined ? raw.timeoutSec : raw.s,
+    gateway: raw.gateway !== undefined ? raw.gateway : raw.g,
   };
 }
 
@@ -182,6 +199,7 @@ module.exports = {
   ACTIVE_IDS,
   ACTIVE_ID_SET,
   VALID_LANG_MODES,
+  VALID_GATEWAY_MODES,
   sanitizeTmdbKey,
   defaultConfig,
   normalizeConfig,
