@@ -71,3 +71,60 @@ El workflow [`.github/workflows/beamup-deploy.yml`](../.github/workflows/beamup-
 - `SSH_PRIVATE_KEY`: clave SSH privada correspondiente a una de las claves públicas registradas en tu cuenta `@noe359866-code`.
 
 Al hacer merge a `main` o pulsar **Run workflow** en la pestaña **Actions → Deploy Stremio Addon to Beamup**, se desplegará automáticamente.
+
+---
+
+## 3. Diagnóstico: Nuvio sí devuelve streams y Stremio no
+
+Nuvio ejecuta los proveedores **dentro de la app** (QuickJS, IP del móvil/TV), así que
+no depende de nada más. El addon de Stremio, en cambio, los ejecuta **en el servidor de
+Beamup** y Stremio descarta lo que tarda demasiado: si el addon tarda 20–40 s en
+responder, el usuario ve la lista vacía aunque los proveedores sí hayan encontrado
+enlaces.
+
+Por eso la ruta de streams ahora:
+
+1. **Contesta antes de un plazo duro** (`ADDON_DEADLINE_MS`, por defecto **7000 ms**,
+   ajustable de 2500 a 25000) con lo que ya esté disponible.
+2. **Sigue raspando en segundo plano** y guarda el resultado completo en una caché por
+   proceso (10 minutos); al volver a abrir el título, Stremio recibe la lista completa al
+   instante.
+3. **Ordena los proveedores por latencia histórica** para que, dentro del plazo, entren
+   primero los que suelen responder rápido.
+4. **Nunca cachea respuestas vacías** (`Cache-Control: no-store`), ni en el CDN de Beamup
+   ni en Stremio: un fallo puntual ya no deja la lista en blanco durante minutos.
+
+### Comprobar qué proveedor falla o tarda (desde el navegador)
+
+```text
+https://7e2a912be9c9-streamflix2.baby-beamup.club/diagnostico/stream/movie/tt1375666.json
+https://7e2a912be9c9-streamflix2.baby-beamup.club/diagnostico/stream/series/tt0903747:1:1.json
+```
+
+Devuelve, para cada proveedor, `ms` (tiempo real en el servidor Beamup) y `count`
+(número de enlaces encontrados). Interpretación rápida:
+
+- `count: 0` + `ms` cercano al timeout → el sitio tarda o bloquea la IP del servidor.
+- `error` con `403`/`521`/`Cloudflare` → el proveedor rechaza peticiones de datacenter;
+  en Nuvio funciona porque la petición sale desde tu IP residencial.
+- `ms` muy alto en casi todos → sube `ADDON_CONCURRENCY` (por defecto 10, máx. 24) o baja
+  el timeout por proveedor en `/configure`.
+
+### Variables de entorno útiles en Beamup
+
+```bash
+beamup secrets ADDON_DEADLINE_MS 7000      # plazo duro de respuesta (2500–25000)
+beamup secrets ADDON_CONCURRENCY 12        # proveedores en paralelo (1–24)
+beamup secrets PROVIDER_TIMEOUT_MS 8000    # timeout por proveedor (4–25 s)
+beamup secrets PUBLIC_BASE_URL https://7e2a912be9c9-streamflix2.baby-beamup.club
+```
+
+### Si el addon "no aparece" o muestra datos viejos
+
+- El manifiesto se sirve con `Cache-Control: public, max-age=120`; antes eran 3600 s, así
+  que Beamup/CDN podía entregar durante una hora un manifiesto de un despliegue anterior
+  (síntoma típico: `logo` roto o un número de proveedores distinto al real). Si el
+  despliegue no está al día, vuelve a desplegar y reinstala el addon en Stremio
+  (`/configure` → **Instalar en Stremio**).
+- Comprueba `/health`: `activeProviders` debe coincidir con los proveedores que ves en
+  `/configure`.

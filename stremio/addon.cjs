@@ -72,6 +72,27 @@ function needsHeaderProxy(stream) {
   return keys.some((key) => key === 'referer' || key === 'origin' || key === 'cookie' || key === 'authorization');
 }
 
+/**
+ * Normaliza y valida una URL base pública. Si el valor recibido no tiene un
+ * dominio real (por ejemplo `https://7e2a912be9c9-streamflix2`, sin
+ * `.baby-beamup.club`) se descarta en lugar de publicar un `logo` roto en el
+ * manifiesto que Stremio no puede cargar.
+ */
+function normalizeBaseUrl(value) {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    const host = url.hostname;
+    if (!host) return '';
+    if (!host.includes('.') && host !== 'localhost') return '';
+    return `${url.protocol}//${url.host}`;
+  } catch (_) {
+    return '';
+  }
+}
+
 function buildManifest(rawConfig = {}, options = {}) {
   const config = normalizeConfig(rawConfig, options.env);
   const count = config.providers.length;
@@ -100,8 +121,9 @@ function buildManifest(rawConfig = {}, options = {}) {
     },
   };
 
-  if (options.baseUrl) {
-    manifest.logo = `${options.baseUrl.replace(/\/+$/, '')}/logo.svg`;
+  const baseUrl = normalizeBaseUrl(options.baseUrl);
+  if (baseUrl) {
+    manifest.logo = `${baseUrl}/logo.svg`;
   }
 
   return manifest;
@@ -217,6 +239,102 @@ function toStremioStream(stream, context) {
   };
 }
 
+const DEFAULT_DEADLINE_MS = 7000;
+const MIN_DEADLINE_MS = 2500;
+const MAX_DEADLINE_MS = 25000;
+const RESULT_CACHE_MAX_ENTRIES = 400;
+const RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
+const EMPTY_RESULT_TTL_MS = 60 * 1000;
+const MAX_STREAMS = 60;
+
+/**
+ * Caché de resultados (por proceso) y trabajos en vuelo.
+ *
+ * Clave del problema real en Stremio: el cliente abandona las peticiones que
+ * tardan demasiado y, al no recibir respuesta a tiempo, muestra la lista vacía.
+ * Nuvio ejecuta los proveedores dentro de la app, así que nunca lo sufre. Aquí
+ * devolvemos lo que haya antes de un plazo duro y seguimos raspando en segundo
+ * plano para que la siguiente petición (Stremio recarga la lista al abrir el
+ * título otra vez) llegue ya resuelta desde caché.
+ */
+const resultCache = new Map();
+const inflightJobs = new Map();
+const providerLatency = new Map();
+
+function averageLatency(id) {
+  const entry = providerLatency.get(id);
+  return entry ? entry.ms : 1500;
+}
+
+function recordLatency(id, ms) {
+  if (!Number.isFinite(ms) || ms < 0) return;
+  const prev = providerLatency.get(id);
+  const alpha = 0.35;
+  providerLatency.set(id, {
+    ms: prev ? Math.round(prev.ms * (1 - alpha) + ms * alpha) : Math.round(ms),
+    samples: (prev ? prev.samples : 0) + 1,
+  });
+  if (providerLatency.size > 200) {
+    const oldest = providerLatency.keys().next();
+    if (!oldest.done) providerLatency.delete(oldest.value);
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, Math.max(0, ms));
+    if (typeof timer.unref === 'function') timer.unref();
+  });
+}
+
+/**
+ * Plazo máximo de respuesta. Stremio corta la petición si el addon tarda
+ * demasiado, por lo que el valor por defecto es deliberadamente bajo:
+ * `ADDON_DEADLINE_MS` (2500–25000 ms, por defecto 7000).
+ */
+function resolveDeadlineMs(env = process.env) {
+  const raw = Number(env.ADDON_DEADLINE_MS ?? env.ADDON_RESPONSE_DEADLINE_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_DEADLINE_MS;
+  return Math.max(MIN_DEADLINE_MS, Math.min(MAX_DEADLINE_MS, Math.round(raw)));
+}
+
+function buildCacheKey(parsed, config) {
+  const id = parsed.imdbId || `tmdb:${parsed.tmdbId}`;
+  const episode = parsed.mediaType === 'tv' ? `:${parsed.season}:${parsed.episode}` : '';
+  const providers = [...config.providers].sort().join(',');
+  return `${parsed.mediaType}/${id}${episode}|${config.lang}|${providers}`;
+}
+
+function readResultCache(key) {
+  const entry = resultCache.get(key);
+  if (!entry) return null;
+  const age = Date.now() - entry.at;
+  if (age > entry.ttl) {
+    resultCache.delete(key);
+    return null;
+  }
+  // Refresca el orden LRU
+  resultCache.delete(key);
+  resultCache.set(key, entry);
+  return { streams: entry.streams, age, ttl: entry.ttl };
+}
+
+function writeResultCache(key, streams, ttl) {
+  if (!key) return;
+  resultCache.set(key, { streams, at: Date.now(), ttl });
+  while (resultCache.size > RESULT_CACHE_MAX_ENTRIES) {
+    const oldest = resultCache.keys().next();
+    if (oldest.done) break;
+    resultCache.delete(oldest.value);
+  }
+}
+
+function clearResultCache() {
+  resultCache.clear();
+  inflightJobs.clear();
+  providerLatency.clear();
+}
+
 async function withTimeout(promise, ms, label) {
   let timer;
   const timeout = new Promise((_, reject) => {
@@ -229,32 +347,160 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
-async function runPool(items, concurrency, worker) {
-  const results = new Array(items.length);
-  let cursor = 0;
-  async function runner() {
-    while (cursor < items.length) {
-      const idx = cursor++;
-      try {
-        results[idx] = await worker(items[idx], idx);
-      } catch (_) {
-        results[idx] = [];
-      }
-    }
+/**
+ * Filtra, deduplica, ordena y transforma los streams acumulados al formato
+ * de Stremio. Se puede invocar varias veces sobre el mismo acumulador
+ * (parcial durante la petición, completo cuando termina el trabajo).
+ */
+function selectStreams(accumulator, context) {
+  const langMode = context.config.lang;
+  const seen = new Set();
+  const flat = [];
+
+  for (const item of accumulator.streams) {
+    if (!item || !item.url) continue;
+    if (!matchesLanguageFilter(item.language, langMode)) continue;
+    const dedupeKey = `${item.url}|${item.language || 'es'}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    flat.push(item);
   }
-  const workers = Array.from(
-    { length: Math.max(1, Math.min(concurrency, items.length)) },
-    () => runner(),
-  );
-  await Promise.all(workers);
-  return results;
+
+  flat.sort((a, b) => {
+    const langDiff = languageRank(b.language, langMode) - languageRank(a.language, langMode);
+    if (langDiff !== 0) return langDiff;
+    const qualDiff = (QUALITY_SCORE[b.quality] || 100) - (QUALITY_SCORE[a.quality] || 100);
+    if (qualDiff !== 0) return qualDiff;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+
+  return flat.slice(0, MAX_STREAMS).map((item) => toStremioStream(item, context));
 }
 
-async function getStremioStreams(params = {}) {
+function pushFoundStreams(accumulator, found) {
+  if (!Array.isArray(found)) return;
+  for (const item of found) {
+    if (!item || !item.url) continue;
+    accumulator.streams.push(item);
+  }
+}
+
+/**
+ * Lanza todos los proveedores con concurrencia limitada y ordenados por
+ * latencia histórica (los rápidos primero, para que el plazo duro alcance a
+ * recoger el máximo de resultados). Cada proveedor terminado empuja sus
+ * streams al acumulador, así una respuesta parcial siempre es útil.
+ */
+function runProviders(options) {
+  const {
+    eligible,
+    providerInputId,
+    parsed,
+    getProvider,
+    perProviderTimeoutMs,
+    concurrency,
+    accumulator,
+  } = options;
+
+  const ordered = [...eligible].sort((a, b) => averageLatency(a.id) - averageLatency(b.id));
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < ordered.length) {
+      const scraper = ordered[cursor];
+      cursor += 1;
+      const startedAt = Date.now();
+      let found = [];
+      let error = '';
+      try {
+        const mod = getProvider(scraper.id);
+        if (!mod || typeof mod.getStreams !== 'function') {
+          throw new Error('Proveedor no disponible');
+        }
+        found = await withTimeout(
+          mod.getStreams(providerInputId, parsed.mediaType, parsed.season, parsed.episode),
+          perProviderTimeoutMs,
+          scraper.id,
+        );
+        if (!Array.isArray(found)) found = [];
+      } catch (err) {
+        error = err && err.message ? err.message : 'Error desconocido';
+        found = [];
+      }
+      const elapsed = Date.now() - startedAt;
+      recordLatency(scraper.id, elapsed);
+      pushFoundStreams(accumulator, found);
+      accumulator.stats.push({ id: scraper.id, ms: elapsed, count: found.length, error });
+      accumulator.pending -= 1;
+    }
+  };
+
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(concurrency, ordered.length)) },
+    () => worker(),
+  );
+  return Promise.all(workers);
+}
+
+function startJob(options) {
+  const {
+    key,
+    eligible,
+    providerInputId,
+    parsed,
+    metadata,
+    config,
+    env,
+    getProvider,
+    accumulator,
+    context,
+  } = options;
+
+  const concurrency = Math.max(1, Math.min(Number(env.ADDON_CONCURRENCY) || 10, 24));
+  const perProviderTimeoutMs = config.timeoutSec * 1000;
+  const startedAt = Date.now();
+
+  const job = { accumulator, startedAt, done: null };
+
+  job.done = runWithRequestContext(
+    { tmdbApiKey: config.tmdbKey, metadata },
+    () => runProviders({
+      eligible,
+      providerInputId,
+      parsed,
+      getProvider,
+      perProviderTimeoutMs,
+      concurrency,
+      accumulator,
+    }),
+  ).then(() => {
+    // El trabajo terminó (puede ser después de haber respondido ya): guardamos
+    // el resultado completo para que la siguiente petición sea instantánea.
+    const streams = selectStreams(accumulator, context);
+    const ttl = streams.length > 0 ? RESULT_CACHE_TTL_MS : EMPTY_RESULT_TTL_MS;
+    writeResultCache(key, streams, ttl);
+    return streams;
+  }).catch(() => []);
+
+  return job;
+}
+
+function resolveEligibleScrapers(config, parsed, metadata, numericTmdbId) {
+  const selectedSet = new Set(config.providers);
+  return ACTIVE_SCRAPERS.filter((scraper) => {
+    if (!selectedSet.has(scraper.id)) return false;
+    if (!scraper.supportedTypes.includes(parsed.mediaType)) return false;
+    if (scraper.id === 'cinehax' && !numericTmdbId) return false;
+    if (!metadata && scraper.id !== 'cinehax') return false;
+    return true;
+  });
+}
+
+async function resolveRequestContext(params) {
   const env = params.env || process.env;
   const config = normalizeConfig(params.config || {}, env);
   const parsed = parseStremioId(params.type, params.id);
-  if (!parsed) return { streams: [], cacheMaxAge: 60 };
+  if (!parsed) return null;
 
   const metadata = await resolveStremioMetadata(parsed, {
     tmdbKey: config.tmdbKey,
@@ -262,81 +508,170 @@ async function getStremioStreams(params = {}) {
   });
 
   const numericTmdbId = metadata?.tmdbId || parsed.tmdbId || '';
-  if (!metadata && !numericTmdbId) {
-    return { streams: [], cacheMaxAge: 60 };
-  }
+  if (!metadata && !numericTmdbId) return null;
 
-  const providerInputId = numericTmdbId
-    ? `tmdb:${numericTmdbId}`
-    : (parsed.imdbId || '');
+  const providerInputId = numericTmdbId ? `tmdb:${numericTmdbId}` : (parsed.imdbId || '');
+  const eligible = resolveEligibleScrapers(config, parsed, metadata, numericTmdbId);
+  if (!eligible.length) return null;
 
-  const selectedSet = new Set(config.providers);
-  const eligible = ACTIVE_SCRAPERS.filter((scraper) => {
-    if (!selectedSet.has(scraper.id)) return false;
-    if (!scraper.supportedTypes.includes(parsed.mediaType)) return false;
-    if (scraper.id === 'cinehax' && !numericTmdbId) return false;
-    if (!metadata && scraper.id !== 'cinehax') return false;
-    return true;
-  });
+  return {
+    env,
+    config,
+    parsed,
+    metadata,
+    eligible,
+    providerInputId,
+    context: { metadata, parsed, config },
+  };
+}
 
-  if (!eligible.length) {
-    return { streams: [], cacheMaxAge: 120 };
+async function getStremioStreams(params = {}) {
+  const request = await resolveRequestContext(params);
+  if (!request) return { streams: [], cacheMaxAge: 60 };
+
+  const { env, config, parsed, metadata, eligible, providerInputId, context } = request;
+  const cacheKey = buildCacheKey(parsed, config);
+
+  const cached = readResultCache(cacheKey);
+  if (cached) {
+    return {
+      streams: cached.streams,
+      cacheMaxAge: cached.streams.length > 0 ? 600 : 60,
+      staleRevalidate: 300,
+      staleError: 1800,
+      cached: true,
+    };
   }
 
   const getProvider = params.providerLoader || loadProviderModule;
-  const concurrency = Math.max(1, Math.min(Number(env.ADDON_CONCURRENCY) || 8, 16));
-  const perProviderTimeoutMs = config.timeoutSec * 1000;
-
-  const rawGroups = await runWithRequestContext(
-    { tmdbApiKey: config.tmdbKey, metadata },
-    () => runPool(eligible, concurrency, async (scraper) => {
-      const mod = getProvider(scraper.id);
-      if (!mod || typeof mod.getStreams !== 'function') return [];
-      const found = await withTimeout(
-        mod.getStreams(providerInputId, parsed.mediaType, parsed.season, parsed.episode),
-        perProviderTimeoutMs,
-        scraper.id,
-      );
-      return Array.isArray(found) ? found : [];
-    }),
-  );
-
-  const flatStreams = [];
-  const seenKeys = new Set();
-  for (const group of rawGroups) {
-    for (const item of group || []) {
-      if (!item || !item.url) continue;
-      if (!matchesLanguageFilter(item.language, config.lang)) continue;
-      const dedupeKey = `${item.url}|${item.language || 'es'}`;
-      if (seenKeys.has(dedupeKey)) continue;
-      seenKeys.add(dedupeKey);
-      flatStreams.push(item);
-    }
+  let job = inflightJobs.get(cacheKey);
+  if (!job) {
+    const accumulator = { streams: [], stats: [], pending: eligible.length };
+    job = startJob({
+      key: cacheKey,
+      eligible,
+      providerInputId,
+      parsed,
+      metadata,
+      config,
+      env,
+      getProvider,
+      accumulator,
+      context,
+    });
+    inflightJobs.set(cacheKey, job);
+    const clear = () => {
+      if (inflightJobs.get(cacheKey) === job) inflightJobs.delete(cacheKey);
+    };
+    job.done.then(clear, clear);
   }
 
-  flatStreams.sort((a, b) => {
-    const langDiff = languageRank(b.language, config.lang) - languageRank(a.language, config.lang);
-    if (langDiff !== 0) return langDiff;
-    const qualDiff = (QUALITY_SCORE[b.quality] || 100) - (QUALITY_SCORE[a.quality] || 100);
-    if (qualDiff !== 0) return qualDiff;
-    return String(a.name || '').localeCompare(String(b.name || ''));
-  });
+  // `deadlineMs` permite fijar el plazo por petición (pruebas y depuración).
+  const requestedDeadline = Number(params.deadlineMs);
+  const deadlineMs = Number.isFinite(requestedDeadline) && requestedDeadline > 0
+    ? Math.max(50, Math.min(MAX_DEADLINE_MS, Math.round(requestedDeadline)))
+    : resolveDeadlineMs(env);
+  let finished = true;
+  if (job.accumulator.pending > 0) {
+    finished = await Promise.race([
+      job.done.then(() => true, () => true),
+      delay(deadlineMs).then(() => false),
+    ]);
+  }
 
-  const context = { metadata, parsed, config };
-  const output = flatStreams.slice(0, 60).map((item) => toStremioStream(item, context));
+  const streams = selectStreams(job.accumulator, context);
+
+  if (streams.length > 0) {
+    return {
+      streams,
+      cacheMaxAge: finished ? 600 : 90,
+      staleRevalidate: 300,
+      staleError: 1800,
+      partial: !finished,
+      elapsedMs: Date.now() - job.startedAt,
+    };
+  }
 
   return {
-    streams: output,
-    cacheMaxAge: output.length > 0 ? 900 : 60,
-    staleRevalidate: 300,
-    staleError: 1800,
+    streams: [],
+    cacheMaxAge: 0,
+    noStore: true,
+    partial: !finished,
+    elapsedMs: Date.now() - job.startedAt,
+  };
+}
+
+/**
+ * Diagnóstico sin plazo: ejecuta todos los proveedores y devuelve el tiempo y
+ * el número de resultados de cada uno. Sirve para saber, desde el navegador,
+ * qué proveedor está lento o bloqueado en el servidor (Beamup).
+ */
+async function diagnoseStremioStreams(params = {}) {
+  const startedAt = Date.now();
+  const request = await resolveRequestContext({
+    ...params,
+    useMetadataCache: false,
+  });
+  const metadataMs = Date.now() - startedAt;
+  if (!request) {
+    return {
+      ok: false,
+      error: 'No se pudo resolver el título: revisa el ID o que Cinemeta/TMDB sea accesible desde el servidor',
+      metadataMs,
+      elapsedMs: Date.now() - startedAt,
+      providers: [],
+      streams: 0,
+    };
+  }
+
+  const { env, config, parsed, eligible, providerInputId, metadata, context } = request;
+  const getProvider = params.providerLoader || loadProviderModule;
+  const accumulator = { streams: [], stats: [], pending: eligible.length };
+  const concurrency = Math.max(1, Math.min(Number(env.ADDON_CONCURRENCY) || 10, 24));
+
+  await runWithRequestContext({ tmdbApiKey: config.tmdbKey, metadata }, () => runProviders({
+    eligible,
+    providerInputId,
+    parsed,
+    getProvider,
+    perProviderTimeoutMs: config.timeoutSec * 1000,
+    concurrency,
+    accumulator,
+  }));
+
+  const streams = selectStreams(accumulator, context);
+  accumulator.stats.sort((a, b) => b.ms - a.ms);
+
+  return {
+    ok: true,
+    type: params.type,
+    id: params.id,
+    key: buildCacheKey(parsed, config),
+    metadata: metadata
+      ? { title: metadata.title, year: metadata.year, tmdbId: metadata.tmdbId || '' }
+      : null,
+    metadataMs,
+    elapsedMs: Date.now() - startedAt,
+    deadlineMs: resolveDeadlineMs(env),
+    providerTimeoutSeconds: config.timeoutSec,
+    providersQueried: eligible.length,
+    providersWithResults: accumulator.stats.filter((s) => s.count > 0).length,
+    providersFailed: accumulator.stats.filter((s) => s.count === 0).length,
+    streams: streams.length,
+    slowest: accumulator.stats.filter((s) => !s.error).slice(0, 5),
+    failed: accumulator.stats.filter((s) => s.error).map(({ id, ms, error }) => ({ id, ms, error })),
+    results: accumulator.stats,
   };
 }
 
 module.exports = {
   buildManifest,
+  normalizeBaseUrl,
   getStremioStreams,
+  diagnoseStremioStreams,
   toStremioStream,
   cleanRequestHeaders,
   needsHeaderProxy,
+  resolveDeadlineMs,
+  clearResultCache,
 };

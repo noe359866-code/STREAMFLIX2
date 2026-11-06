@@ -9,7 +9,12 @@ const {
   ACTIVE_SCRAPERS,
   decodeConfig,
 } = require('./config.cjs');
-const { buildManifest, getStremioStreams } = require('./addon.cjs');
+const {
+  buildManifest,
+  getStremioStreams,
+  diagnoseStremioStreams,
+  normalizeBaseUrl,
+} = require('./addon.cjs');
 const { LOGO_SVG, renderConfigurePage } = require('./landing.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -24,7 +29,9 @@ const CORS_HEADERS = {
 
 function resolveBaseUrl(req, env = process.env) {
   if (env.PUBLIC_BASE_URL) {
-    return String(env.PUBLIC_BASE_URL).trim().replace(/\/+$/, '');
+    const configured = normalizeBaseUrl(env.PUBLIC_BASE_URL);
+    if (configured) return configured;
+    console.warn('[stremio-server] PUBLIC_BASE_URL inválida, se ignora:', env.PUBLIC_BASE_URL);
   }
   const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
   const proto = forwardedProto === 'https' || forwardedProto === 'http' ? forwardedProto : 'http';
@@ -32,7 +39,11 @@ function resolveBaseUrl(req, env = process.env) {
     .split(',')[0]
     .trim()
     .replace(/[^A-Za-z0-9.:[\]-]/g, '');
-  return rawHost ? `${proto}://${rawHost}` : '';
+  if (!rawHost) return '';
+  // Un host sin dominio real (p. ej. `7e2a912be9c9-streamflix2`) produce enlaces
+  // y un logo inservibles en el manifiesto; en ese caso no publicamos base.
+  if (!rawHost.includes('.') && !rawHost.startsWith('localhost')) return '';
+  return `${proto}://${rawHost}`;
 }
 
 function sendJson(req, res, statusCode, payload, cacheControl = 'no-cache') {
@@ -141,7 +152,7 @@ function createAddonServer(options = {}) {
       if (pathname === '/manifest.json') {
         const config = decodeConfig('', env);
         const manifest = buildManifest(config, { env, baseUrl });
-        sendJson(req, res, 200, manifest, 'public, max-age=3600, stale-while-revalidate=86400');
+        sendJson(req, res, 200, manifest, 'public, max-age=120, stale-while-revalidate=600');
         return;
       }
 
@@ -149,7 +160,49 @@ function createAddonServer(options = {}) {
       if (configManifestMatch && configManifestMatch[1] !== 'nuvio') {
         const config = decodeConfig(configManifestMatch[1], env);
         const manifest = buildManifest(config, { env, baseUrl });
-        sendJson(req, res, 200, manifest, 'public, max-age=3600, stale-while-revalidate=86400');
+        sendJson(req, res, 200, manifest, 'public, max-age=120, stale-while-revalidate=600');
+        return;
+      }
+
+      // Diagnóstico por proveedor: /diagnostico/stream/:type/:id.json
+      // (también /diagnostico?type=movie&id=tt1375666 y /diagnostics/...)
+      const diagMatch = pathname.match(/^(?:\/([^/]+))?\/(?:diagnostico|diagnostics)\/stream\/([^/]+)\/([^/]+)\.json$/);
+      if (diagMatch) {
+        const [, configSeg, diagType, diagId] = diagMatch;
+        const config = decodeConfig(configSeg || '', env);
+        const result = await diagnoseStremioStreams({
+          type: diagType,
+          id: diagId,
+          config,
+          env,
+          providerLoader,
+          useMetadataCache: false,
+        });
+        sendJson(req, res, 200, result, 'no-store');
+        return;
+      }
+
+      if (pathname === '/diagnostico' || pathname === '/diagnostics') {
+        const diagType = parsedUrl.searchParams.get('type') || 'movie';
+        const diagId = parsedUrl.searchParams.get('id') || '';
+        if (diagId) {
+          const result = await diagnoseStremioStreams({
+            type: diagType,
+            id: diagId,
+            config: decodeConfig('', env),
+            env,
+            providerLoader,
+            useMetadataCache: false,
+          });
+          sendJson(req, res, 200, result, 'no-store');
+          return;
+        }
+        sendJson(req, res, 200, {
+          uso: '/diagnostico/stream/<movie|series>/<imdb o tmdb:ID>.json',
+          ejemploPelicula: '/diagnostico/stream/movie/tt1375666.json',
+          ejemploSerie: '/diagnostico/stream/series/tt0903747:1:1.json',
+          pista: 'Cada proveedor devuelve ms y cuántos streams encontró. Usa ?type= y ?id= si prefieres la raíz.',
+        }, 'no-store');
         return;
       }
 
@@ -166,13 +219,22 @@ function createAddonServer(options = {}) {
           providerLoader,
           useMetadataCache,
         });
-        const maxAge = Number(result.cacheMaxAge) || 60;
-        const swr = Number(result.staleRevalidate) || 0;
-        const sie = Number(result.staleError) || 0;
-        const cacheParts = [`public`, `max-age=${maxAge}`];
-        if (swr > 0 && result.streams.length > 0) cacheParts.push(`stale-while-revalidate=${swr}`);
-        if (sie > 0 && result.streams.length > 0) cacheParts.push(`stale-if-error=${sie}`);
-        sendJson(req, res, 200, { streams: result.streams }, cacheParts.join(', '));
+        // Una lista vacía se sirve con `no-store`: si un fallo momentáneo de
+        // los proveedores se cacheara (CDN de Beamup o el propio Stremio), el
+        // usuario vería "sin streams" durante minutos aunque ya hubiera
+        // resultados disponibles.
+        const isEmpty = !result.streams || result.streams.length === 0;
+        let cacheControl = 'no-store, max-age=0';
+        if (!isEmpty && !result.noStore) {
+          const maxAge = Number(result.cacheMaxAge) || 60;
+          const swr = Number(result.staleRevalidate) || 0;
+          const sie = Number(result.staleError) || 0;
+          const cacheParts = ['public', `max-age=${maxAge}`];
+          if (swr > 0) cacheParts.push(`stale-while-revalidate=${swr}`);
+          if (sie > 0) cacheParts.push(`stale-if-error=${sie}`);
+          cacheControl = cacheParts.join(', ');
+        }
+        sendJson(req, res, 200, { streams: result.streams || [] }, cacheControl);
         return;
       }
 

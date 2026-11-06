@@ -19,6 +19,8 @@ const {
 const {
   buildManifest,
   getStremioStreams,
+  diagnoseStremioStreams,
+  clearResultCache,
 } = require('../stremio/addon.cjs');
 const { createAddonServer } = require('../stremio/server.cjs');
 const { ROOT, fixture, response } = require('./helpers.cjs');
@@ -277,7 +279,7 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
     const seg = encodeConfig({ providers: ['cuevana'] });
     const streamRes = await originalFetch(`${base}/${seg}/stream/series/tt0903747%3A2%3A3.json`);
     assert.equal(streamRes.status, 200);
-    assert.match(streamRes.headers.get('cache-control') || '', /max-age=900/);
+    assert.match(streamRes.headers.get('cache-control') || '', /max-age=600/);
     const streamJson = await streamRes.json();
     assert.equal(streamJson.streams.length, 1);
     assert.equal(streamJson.streams[0].url, 'https://cdn.example/s2e3/master.m3u8');
@@ -303,6 +305,125 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
     assert.equal(blockedRes.status, 404);
   } finally {
     global.fetch = originalFetch;
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('el manifiesto omite `logo` cuando la URL base no tiene dominio válido (caso Beamup truncado)', () => {
+  const manifest = buildManifest({}, { baseUrl: 'https://7e2a912be9c9-streamflix2' });
+  assert.equal(manifest.logo, undefined);
+  assert.equal(lintManifest(manifest).valid, true);
+  const good = buildManifest({}, { baseUrl: 'https://7e2a912be9c9-streamflix2.baby-beamup.club/' });
+  assert.equal(good.logo, 'https://7e2a912be9c9-streamflix2.baby-beamup.club/logo.svg');
+});
+
+test('plazo duro: responde con resultados parciales y luego entrega el completo desde caché', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt1111111.json')) {
+      return response({
+        meta: { id: 'tt1111111', moviedb_id: 777, name: 'Rapida', releaseInfo: '2020' },
+      }, url);
+    }
+    return originalFetch(input);
+  };
+
+  const fast = {
+    async getStreams() {
+      return [{
+        name: 'Rapido', provider: 'cuevana', url: 'https://cdn.example/fast/master.m3u8',
+        quality: '1080p', language: 'es-LAT', type: 'hls',
+      }];
+    },
+  };
+  const slow = {
+    async getStreams() {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return [{
+        name: 'Lento', provider: 'cinehax', url: 'https://cdn.example/slow/master.m3u8',
+        quality: '1080p', language: 'es-LAT', type: 'hls',
+      }];
+    },
+  };
+  const providerLoader = (id) => (id === 'cinehax' ? slow : fast);
+  const params = {
+    type: 'movie',
+    id: 'tt1111111',
+    config: { providers: ['cinehax', 'cuevana'] },
+    env: {},
+    providerLoader,
+    useMetadataCache: false,
+    deadlineMs: 80,
+  };
+
+  try {
+    const startedAt = Date.now();
+    const partial = await getStremioStreams(params);
+    const elapsed = Date.now() - startedAt;
+    assert.ok(elapsed < 240, `debe responder sin esperar al proveedor lento (${elapsed} ms)`);
+    assert.equal(partial.streams.length, 1);
+    assert.equal(partial.partial, true);
+
+    // El trabajo continúa en segundo plano y deja el resultado completo en caché.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const cached = await getStremioStreams(params);
+    assert.equal(cached.cached, true);
+    assert.equal(cached.streams.length, 2);
+    assert.equal(cached.partial, undefined);
+  } finally {
+    global.fetch = originalFetch;
+    clearResultCache();
+  }
+});
+
+test('streams vacíos se sirven con no-store y /diagnostico informa tiempo y resultado por proveedor', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt2222222.json')) {
+      return response({
+        meta: { id: 'tt2222222', moviedb_id: 888, name: 'Vacia', releaseInfo: '2021' },
+      }, url);
+    }
+    return originalFetch(input);
+  };
+
+  const emptyProvider = { async getStreams() { return []; } };
+  const server = createAddonServer({
+    env: {},
+    providerLoader: () => emptyProvider,
+    useMetadataCache: false,
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    const res = await originalFetch(`${base}/stream/movie/tt2222222.json`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('cache-control'), 'no-store, max-age=0');
+    assert.deepEqual(await res.json(), { streams: [] });
+
+    const diagRes = await originalFetch(`${base}/diagnostico/stream/movie/tt2222222.json`);
+    assert.equal(diagRes.status, 200);
+    assert.equal(diagRes.headers.get('cache-control'), 'no-store');
+    const diagJson = await diagRes.json();
+    assert.equal(diagJson.ok, true);
+    assert.equal(diagJson.streams, 0);
+    assert.ok(diagJson.results.length >= 1);
+    assert.equal(typeof diagJson.results[0].ms, 'number');
+    assert.equal(typeof diagJson.deadlineMs, 'number');
+
+    const helpRes = await originalFetch(`${base}/diagnostico`);
+    const helpJson = await helpRes.json();
+    assert.match(helpJson.uso, /diagnostico\/stream/);
+  } finally {
+    global.fetch = originalFetch;
+    clearResultCache();
     await new Promise((resolve) => server.close(resolve));
   }
 });
