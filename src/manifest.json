@@ -315,11 +315,11 @@
     {
       "id": "tukiplay",
       "name": "TukiPlay",
-      "description": "Embed público por TMDb/IMDb; solo devuelve medios directos si el player los expone sin depender de una API privada.",
+      "description": "Inactivo: su HLS devolvió 403 en tres intentos de GitHub Actions (run 42168396452).",
       "version": "1.0.0",
       "filename": "providers/tukiplay.js",
       "supportedTypes": ["movie", "tv"],
-      "enabled": true,
+      "enabled": false,
       "contentLanguage": ["es"],
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },

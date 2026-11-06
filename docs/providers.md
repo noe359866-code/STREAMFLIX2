@@ -32,7 +32,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 | `sololatino` | SoloLatino — `sololatino.net` + Embed69 | Película/TV | Activo | ✅ | `player-url`, XSRF, `dataLink`, AES/PoW y fallback IMDb Embed69. |
 | `tioanime` | TioAnime — `tioanime.com` | Película/TV | Activo | ✅ | Verifica `var episodes`; usa únicamente Voe/YourUpload como el origen. |
 | `tioplus` | TioPlus/Pelisplusto — `tioplus.app` | Película/TV | Activo | ✅ | Valida `seasonsJson`; URLs `season/{s}/episode/{e}` y `.bg-tabs` Base64. |
-| `tukiplay` | TukiPlay — `tukiplay.com` | Película/TV | Activo | ✅ | Construye el embed público TMDb/IMDb y sigue solo fuentes/iframes directos expuestos. No usa `/api/v1/resolve` porque requiere una clave configurada en el panel. |
+| `tukiplay` | TukiPlay — `tukiplay.com` | Película/TV | **Inactivo** | ✅ | En [Actions run 42168396452](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42168396452) encontró un HLS en cada uno de tres intentos, pero la playlist del hoster respondió **403/403/403** desde Actions. Se desactiva en Nuvio y Stremio; el código permanece para una posible recuperación. |
 | `videoapi` | VideoAPI — `videoapi.la` | Película/TV | Activo | ✅ | Consulta el endpoint público `exists`, acepta solo rutas `/e/...` del mismo dominio y busca un medio directo en el embed. No suplanta Origin/Referer ni usa endpoints privados. |
 | `verpeliculasonline` | VerPeliculasOnline — `verpeliculasonline.net` | **Película** | Activo | ✅ | DooPlayer `admin-ajax.php`, ESP/LAT/SUB, sin tráiler/descargas. Decodifica Voe F7 y rechaza el señuelo Big Buck Bunny; HLS real validado a nivel de playlist, no de reproducción. |
 | `animebum` | AnimeBum — `www.animebum.net` | Película/TV | **Inactivo** | ✅ | Presente pero deshabilitado en Streamflix; `video[]` y pCloud. No activar esperando disponibilidad. |
@@ -42,7 +42,8 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 - Compilación esbuild/CommonJS: **32/32** (validación local de esta revisión).
 - Export `getStreams`: **32/32**.
 - Recorrido offline con fixtures: validado para los siete adaptadores nuevos; no equivale a disponibilidad real.
-- Suite completa en esta revisión: **59/59** pruebas offline.
+- Suite completa en esta revisión: **74/74** pruebas offline; **30 proveedores activos** (TukiPlay y AnimeBum inactivos).
+- [Auditoría de medios en Actions, run 42168396452](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42168396452): 31 proveedores activos auditados antes de desactivar TukiPlay, **3 intentos por proveedor**, HLS/MP4 acotados. TukiPlay fue el único con 403 de la playlist en los tres; otros 403 pertenecían a búsqueda/puertas y no demuestran bloqueo del medio. La mayoría no produjo un HLS/MP4 comprobable para el título de muestra y quedó sin clasificación de reproducción.
 - GitHub Actions, [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365): build de 32 bundles, 59 pruebas offline y lint Beamup correctos. La sonda live de Pelispedia no encontró un medio cuya firma pudiera validar; la ficha pública consultada muestra el player online bloqueado y enlaces de descarga, que se excluyen.
 - GitHub Actions, [run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): **25 bundles y 43 pruebas offline correctos** con los tres nuevos conectores registrados.
 - GitHub Actions, [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): el Voe real de Van Helsing decodificó el título correcto; su `master.m3u8` respondió **HTTP 200**, `application/vnd.apple.mpegurl`, 690 bytes y `#EXTM3U`. No se comprobaron segmentos ni reproducción en Nuvio.

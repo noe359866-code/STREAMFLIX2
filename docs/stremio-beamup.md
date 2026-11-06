@@ -147,7 +147,7 @@ Para eso está el **pool de proxies** (`stremio/proxy-pool.cjs`, sin dependencia
 3. Guarda los sanos en memoria (8 por defecto, refresco cada 10 min).
 4. `proxyFetch()` implementa un cliente HTTP/1.1 completo sobre el túnel
    (chunked, gzip/deflate/br, redirecciones y POST) y devuelve una `Response` nativa.
-5. `installProxyFetchHook()` hace que `globalThis.fetch` de los 31 proveedores use el
+5. `installProxyFetchHook()` hace que `globalThis.fetch` de los proveedores activos use el
    proxy **solo dentro del contexto asíncrono** en el que se pidió (`AsyncLocalStorage`),
    sin tocar ni un archivo de `providers/`.
 

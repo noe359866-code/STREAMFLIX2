@@ -3,7 +3,7 @@
 /**
  * Pool de proxies HTTP(S) para el raspado del lado del servidor.
  *
- * Problema que resuelve: los 31 proveedores se ejecutan en el contenedor de
+ * Problema que resuelve: los proveedores activos se ejecutan en el contenedor de
  * Beamup (IP de datacenter), y muchos de los sitios los rechazan con 403/Cloudflare.
  * Nuvio no lo sufre porque ejecuta los proveedores en el dispositivo del usuario.
  *

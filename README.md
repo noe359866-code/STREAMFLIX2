@@ -5,9 +5,9 @@ Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**
 1. **Pack de plugins para el runtime QuickJS/CommonJS de Nuvio** (`manifest.json` + `providers/*.js` en la raíz).
 2. **Addon de Stremio (`org.streamflix2.es`) listo para Beamup** (`stremio/`, `Procfile`, `scripts/deploy-beamup.sh`), con resolución automática de IDs IMDb (`tt…`) mediante Cinemeta, clave TMDB opcional, selector interactivo en `/configure` y entrega de cabeceras mediante `behaviorHints.proxyHeaders`.
 
-Incluye **31 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
+Incluye **30 conectores activos**, más **AnimeBum y TukiPlay deshabilitados**. AnimeBum estaba inactivo en el proyecto de origen y el HLS de TukiPlay devolvió 403 en tres intentos desde GitHub Actions.
 
-> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **32 bundles** y **59 pruebas offline** pasa localmente. El [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365) pasó la validación offline actual (32 bundles, 59 pruebas y lint del addon Beamup); la sonda live de Pelispedia no validó un medio reproducible en el título consultado. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **32 bundles** y **74 pruebas offline** pasa localmente. El [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365) pasó la validación offline actual (32 bundles, 59 pruebas y lint del addon Beamup); la sonda live de Pelispedia no validó un medio reproducible en el título consultado. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
 
 ## Addon de Stremio (Beamup)
 
@@ -55,12 +55,12 @@ El servidor de Nuvio escucha en `0.0.0.0:3000` y publica `/manifest.json` y `/pr
 
 | Grupo | Conectores |
 |---|---|
-| Películas y series | CineCalidad, Cine24H, CineHax/MovieMaster, Cuevana 3, Embed69, Fanpelis, FlixLatam, PlayLatinSRC, RepelisPlus, TukiPlay, VideoAPI, PelisForte, PelisGo, PelisflixHD, PoseidonHD2, SoloLatino y TioPlus/Pelisplusto |
+| Películas y series | CineCalidad, Cine24H, CineHax/MovieMaster, Cuevana 3, Embed69, Fanpelis, FlixLatam, PlayLatinSRC, RepelisPlus, VideoAPI, PelisForte, PelisGo, PelisflixHD, PoseidonHD2, SoloLatino y TioPlus/Pelisplusto |
 | Películas solamente | HDFull y VerPeliculasOnline |
 | Doramas | Doramasflix |
 | Series solamente | Danimados (animadas), SeriesFlix, Series Turcas y LaCartoons |
 | Anime | AnimeAV1 (solo TV), Anime Online Ninja, JKAnime, Latanime y TioAnime |
-| Conservado inactivo | AnimeBum |
+| Conservados inactivos | AnimeBum y TukiPlay |
 
 La fuente, el tipo admitido, el dominio y las limitaciones de cada uno están en [`docs/providers.md`](docs/providers.md).
 
@@ -156,7 +156,8 @@ También se puede activar la prueba predeterminada de CineHax con un commit cuyo
 
 ## Limitaciones conocidas
 
-- Los adaptadores nuevos de TukiPlay, VideoAPI y PlayLatinSRC parten de sus embeds públicos y solo entregan medios directos que estén expuestos en HTML estático; no ejecutan reproductores JavaScript, no suplantan orígenes permitidos ni usan claves API privadas. Su disponibilidad en Beamup no está validada en vivo. VideoAPI puede aplicar restricciones de origen; TukiPlay documenta `resolve` con una clave configurada en su panel.
+- TukiPlay está **desactivado**: su HLS devolvió 403 en los tres intentos de [la auditoría de medios en Actions](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42168396452). Se conserva el código para futuras reparaciones; este resultado se refiere a la red de Actions, no prueba un bloqueo en todos los dispositivos.
+- VideoAPI y PlayLatinSRC parten de sus embeds públicos y solo entregan medios directos expuestos en HTML estático; no ejecutan reproductores JavaScript, no suplantan orígenes permitidos ni usan claves API privadas. Su reproducción en Beamup no está validada. VideoAPI puede aplicar restricciones de origen.
 - RepelisPlus y las rutas directas IMDb de Embed69 están cubiertos por fixtures offline, no por pruebas end-to-end en sus webs. Embed69 ya se empleaba como hoster de fallback dentro de SoloLatino.
 - Cloudflare/WebView, CAPTCHA y retos que exijan un navegador completo no se pueden resolver de forma fiable en QuickJS. Anime Online Ninja es especialmente dependiente de Cloudflare. PelisGo mostró verificación interactiva durante esta validación y HDFull respondió 403 a búsqueda/medio desde Actions; no se intentó eludir ninguno de los dos controles.
 - Danimados solo declara TV; PelisGo admite película/TV; HDFull solo declara películas. Ninguno de los tres cambia de temporada ni sustituye un episodio ausente por otro. Sus recorridos offline están cubiertos, pero el `live-check` end-to-end externo no se ejecutó porque falta el secreto `TMDB_API_KEY` del repositorio; Nuvio usa la clave efectiva de la app, no ese secreto de CI.
