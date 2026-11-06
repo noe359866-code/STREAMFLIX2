@@ -20,6 +20,11 @@ const {
   runWithProxy,
   installProxyFetchHook,
 } = require('./proxy-pool.cjs');
+const {
+  resolveGatewayOptions,
+  buildGatewayUrl,
+  isPlaylistUrl,
+} = require('./stream-gateway.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 const providerModules = new Map();
@@ -203,9 +208,49 @@ function matchesLanguageFilter(language, langMode) {
   return (language || 'es') === target;
 }
 
-function toStremioStream(stream, context) {
+/**
+ * Decide quién se encarga del tráfico de vídeo. El orden de preferencia es el
+ * más barato para el anfitrión y el más compatible para el reproductor:
+ *
+ *  1. `direct`          — el CDN no pide cabeceras: URL tal cual, sin coste.
+ *  2. `proxy-headers`   — el CDN pide `Referer`/`Origin`/`Cookie`: se entregan
+ *                         `notWebReady` + `proxyHeaders` y el *streaming
+ *                         server* local del usuario pone las cabeceras.
+ *                         Cero bytes por Beamup.
+ *  3. `gateway`         — opt-in (`STREAM_GATEWAY=auto|on`): sólo HLS y sólo
+ *                         cuando hay cabeceras que el cliente no puede mandar
+ *                         (Stremio Web/iOS/TV). Se reescribe el playlist y los
+ *                         segmentos se emiten en streaming con presupuesto.
+ *
+ * `transport` viaja en el diagnóstico para saber qué camino tomó cada enlace.
+ */
+function resolveTransport(stream, context = {}) {
+  const gateway = context.gateway || { enabled: false, mode: 'off' };
   const headers = cleanRequestHeaders(stream.headers);
-  const requireProxyHeaders = needsHeaderProxy(stream);
+  const hasHeaders = Object.keys(headers).length > 0;
+  const needsHeaders = needsHeaderProxy(stream);
+  const hls = /\.m3u8(?:$|[?#])|\.m3u8?$|\/m3u8\//i.test(String(stream.url || ''))
+    || stream.type === 'hls'
+    || isPlaylistUrl(stream.url);
+
+  if (!needsHeaders) return { gateway: false, headers, transport: hls ? 'direct-hls' : 'direct' };
+  if (!gateway.enabled) return { gateway: false, headers, transport: 'proxy-headers' };
+
+  const gatewayEligible = gateway.mode === 'on'
+    ? (hls || stream.type === 'mp4')
+    : hls; // `auto`: sólo HLS, que es lo que la pasarela sabe reescribir bien.
+  if (!gatewayEligible) return { gateway: false, headers, transport: 'proxy-headers' };
+  if (!context.baseUrl) return { gateway: false, headers, transport: 'proxy-headers' };
+  if (!hasHeaders && gateway.mode !== 'on') {
+    return { gateway: false, headers, transport: hls ? 'direct-hls' : 'direct' };
+  }
+  return { gateway: true, headers, transport: 'gateway' };
+}
+
+function toStremioStream(stream, context) {
+  const route = resolveTransport(stream, context);
+  const headers = route.headers;
+  const requireProxyHeaders = route.transport === 'proxy-headers';
   const isHttpsMp4 = /^https:\/\//i.test(stream.url) && stream.type === 'mp4' && !requireProxyHeaders;
   const langCode = stream.language || 'es';
   const langBadge = LANGUAGE_SHORT[langCode] || 'ES';
@@ -221,17 +266,28 @@ function toStremioStream(stream, context) {
     filename,
   };
 
-  if (requireProxyHeaders && Object.keys(headers).length > 0) {
+  let url = stream.url;
+  if (route.gateway) {
+    // HLS servido por nuestra pasarela: el reproductor no manda cabeceras, las
+    // pone ella. Se mantiene `notWebReady` para que el servidor local no intente
+    // un acceso directo al CDN (fallaría justo por las cabeceras).
+    url = buildGatewayUrl(context.baseUrl, stream.url, headers);
+    behaviorHints.notWebReady = true;
+    behaviorHints.streamflix2Transport = route.transport;
+  } else if (requireProxyHeaders && Object.keys(headers).length > 0) {
     behaviorHints.notWebReady = true;
     behaviorHints.proxyHeaders = { request: headers };
+    behaviorHints.streamflix2Transport = route.transport;
   } else if (!isHttpsMp4) {
     behaviorHints.notWebReady = true;
+    behaviorHints.streamflix2Transport = route.transport;
   }
 
   const serverDetail = String(stream.title || '').split('·')[0].trim() || stream.name;
+  const transportNote = route.transport === 'gateway' ? ' · pasarela' : '';
   const description = [
     `🎬 ${stream.name}${serverDetail && serverDetail !== stream.name ? ` · ${serverDetail}` : ''}`,
-    `${langLabel} · ${quality} · ${formatUpper}`,
+    `${langLabel} · ${quality} · ${formatUpper}${transportNote}`,
   ].join('\n');
 
   const subtitles = mapSubtitles(stream.subtitles, providerSlug);
@@ -240,7 +296,7 @@ function toStremioStream(stream, context) {
     name: `STREAMFLIX2\n${quality} · ${langBadge}`,
     title: description,
     description,
-    url: stream.url,
+    url,
     ...(subtitles ? { subtitles } : {}),
     behaviorHints,
   };
@@ -305,11 +361,13 @@ function resolveDeadlineMs(env = process.env) {
   return Math.max(MIN_DEADLINE_MS, Math.min(MAX_DEADLINE_MS, Math.round(raw)));
 }
 
-function buildCacheKey(parsed, config) {
+function buildCacheKey(parsed, config, gatewayMode = 'off') {
   const id = parsed.imdbId || `tmdb:${parsed.tmdbId}`;
   const episode = parsed.mediaType === 'tv' ? `:${parsed.season}:${parsed.episode}` : '';
   const providers = [...config.providers].sort().join(',');
-  return `${parsed.mediaType}/${id}${episode}|${config.lang}|${providers}`;
+  // `gatewayMode` forma parte de la clave: al activar/desactivar la pasarela no
+  // se deben reutilizar URLs del modo anterior.
+  return `${parsed.mediaType}/${id}${episode}|${config.lang}|${providers}|g:${gatewayMode}`;
 }
 
 function readResultCache(key) {
@@ -657,6 +715,9 @@ async function resolveRequestContext(params) {
   const eligible = resolveEligibleScrapers(config, parsed, metadata, numericTmdbId);
   if (!eligible.length) return null;
 
+  const gateway = resolveGatewayOptions(env);
+  const baseUrl = normalizeBaseUrl(params.baseUrl);
+
   return {
     env,
     config,
@@ -664,7 +725,15 @@ async function resolveRequestContext(params) {
     metadata,
     eligible,
     providerInputId,
-    context: { metadata, parsed, config },
+    context: {
+      metadata,
+      parsed,
+      config,
+      baseUrl,
+      // Con la pasarela apagada (predeterminado) `enabled` es false y todos los
+      // enlaces vuelven a la vía directa/`proxyHeaders`.
+      gateway: { enabled: gateway.enabled, mode: gateway.mode },
+    },
   };
 }
 
@@ -673,7 +742,7 @@ async function getStremioStreams(params = {}) {
   if (!request) return { streams: [], cacheMaxAge: 60 };
 
   const { env, config, parsed, metadata, eligible, providerInputId, context } = request;
-  const cacheKey = buildCacheKey(parsed, config);
+  const cacheKey = buildCacheKey(parsed, config, context.gateway.enabled ? context.gateway.mode : 'off');
 
   const cached = readResultCache(cacheKey);
   if (cached) {
@@ -797,7 +866,17 @@ async function diagnoseStremioStreams(params = {}) {
     ok: true,
     type: params.type,
     id: params.id,
-    key: buildCacheKey(parsed, config),
+    key: buildCacheKey(parsed, config, context.gateway.enabled ? context.gateway.mode : 'off'),
+    streamGateway: {
+      mode: context.gateway.mode,
+      enabled: context.gateway.enabled,
+      baseUrl: context.baseUrl || '',
+    },
+    transports: streams.reduce((acc, item) => {
+      const kind = (item.behaviorHints && item.behaviorHints.streamflix2Transport) || 'direct';
+      acc[kind] = (acc[kind] || 0) + 1;
+      return acc;
+    }, {}),
     metadata: metadata
       ? { title: metadata.title, year: metadata.year, tmdbId: metadata.tmdbId || '' }
       : null,
@@ -821,6 +900,7 @@ async function diagnoseStremioStreams(params = {}) {
 module.exports = {
   buildManifest,
   normalizeBaseUrl,
+  resolveTransport,
   getStremioStreams,
   diagnoseStremioStreams,
   toStremioStream,

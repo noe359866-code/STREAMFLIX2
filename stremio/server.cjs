@@ -17,6 +17,7 @@ const {
 } = require('./addon.cjs');
 const { LOGO_SVG, renderConfigurePage } = require('./landing.cjs');
 const { ensurePool, proxyStatus } = require('./proxy-pool.cjs');
+const { handleGatewayRequest, gatewayStatus } = require('./stream-gateway.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -114,6 +115,13 @@ function createAddonServer(options = {}) {
       const pathname = parsedUrl.pathname.replace(/\/{2,}/g, '/');
       const baseUrl = resolveBaseUrl(req, env);
 
+      // Pasarela HLS opcional (/g/playlist.m3u8, /g/segment). Se evalúa antes
+      // que cualquier otra ruta y sólo acepta tickets firmados.
+      if (pathname.startsWith('/g/') || pathname === '/proxy') {
+        await handleGatewayRequest(req, res, { env, baseUrl, url: parsedUrl });
+        return;
+      }
+
       if (pathname === '/health' || pathname === '/healthz') {
         sendJson(req, res, 200, {
           status: 'ok',
@@ -121,6 +129,7 @@ function createAddonServer(options = {}) {
           version: ADDON_VERSION,
           activeProviders: ACTIVE_SCRAPERS.length,
           proxy: proxyStatus(),
+          gateway: gatewayStatus(env),
         }, 'no-store');
         return;
       }
@@ -177,6 +186,7 @@ function createAddonServer(options = {}) {
           id: diagId,
           config,
           env,
+          baseUrl,
           providerLoader,
           useMetadataCache: false,
         });
@@ -193,6 +203,7 @@ function createAddonServer(options = {}) {
             id: diagId,
             config: decodeConfig('', env),
             env,
+            baseUrl,
             providerLoader,
             useMetadataCache: false,
           });
@@ -218,6 +229,7 @@ function createAddonServer(options = {}) {
           id: rawId,
           config,
           env,
+          baseUrl,
           providerLoader,
           useMetadataCache,
         });

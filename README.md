@@ -24,6 +24,26 @@ npm start
 - Configurador web e instalador `stremio://`: `/configure`
 - Manifiesto Stremio: `/manifest.json` y `/:config/manifest.json`
 - Streams de películas y series (`tt…` y `tmdb:…`): `/stream/:type/:id.json`
+- Estado: `/health` (incluye `proxy` del raspado y `gateway` de vídeo)
+
+### Transporte de vídeo sin abusar de Beamup
+
+Por defecto **no se retransmite vídeo**: los enlaces con `Referer`/`Origin` se
+entregan con `behaviorHints.proxyHeaders` y los descarga el *streaming server*
+local de Stremio (coste 0 para el anfitrión). Si hace falta una pasarela propia
+(Stremio Web, iOS), existe una **opt-in** con `STREAM_GATEWAY=auto|on`: reescribe
+sólo HLS, usa tickets HMAC caducables, emite segmentos en streaming con
+`Range`, tiene presupuesto diario de bytes, límite de conexiones y anti-SSRF.
+
+```bash
+beamup secrets STREAM_GATEWAY_SECRET "$(openssl rand -hex 24)"
+beamup secrets STREAM_GATEWAY auto
+beamup secrets STREAM_GATEWAY_DAILY_MB 4096
+```
+
+Investigación, cuentas de ancho de banda, límites reales de Beamup y
+alternativas (VPS, Cloudflare Workers, túnel a casa, MediaFlow) en
+**[`docs/video-proxy.md`](docs/video-proxy.md)**.
 
 ## Instalación en Nuvio
 

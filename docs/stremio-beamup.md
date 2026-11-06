@@ -184,6 +184,44 @@ proveedor, `via: "direct" | "proxy"`).
 - La alternativa definitiva es raspа desde una IP residencial (un mini-servidor en casa con
   `PROXY_LIST_URL` propio o un VPS no bloqueado).
 
+---
+
+## 5. Transporte de vídeo: qué pasa cuando el CDN exige `Referer`
+
+El addon **no retransmite vídeo por defecto**. El orden de preferencia está en
+`resolveTransport()` (`stremio/addon.cjs`) y se ve en cada stream como
+`behaviorHints.streamflix2Transport`:
+
+| Vía | Cuándo | Coste en Beamup |
+| --- | --- | --- |
+| `direct` / `direct-hls` | El CDN no pide cabeceras | 0 |
+| `proxy-headers` | Pide `Referer`/`Origin`/`Cookie` → se entrega `notWebReady` + `proxyHeaders` y el *streaming server* local de Stremio pone las cabeceras | 0 |
+| `gateway` | Sólo si activas `STREAM_GATEWAY=auto\|on` y el cliente no puede mandar cabeceras (Stremio Web/iOS) | Consume tráfico, con presupuesto |
+
+### Activar la pasarela (opcional)
+
+```bash
+beamup secrets STREAM_GATEWAY_SECRET "$(openssl rand -hex 24)"   # firma los tickets
+beamup secrets STREAM_GATEWAY auto        # off (defecto) | auto | on
+beamup secrets STREAM_GATEWAY_DAILY_MB 4096
+beamup secrets STREAM_GATEWAY_MAX_CONCURRENT 6
+beamup secrets PUBLIC_BASE_URL https://7e2a912be9c9-streamflix2.baby-beamup.club
+```
+
+La pasarela sólo sirve HLS a través de `/g/playlist.m3u8?t=…` y `/g/segment?t=…`
+con tickets HMAC caducables, emite los segmentos en streaming con `Range`/206,
+no cachea vídeo, corta el stream al agotar el presupuesto diario y rechaza
+destinos internos (anti-SSRF). Estado en `/health` → `gateway`
+(`bytesToday`, `budgetUsedPct`, `activeConnections`, `blockedByBudget`) y en
+`/diagnostico` → `streamGateway` + `transports`.
+
+**Desactivar:** `beamup secrets STREAM_GATEWAY off`. Los enlaces ya entregados
+caducan solos con el ticket (6 h).
+
+Razonamiento completo, límites de Beamup, cuentas de ancho de banda y
+alternativas (VPS, Cloudflare Workers, túnel a casa, MediaFlow):
+[`docs/video-proxy.md`](video-proxy.md).
+
 ### Listados con respaldo
 
 `PROXY_LIST_URL` acepta **varias fuentes separadas por coma**. Por defecto se prueban en

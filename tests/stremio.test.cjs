@@ -309,6 +309,80 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
   }
 });
 
+test('/health publica el estado de la pasarela y /g/ responde 404 con STREAM_GATEWAY=off (predeterminado)', async () => {
+  clearResultCache();
+  const server = createAddonServer({ env: {}, providerLoader: () => ({ async getStreams() { return []; } }) });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    const health = await (await fetch(`${base}/health`)).json();
+    assert.equal(health.status, 'ok');
+    assert.equal(health.gateway.mode, 'off');
+    assert.equal(health.gateway.enabled, false);
+    assert.equal(health.gateway.bytesToday, 0);
+
+    const res = await fetch(`${base}/g/segment?t=invalido`);
+    assert.equal(res.status, 404);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('con STREAM_GATEWAY=auto los HLS con cabeceras salen firmados por la pasarela', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt3333333.json')) {
+      return response({
+        meta: { id: 'tt3333333', moviedb_id: 999, name: 'Pasarela', releaseInfo: '2022' },
+      }, url);
+    }
+    return originalFetch(input);
+  };
+
+  const fakeProvider = {
+    async getStreams() {
+      return [{
+        name: 'ProveedorFake',
+        provider: 'sololatino',
+        title: 'Voe · es-LAT · 1080p',
+        url: 'https://cdn.example/pelicula/master.m3u8',
+        quality: '1080p',
+        language: 'es-LAT',
+        type: 'hls',
+        headers: { Referer: 'https://sololatino.test/' },
+      }];
+    },
+  };
+
+  const server = createAddonServer({
+    env: { STREAM_GATEWAY: 'auto' },
+    providerLoader: () => fakeProvider,
+    useMetadataCache: false,
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    const res = await fetch(`${base}/stream/movie/tt3333333.json`);
+    const json = await res.json();
+    assert.equal(json.streams.length, 1);
+    const [stream] = json.streams;
+    assert.ok(stream.url.startsWith(`${base}/g/playlist.m3u8?t=`), stream.url);
+    assert.equal(stream.behaviorHints.proxyHeaders, undefined);
+    assert.equal(stream.behaviorHints.notWebReady, true);
+    assert.equal(stream.behaviorHints.streamflix2Transport, 'gateway');
+  } finally {
+    global.fetch = originalFetch;
+    clearResultCache();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('el manifiesto omite `logo` cuando la URL base no tiene dominio válido (caso Beamup truncado)', () => {
   const manifest = buildManifest({}, { baseUrl: 'https://7e2a912be9c9-streamflix2' });
   assert.equal(manifest.logo, undefined);
