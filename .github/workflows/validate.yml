@@ -89,78 +89,110 @@ jobs:
           }
 
           (async () => {
-            // 1. Probar endpoints en vivo de Beamup
+            // 1. Probar endpoints en vivo de Beamup (sin URLs largas para no truncar)
             const cinehaxSeg = encodeConfig({ providers: ['cinehax'] });
             const beamupChecks = {};
-            beamupChecks.health = await timedFetch(`${BEAMUP}/health`, 15000);
-            beamupChecks.manifest = await timedFetch(`${BEAMUP}/manifest.json`, 15000);
-            beamupChecks.cinehaxFightClub = await timedFetch(`${BEAMUP}/${cinehaxSeg}/stream/movie/tt0137523.json`, 30000);
-            beamupChecks.allFightClub = await timedFetch(`${BEAMUP}/stream/movie/tt0137523.json`, 45000);
-            beamupChecks.allInsideOut2 = await timedFetch(`${BEAMUP}/stream/movie/tt22022452.json`, 45000);
-            beamupChecks.allBreakingBad = await timedFetch(`${BEAMUP}/stream/series/tt0903747:1:1.json`, 45000);
-            beamupChecks.encodedColonBreakingBad = await timedFetch(`${BEAMUP}/stream/series/tt0903747%3A1%3A1.json`, 45000);
-            emit('BEAMUP_LIVE', beamupChecks);
+            for (const [k, path] of [
+              ['cinehaxFightClub', `/${cinehaxSeg}/stream/movie/tt0137523.json`],
+              ['allFightClub', '/stream/movie/tt0137523.json'],
+              ['allInsideOut2', '/stream/movie/tt22022452.json'],
+              ['allDeadpool3', '/stream/movie/tt6263850.json'],
+              ['allBreakingBadColon', '/stream/series/tt0903747:1:1.json'],
+              ['allBreakingBadPct', '/stream/series/tt0903747%3A1%3A1.json'],
+              ['allOnePiecePct', '/stream/series/tt0388629%3A1%3A1.json'],
+            ]) {
+              const r = await timedFetch(`${BEAMUP}${path}`, 45000);
+              beamupChecks[k] = { ok: r.ok, status: r.status, ms: r.ms, cache: r.cache, count: r.streamsCount, err: r.error, firstName: r.sample?.[0]?.title };
+            }
+            emit('BEAMUP_SUMMARY', beamupChecks);
 
-            // 2. Probar qué devuelve Cinemeta realmente para varias películas y series
-            const cinemetaChecks = {};
-            for (const [type, id] of [['movie', 'tt0137523'], ['movie', 'tt22022452'], ['movie', 'tt6263850'], ['series', 'tt0903747'], ['series', 'tt0388629']]) {
-              const r = await fetch(`https://v3-cinemeta.strem.io/meta/${type}/${id}.json`).then((x) => x.json()).catch((e) => ({ err: e.message }));
-              cinemetaChecks[`${type}:${id}`] = {
-                name: r?.meta?.name,
-                moviedb_id: r?.meta?.moviedb_id,
-                aliases: r?.meta?.aliases,
-                year: r?.meta?.year || r?.meta?.releaseInfo,
+            // 2. Probar IMDb GraphQL + TMDB web pública sin API key para obtener títulos en español (MX/ES)
+            const esTests = {};
+            for (const [imdbId, tmdbId, type] of [['tt22022452', '1022789', 'movie'], ['tt0137523', '550', 'movie'], ['tt6263850', '533535', 'movie'], ['tt0903747', '1396', 'tv']]) {
+              const gqlQuery = {
+                query: `query($id: ID!) { title(id: $id) { titleText { text } originalTitleText { text } releaseYear { year } akas(first: 30) { edges { node { text country { id } language { id } } } } } }`,
+                variables: { id: imdbId },
+              };
+              const gql = await fetch('https://api.graphql.imdb.com/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept-Language': 'es-MX,es;q=0.9', 'User-Agent': 'Mozilla/5.0' },
+                body: JSON.stringify(gqlQuery),
+              }).then((x) => x.json()).catch((e) => ({ err: e.message }));
+              const akas = (gql?.data?.title?.akas?.edges || [])
+                .map((e) => ({ t: e?.node?.text, c: e?.node?.country?.id, l: e?.node?.language?.id }))
+                .filter((a) => !a.c || ['MX', 'ES', 'AR', 'CO', 'CL', 'PE', 'VE', 'US', 'XWW', 'XYU'].includes(a.c));
+
+              const tmdbWeb = await fetch(`https://www.themoviedb.org/${type}/${tmdbId}?language=es-MX`, {
+                headers: { 'Accept-Language': 'es-MX,es;q=0.9', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0' },
+              }).then(async (x) => {
+                const txt = await x.text();
+                const og = txt.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i)?.[1]
+                  || txt.match(/<title>([^<]+)<\/title>/i)?.[1];
+                return { status: x.status, og };
+              }).catch((e) => ({ err: e.message }));
+
+              esTests[imdbId] = {
+                gqlTitle: gql?.data?.title?.titleText?.text,
+                gqlOrig: gql?.data?.title?.originalTitleText?.text,
+                akas: akas.slice(0, 8),
+                tmdbWeb,
               };
             }
-            emit('CINEMETA_META', cinemetaChecks);
+            emit('ES_TITLE_SOURCES', esTests);
 
-            // 3. Probar fuentes públicas sin API key para título en español + TMDB ID (IMDb suggestion + Wikidata)
-            const altMeta = {};
-            for (const id of ['tt0137523', 'tt22022452', 'tt6263850', 'tt0903747']) {
-              const imdbEs = await fetch(`https://v3.sg.media-imdb.com/suggestion/x/${id}.json`, {
-                headers: { 'Accept-Language': 'es-MX,es;q=0.9', 'User-Agent': 'Mozilla/5.0' },
-              }).then((x) => x.json()).catch((e) => ({ err: e.message }));
-              const sparql = `SELECT ?item ?tmdbMovie ?tmdbTv ?esLabel ?esMxLabel ?enLabel WHERE { ?item wdt:P345 "${id}". OPTIONAL { ?item wdt:P4947 ?tmdbMovie. } OPTIONAL { ?item wdt:P4983 ?tmdbTv. } SERVICE wikibase:label { bd:serviceParam wikibase:language "es-419,es,en". ?item rdfs:label ?esLabel. } } LIMIT 5`;
-              const wd = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(sparql)}`, {
-                headers: { 'User-Agent': 'STREAMFLIX2-Stremio-Addon/1.0 (https://github.com/noe359866-code/STREAMFLIX2)' },
-              }).then((x) => x.json()).catch((e) => ({ err: e.message }));
-              altMeta[id] = {
-                imdbSuggestion: imdbEs?.d?.[0] ? { l: imdbEs.d[0].l, y: imdbEs.d[0].y, qid: imdbEs.d[0].qid } : imdbEs,
-                wikidata: wd?.results?.bindings?.[0] || null,
-              };
+            // 3. Diagnosticar por qué fallaron proveedores específicos (CineHax en 1022789, TV, Anime)
+            const chCheck = {};
+            for (const p of ['/e/movie/550', '/e/movie/1022789', '/e/movie/533535', '/e/tv/1396/1/1']) {
+              try {
+                const r = await fetch('https://api.moviemaster.lat' + p, {
+                  headers: { Referer: 'https://api.moviemaster.lat/', 'User-Agent': 'Mozilla/5.0 Chrome/124.0.0.0', 'Sec-Fetch-Dest': 'iframe', 'Sec-Fetch-Mode': 'navigate' },
+                });
+                const txt = await r.text();
+                const ui = txt.match(/window\.PM_UI\s*=\s*["']([^"']+)["']/i)?.[1];
+                let serversCount = -1;
+                let sampleSrv = null;
+                if (ui) {
+                  const id = p.split('/')[3];
+                  const isTv = p.includes('/tv/');
+                  const q = isTv ? `tmdb=${id}&type=tv&season=1&episode=1&ui=${encodeURIComponent(ui)}` : `tmdb=${id}&type=movie&ui=${encodeURIComponent(ui)}`;
+                  const sr = await fetch(`https://api.moviemaster.lat/servers?${q}`, { headers: { Referer: 'https://api.moviemaster.lat/', 'User-Agent': 'Mozilla/5.0 Chrome/124.0.0.0' } });
+                  const sj = await sr.json();
+                  serversCount = (sj.servers || []).length;
+                  if (sj.servers?.[0]) {
+                    const vr = await fetch(`https://api.moviemaster.lat/video?${q.replace(/&ui=.*/, '')}&embed=${encodeURIComponent(sj.servers[0].id)}&noiframe=1&r=1`, { headers: { Referer: 'https://api.moviemaster.lat/', 'User-Agent': 'Mozilla/5.0 Chrome/124.0.0.0' } });
+                    sampleSrv = await vr.json().catch(() => ({ status: vr.status }));
+                  }
+                }
+                chCheck[p] = { status: r.status, hasUi: Boolean(ui), serversCount, sampleSrv };
+              } catch (e) {
+                chCheck[p] = { err: e.message };
+              }
             }
-            emit('PUBLIC_ES_META', altMeta);
+            emit('CINEHAX_DIAG', chCheck);
 
-            // 4. Probar los 24 proveedores individualmente con título en español + tmdbId
+            // 4. Probar proveedores de TV y Anime en vivo (Breaking Bad S01E01 + Jujutsu Kaisen S01E01)
             const { runWithRequestContext } = require('./stremio/metadata.cjs');
-            const fakeMetaMovie = {
-              id: '1022789',
-              tmdbId: '1022789',
-              imdbId: 'tt22022452',
-              title: 'IntensaMente 2',
-              originalTitle: 'Inside Out 2',
-              titles: ['IntensaMente 2', 'Intensamente 2', 'Del revés 2', 'Inside Out 2'],
-              year: '2024',
-              mediaType: 'movie',
+            const tvStats = {};
+            const bbMeta = {
+              id: '1396', tmdbId: '1396', imdbId: 'tt0903747',
+              title: 'Breaking Bad', originalTitle: 'Breaking Bad', titles: ['Breaking Bad'], year: '2008', mediaType: 'tv',
             };
-            const provStats = {};
-            await runWithRequestContext({ tmdbApiKey: '', metadata: fakeMetaMovie }, async () => {
-              await Promise.all(ACTIVE_SCRAPERS.filter((s) => s.supportedTypes.includes('movie')).map(async (s) => {
+            await runWithRequestContext({ tmdbApiKey: '', metadata: bbMeta }, async () => {
+              await Promise.all(ACTIVE_SCRAPERS.filter((s) => s.supportedTypes.includes('tv')).map(async (s) => {
                 const t0 = Date.now();
                 try {
                   const mod = require(`./providers/${s.id}.js`);
-                  const p = mod.getStreams('tmdb:1022789', 'movie', null, null);
                   const res = await Promise.race([
-                    p,
+                    mod.getStreams('tmdb:1396', 'tv', 1, 1),
                     new Promise((_, rej) => setTimeout(() => rej(new Error('timeout-12s')), 12000)),
                   ]);
-                  provStats[s.id] = { count: Array.isArray(res) ? res.length : -1, ms: Date.now() - t0, sampleUrl: res?.[0]?.url?.slice(0, 80) };
+                  tvStats[s.id] = { count: Array.isArray(res) ? res.length : -1, ms: Date.now() - t0 };
                 } catch (e) {
-                  provStats[s.id] = { err: e.message, ms: Date.now() - t0 };
+                  tvStats[s.id] = { err: e.message, ms: Date.now() - t0 };
                 }
               }));
             });
-            emit('PROVIDER_MOVIE_STATS', provStats);
+            emit('PROVIDER_TV_STATS', tvStats);
           })();
           EOF
 
