@@ -11,17 +11,12 @@ function endpointType(mediaType) {
   return mediaType === 'movie' ? 'movie' : 'tv';
 }
 
-async function findByImdb(imdb) {
-  const response = await fetchJson(`https://api.themoviedb.org/3/find/${encodeURIComponent(imdb)}`, {
-    referer: 'https://www.themoviedb.org/',
-    extraHeaders: { Accept: 'application/json' },
-  });
-  // La API exige api_key; se añade aquí para mantener una sola construcción de URL.
-  return response.data;
-}
-
 export async function resolveMetadata(contentId, mediaType) {
   const type = endpointType(mediaType);
+  if (typeof globalThis.__STREAMFLIX_METADATA_HOOK === 'function') {
+    const hooked = await globalThis.__STREAMFLIX_METADATA_HOOK(contentId, type);
+    if (hooked) return hooked;
+  }
   let id = String(contentId || '').trim().replace(/^tmdb[:/]/i, '').split('/')[0];
   if (!id) throw new Error('ID de contenido vacío.');
   if (/^(?:imdb:)?tt\d+$/i.test(id)) {

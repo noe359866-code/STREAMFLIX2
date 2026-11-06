@@ -298,6 +298,10 @@ function endpointType(mediaType) {
 }
 async function resolveMetadata(contentId, mediaType) {
   const type = endpointType(mediaType);
+  if (typeof globalThis.__STREAMFLIX_METADATA_HOOK === "function") {
+    const hooked = await globalThis.__STREAMFLIX_METADATA_HOOK(contentId, type);
+    if (hooked) return hooked;
+  }
   let id = String(contentId || "").trim().replace(/^tmdb[:/]/i, "").split("/")[0];
   if (!id) throw new Error("ID de contenido vac\xEDo.");
   if (/^(?:imdb:)?tt\d+$/i.test(id)) {

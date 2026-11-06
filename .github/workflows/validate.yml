@@ -41,7 +41,7 @@ on:
 
 jobs:
   validate:
-    name: Build y pruebas offline
+    name: Build y pruebas offline (Nuvio + Stremio Beamup)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -57,21 +57,41 @@ jobs:
       - name: Validar sintaxis de herramientas
         run: |
           node --check server.cjs
+          node --check stremio/server.cjs
           node --check scripts/live-check.cjs
-      - name: Comprobar manifiesto y bundle servidos
+          bash -n scripts/deploy-beamup.sh
+      - name: Comprobar servidor local Nuvio
         run: |
-          npm start > /tmp/streamflix2-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          PORT=3001 npm run start:nuvio > /tmp/streamflix2-nuvio.log 2>&1 &
+          NUVIO_PID=$!
+          trap 'kill "$NUVIO_PID" 2>/dev/null || true' EXIT
           for attempt in {1..20}; do
-            if curl -fsS http://127.0.0.1:3000/manifest.json -o /tmp/manifest.json; then break; fi
+            if curl -fsS http://127.0.0.1:3001/manifest.json -o /tmp/nuvio-manifest.json; then break; fi
             sleep 1
           done
-          cmp manifest.json /tmp/manifest.json
-          curl -fsS http://127.0.0.1:3000/providers/animeav1.js -o /tmp/animeav1.js
+          cmp manifest.json /tmp/nuvio-manifest.json
+          curl -fsS http://127.0.0.1:3001/providers/animeav1.js -o /tmp/animeav1.js
           grep -q getStreams /tmp/animeav1.js
-          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/package.json)" = 404
-      - name: Publicar paquete instalable
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/package.json)" = 404
+      - name: Comprobar Addon Stremio y stremio-addon-linter (check-deploy de Beamup)
+        run: |
+          PORT=7001 npm start > /tmp/streamflix2-stremio.log 2>&1 &
+          STREMIO_PID=$!
+          trap 'kill "$STREMIO_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:7001/manifest.json -o /tmp/stremio-manifest.json; then break; fi
+            sleep 1
+          done
+          node -e '
+            const fs = require("node:fs");
+            const { lintManifest } = require("stremio-addon-linter");
+            const res = lintManifest(JSON.parse(fs.readFileSync("/tmp/stremio-manifest.json", "utf8")));
+            if (!res.valid) { console.error(res.errors); process.exit(1); }
+          '
+          curl -fsS http://127.0.0.1:7001/configure | grep -q "STREAMFLIX2"
+          curl -fsS http://127.0.0.1:7001/nuvio/manifest.json -o /tmp/stremio-nuvio-manifest.json
+          cmp manifest.json /tmp/stremio-nuvio-manifest.json
+      - name: Publicar paquete instalable Nuvio
         uses: actions/upload-artifact@v4
         with:
           name: streamflix2-nuvio-providers
@@ -106,6 +126,27 @@ jobs:
           args=(--provider "$PROVIDER" --tmdb "$TMDB_ID" --type "$MEDIA_TYPE" --season "$SEASON" --episode "$EPISODE" --output live-result.json)
           if [[ "$PLAYBACK" == "true" ]]; then args+=(--playback); fi
           node scripts/live-check.cjs "${args[@]}"
+      - name: Probar extremo a extremo el Addon Stremio (Cinemeta tt0137523 -> CineHax)
+        if: (inputs.provider || 'cinehax') == 'cinehax'
+        run: |
+          PORT=7009 npm start > /tmp/stremio-live.log 2>&1 &
+          ADDON_PID=$!
+          trap 'kill "$ADDON_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:7009/health >/dev/null; then break; fi
+            sleep 1
+          done
+          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["cinehax"] }));')"
+          curl -fsS "http://127.0.0.1:7009/${SEG}/stream/movie/tt0137523.json" -o /tmp/stremio-live-streams.json
+          node -e '
+            const fs = require("node:fs");
+            const data = JSON.parse(fs.readFileSync("/tmp/stremio-live-streams.json", "utf8"));
+            if (!Array.isArray(data.streams) || data.streams.length < 1) {
+              console.error("Se esperaba al menos 1 stream para tt0137523:", data);
+              process.exit(1);
+            }
+            console.log(`✓ Stremio live tt0137523 devolvió ${data.streams.length} streams con proxyHeaders`);
+          '
       - name: Publicar informe de la prueba real
         if: always()
         uses: actions/upload-artifact@v4

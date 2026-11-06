@@ -2,7 +2,7 @@
   "name": "streamflix2-nuvio-es",
   "version": "1.0.0",
   "private": true,
-  "description": "Proveedores Nuvio en español adaptados de Streamflix Reborn",
+  "description": "Proveedores VOD en español para Nuvio y addon de Stremio para Beamup",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=20"
@@ -13,10 +13,16 @@
     "check": "npm run build && npm test",
     "test:live": "node scripts/live-check.cjs",
     "test:playback": "node scripts/live-check.cjs --playback",
-    "start": "node server.cjs"
+    "start": "node stremio/server.cjs",
+    "start:stremio": "node stremio/server.cjs",
+    "start:nuvio": "node server.cjs",
+    "deploy:beamup": "bash scripts/deploy-beamup.sh"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0"
   },
   "devDependencies": {
-    "crypto-js": "^4.2.0",
-    "esbuild": "^0.25.11"
+    "esbuild": "^0.25.11",
+    "stremio-addon-linter": "^1.7.0"
   }
 }

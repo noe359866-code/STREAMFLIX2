@@ -1,34 +1,55 @@
-# STREAMFLIX2 — proveedores español/latino para Nuvio
+# STREAMFLIX2 — proveedores español/latino para Nuvio y Addon de Stremio (Beamup)
 
-Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**, empaquetados para el runtime **QuickJS/CommonJS de Nuvio**. Incluye **24 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
+Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**, disponible en dos formatos dentro del mismo repositorio:
 
-> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio. La compilación de **25 bundles** y **43 pruebas offline** pasa localmente y en GitHub Actions ([run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146)). El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
+1. **Pack de plugins para el runtime QuickJS/CommonJS de Nuvio** (`manifest.json` + `providers/*.js` en la raíz).
+2. **Addon de Stremio (`org.streamflix2.es`) listo para Beamup** (`stremio/`, `Procfile`, `scripts/deploy-beamup.sh`), con resolución automática de IDs IMDb (`tt…`) mediante Cinemeta, clave TMDB opcional, selector interactivo en `/configure` y entrega de cabeceras mediante `behaviorHints.proxyHeaders`.
 
-## Instalación
+Incluye **24 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
 
-No hace falta instalar Node.js para usar los bundles ya generados.
+> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **25 bundles** y **49 pruebas offline** pasa localmente y en GitHub Actions ([run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146)). El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
 
-1. Usa una compilación de Nuvio con soporte para plugins locales/sideloaded. Los plugins de Nuvio devuelven streams; **no son addons de Stremio, catálogos, listas IPTV ni proveedores de metadatos**.
-2. Añade este manifiesto como repositorio de plugins:
+## Addon de Stremio (Beamup)
 
-   ```text
-   https://raw.githubusercontent.com/noe359866-code/STREAMFLIX2/arena/e6074aa1-streamflix2/manifest.json
-   ```
+Consulta la guía paso a paso en **[`docs/stremio-beamup.md`](docs/stremio-beamup.md)**.
 
-   Si el repositorio se publica en otra rama, cambia el segmento de rama en la URL. Nuvio descarga cada `filename` de forma relativa al manifiesto. **Actualmente el repositorio es privado**: para que esta URL funcione directamente en Nuvio hay que hacerlo público o alojar `manifest.json` y `providers/` en un servidor accesible. No uses URLs con tokens temporales; como alternativa, utiliza el servidor local descrito abajo.
-3. **No necesitas añadir otra clave TMDB dentro de Nuvio en condiciones normales.** El runtime inyecta automáticamente `TMDB_API_KEY` con la clave efectiva de Nuvio: la personal si la configuraste o la predeterminada de la app si dejaste el campo vacío. Este repositorio no incrusta ninguna clave. CineHax usa directamente el ID recibido; el resto hace consultas propias a TMDB para obtener título, año, títulos alternativos e IMDb. La clave secreta solo es necesaria al ejecutar pruebas externas en Node/GitHub Actions, donde no existe el runtime de Nuvio.
-4. Activa individualmente los proveedores que quieras probar. AnimeBum aparece intencionadamente deshabilitado.
-
-### Servidor local opcional
-
-Para servir el mismo manifiesto y los bundles durante una prueba:
+### Arranque rápido del Addon de Stremio
 
 ```bash
 npm ci
 npm start
 ```
 
-El servidor escucha en `0.0.0.0:3000` y publica `/manifest.json` y `/providers/*.js`. Desde otro dispositivo usa la IP de la máquina, no `localhost`. Para cambiar el puerto: `PORT=8080 npm start`.
+- Escucha en `0.0.0.0:${PORT:-7000}` (compatible directamente con **Beamup** mediante `Procfile`, `npm run deploy:beamup` o `git push beamup HEAD:master`).
+- Configurador web e instalador `stremio://`: `/configure`
+- Manifiesto Stremio: `/manifest.json` y `/:config/manifest.json`
+- Streams de películas y series (`tt…` y `tmdb:…`): `/stream/:type/:id.json`
+
+## Instalación en Nuvio
+
+No hace falta instalar Node.js para usar los bundles ya generados en Nuvio.
+
+1. Usa una compilación de Nuvio con soporte para plugins locales/sideloaded. Los archivos `providers/*.js` son plugins nativos de Nuvio (para usarlos en Stremio utiliza el servidor del addon descrito arriba).
+2. Añade este manifiesto como repositorio de plugins:
+
+   ```text
+   https://raw.githubusercontent.com/noe359866-code/STREAMFLIX2/arena/e6074aa1-streamflix2/manifest.json
+   ```
+
+   Si el repositorio se publica en otra rama, cambia el segmento de rama en la URL. Nuvio descarga cada `filename` de forma relativa al manifiesto. **Actualmente el repositorio es privado**: para que esta URL funcione directamente en Nuvio hay que hacerlo público o alojar `manifest.json` y `providers/` en un servidor accesible (también se sirven bajo `/nuvio/manifest.json` en el servidor Stremio). No uses URLs con tokens temporales; como alternativa, utiliza el servidor local descrito abajo.
+3. **No necesitas añadir otra clave TMDB dentro de Nuvio en condiciones normales.** El runtime inyecta automáticamente `TMDB_API_KEY` con la clave efectiva de Nuvio: la personal si la configuraste o la predeterminada de la app si dejaste el campo vacío. Este repositorio no incrusta ninguna clave. CineHax usa directamente el ID recibido; el resto hace consultas propias a TMDB para obtener título, año, títulos alternativos e IMDb. La clave secreta solo es necesaria al ejecutar pruebas externas en Node/GitHub Actions, donde no existe el runtime de Nuvio.
+4. Activa individualmente los proveedores que quieras probar. AnimeBum aparece intencionadamente deshabilitado.
+
+### Servidor local opcional para Nuvio
+
+Para servir únicamente el manifiesto de Nuvio y los bundles durante una prueba:
+
+```bash
+npm ci
+npm run start:nuvio
+```
+
+El servidor de Nuvio escucha en `0.0.0.0:3000` y publica `/manifest.json` y `/providers/*.js`. Desde otro dispositivo usa la IP de la máquina, no `localhost`. Para cambiar el puerto: `PORT=8080 npm run start:nuvio`.
 
 ## Cobertura
 
