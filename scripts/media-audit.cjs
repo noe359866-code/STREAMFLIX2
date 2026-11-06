@@ -173,6 +173,29 @@ function runChild(id, output) {
   });
 }
 
+function annotateResults(results, proposedRemoval) {
+  if (process.env.GITHUB_ACTIONS !== 'true') return;
+  // Las anotaciones se pueden consultar con la API de GitHub incluso cuando
+  // el almacenamiento externo de artefactos/logs no está disponible.
+  for (const item of results) {
+    const evidence = {
+      provider: item.provider,
+      decision: item.decision,
+      ...(item.error ? { error: item.error } : {}),
+      attempts: item.attempts.map((attempt) => ({
+        discovered: attempt.discovered,
+        mediaCount: attempt.mediaCount,
+        otherFormats: attempt.otherFormats,
+        discovery403: attempt.discovery403,
+        timedOut: attempt.timedOut,
+        media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host, outcome: media.outcome })),
+      })),
+    };
+    console.log(`::notice file=scripts/media-audit.cjs,title=media-${item.provider}::${JSON.stringify(evidence)}`);
+  }
+  console.log(`::notice file=scripts/media-audit.cjs,title=media-resumen::${JSON.stringify({ audited: results.length, attempts: ATTEMPTS, proposedRemoval })}`);
+}
+
 function appendSummary(results, output) {
   if (!process.env.GITHUB_STEP_SUMMARY) return;
   const lines = [
@@ -216,6 +239,7 @@ async function auditAll(output) {
   };
   writeJson(output, report);
   appendSummary(results, output);
+  annotateResults(results, report.proposedRemoval);
   console.log(`Informe: ${output}; propuestos para retirada: ${report.proposedRemoval.join(', ') || 'ninguno'}`);
 }
 
