@@ -43,6 +43,7 @@ Estado al **5 de noviembre de 2026**. “Fixture” significa que el recorrido s
 - Export `getStreams`: **32/32**.
 - Recorrido offline con fixtures: validado para los siete adaptadores nuevos; no equivale a disponibilidad real.
 - Suite completa en esta revisión: **59/59** pruebas offline.
+- GitHub Actions, [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365): build de 32 bundles, 59 pruebas offline y lint Beamup correctos. La sonda live de Pelispedia no encontró un medio cuya firma pudiera validar; la ficha pública consultada muestra el player online bloqueado y enlaces de descarga, que se excluyen.
 - GitHub Actions, [run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): **25 bundles y 43 pruebas offline correctos** con los tres nuevos conectores registrados.
 - GitHub Actions, [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613): el Voe real de Van Helsing decodificó el título correcto; su `master.m3u8` respondió **HTTP 200**, `application/vnd.apple.mpegurl`, 690 bytes y `#EXTM3U`. No se comprobaron segmentos ni reproducción en Nuvio.
 - GitHub Actions, [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): **CineHax descubrió al menos un stream real y un medio superó la comprobación de firma**.
