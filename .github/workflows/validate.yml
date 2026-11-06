@@ -61,6 +61,7 @@ jobs:
           node --check scripts/live-check.cjs
           node --check scripts/media-audit.cjs
           node --check scripts/media-audit-lib.cjs
+          node --check scripts/site-recon.cjs
           bash -n scripts/deploy-beamup.sh
       - name: Comprobar servidor local Nuvio
         run: |
@@ -148,6 +149,27 @@ jobs:
         with:
           name: live-${{ matrix.provider }}
           path: live-${{ matrix.provider }}.json
+          if-no-files-found: warn
+
+  site-recon:
+    name: Inspeccionar HTML público de Repelis24 y Gnula
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[site-recon]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Inspeccionar respuestas públicas sin ejecutar scripts de terceros
+        run: node scripts/site-recon.cjs --output site-recon.json
+      - name: Publicar estructura y estados (sin cuerpos de páginas ni tokens)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-recon
+          path: site-recon.json
           if-no-files-found: warn
 
   audit-media:
