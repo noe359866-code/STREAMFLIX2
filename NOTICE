@@ -23,6 +23,11 @@ Para PelisGo se consultó únicamente como referencia del contrato público de
 búsqueda/servidores este snapshot, sin incorporar sus rutas de descarga:
   https://github.com/adrianjael/pluggin-latino/blob/66209d1549ec624ba922d628b701a86892b50e0b/providers/pelisgo.js
 
+También se revisaron los metadatos públicos de CNCVerse Cloud Stream Extension:
+  https://github.com/NivinCNC/CNCVerse-Cloud-Stream-Extension
+  Comparación y exclusiones: docs/revision-cncverse-cloudstream.md
+No se incorpora código, binarios .cs3 ni medios de CNCVerse o de CNCVerse Bridge.
+
 La implementación JavaScript, los adaptadores del runtime y las pruebas son una
 conversión independiente para Nuvio. No se incluye código Android/Kotlin compilado,
 contenido multimedia, cuentas, credenciales ni claves TMDB.
