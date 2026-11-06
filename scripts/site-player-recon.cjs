@@ -12,7 +12,7 @@ const HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.7',
   'Accept-Language': 'es-MX,es;q=0.9,en;q=0.6',
 };
-const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one', 'nupload.me']);
+const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one', 'nupload.me', 'nupload.my']);
 const MAX = 260000;
 
 function clean(text) {
@@ -62,7 +62,8 @@ async function get(url, referer, post, depth = 0) {
       const target = new URL(location, url);
       if (target.protocol === 'https:' && ALLOWED.has(target.hostname)) {
         const next = await get(target.href, referer, post, depth + 1);
-        return { ...next, requested: safeUrl(url), redirectChain: [response.status, ...(next.redirectChain || [])] };
+        return { ...next, requested: safeUrl(url), redirectChain: [response.status, ...(next.redirectChain || [])],
+          redirectLocations: [safeUrl(target.href), ...(next.redirectLocations || [])] };
       }
       return { status: response.status, contentType: response.headers.get('content-type') || '', html: '', url, location: safeUrl(location, url) };
     }
@@ -140,6 +141,16 @@ async function repelis() {
       options: dooplayOptions(page.html).map(({ post, ...option }) => ({ ...option, postIsNumber: /^\d+$/.test(post) })),
       players: [],
     };
+    if (url.includes('/serie/')) {
+      const region = /<ul\b[^>]*class\s*=\s*["'][^"']*episodios[^"']*["'][^>]*>[\s\S]{0,12000}/i.exec(page.html)?.[0] || '';
+      summary.seriesRegion = {
+        hasEpisodesMarkup: Boolean(region), startText: clean(region),
+        links: anchors(region, url, /./).slice(0, 18).map((a) => ({ label: a.label, url: a.safe })),
+        liTags: [...region.matchAll(/<li\b[^>]*>/gi)].slice(0, 12).map(([tag]) => ({ class: attr(tag, 'class'),
+          dataKeys: [...tag.matchAll(/\b(data-[a-z-]+)=/gi)].map((m) => m[1]).slice(0, 10),
+        })),
+      };
+    }
     const firstEpisode = anchors(page.html, url, /episodios?|temporada|season|capitulo/i)
       .find((a) => /1[x×-]0?1|temporada[=/]1.*episodio[=/]1|episode[=/]1/i.test(a.href + ' ' + a.label));
     if (url.includes('/serie/') && firstEpisode) {
@@ -163,6 +174,12 @@ async function repelis() {
         endpoint: safeUrl(endpoint, base), status: reply.status, error: reply.error,
         response: responseInfo(reply.html, endpoint),
       };
+      let playerData;
+      try { playerData = JSON.parse(reply.html); } catch (_) { /* sin JSON */ }
+      try {
+        const wrapper = new URL(playerData?.embed_url);
+        item.wrapperTarget = safeUrl(wrapper.searchParams.get('url'));
+      } catch (_) { /* no es URL o no lleva destino anidado */ }
       if (summary.players.length === 0 && item.response.embed?.host === 'nupload.me') {
         let data;
         try { data = JSON.parse(reply.html); } catch (_) { /* sin JSON, no hay embed */ }
@@ -170,9 +187,9 @@ async function repelis() {
         if (typeof embedded === 'string' && /^https:\/\/nupload\.me\//i.test(embedded)) {
           const hoster = await get(embedded, url);
           item.hoster = { status: hoster.status, error: hoster.error, redirectChain: hoster.redirectChain,
-            location: hoster.location, contentType: hoster.contentType,
+            redirectLocations: hoster.redirectLocations, location: hoster.location, contentType: hoster.contentType,
             title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(hoster.html)?.[1]),
-            iframes: iframeInfo(hoster.html, embedded), media: mediaHints(hoster.html),
+            iframes: iframeInfo(hoster.html, hoster.url || embedded), media: mediaHints(hoster.html),
           };
         }
       }
@@ -204,7 +221,8 @@ async function gnula() {
       if (frameUrl.hostname !== 'ver.gnula.one' || !frameUrl.searchParams.has('trembed')) continue;
       const frame = await get(frameUrl.href, url);
       summary.frames.push({ status: frame.status, error: frame.error, contentType: frame.contentType,
-        url: safeUrl(frameUrl.href, base), redirectChain: frame.redirectChain, location: frame.location,
+        url: safeUrl(frameUrl.href, base), redirectChain: frame.redirectChain, redirectLocations: frame.redirectLocations,
+        location: frame.location, finalUrl: safeUrl(frame.url || frameUrl.href),
         iframes: iframeInfo(frame.html, frame.url || frameUrl.href),
         media: mediaHints(frame.html), response: responseInfo(frame.html, frame.url || frameUrl.href),
       });
