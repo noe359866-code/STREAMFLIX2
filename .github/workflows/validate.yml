@@ -194,6 +194,55 @@ jobs:
           path: site-player.json
           if-no-files-found: warn
 
+  audit-new-sites:
+    name: Auditar HLS/MP4 · ${{ matrix.provider }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-new-sites]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [repelis24, gnulaone]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver títulos y verificar medios reales sin descargar vídeos completos
+        run: node scripts/media-audit.cjs --provider "${{ matrix.provider }}" --output "audit-${{ matrix.provider }}.json"
+      - name: Publicar los tres estados por la API de anotaciones de Actions
+        env:
+          PROVIDER: ${{ matrix.provider }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const id = process.env.PROVIDER;
+          const report = JSON.parse(fs.readFileSync(`audit-${id}.json`, 'utf8'));
+          const attempts = report.attempts.map((item) => ({
+            discovered: item.discovered,
+            mediaCount: item.mediaCount,
+            discovery403: item.discovery403,
+            timedOut: item.timedOut,
+            media: item.media.map(({ format, stage, status, host, outcome }) => ({ format, stage, status, host, outcome })),
+          }));
+          console.log(`::notice file=scripts/media-audit.cjs,title=audit-new-${id}::${JSON.stringify({ provider: id, sample: report.sample, decision: report.decision, attempts })}`);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `## ${id}: tres intentos de HLS/MP4\n\n` +
+            attempts.map((item, index) => `- Intento ${index + 1}: ${item.mediaCount} medios; ${item.media.map((m) => `${m.host} ${m.status || 'sin HTTP'} ${m.outcome}`).join(', ') || 'sin medio resuelto'}`).join('\n') +
+            `\n\nDecisión: **${report.decision}**. Un 403 de catálogo no demuestra bloqueo del medio.\n`);
+          NODE
+      - name: Publicar informe sin URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ matrix.provider }}-3-attempts
+          path: audit-${{ matrix.provider }}.json
+          if-no-files-found: warn
+
   audit-media:
     name: Auditar HLS/MP4 reales · tres intentos por proveedor
     if: (github.event_name == 'workflow_dispatch' && inputs.provider == 'audit-media') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-media]'))

@@ -20,6 +20,8 @@ const CATEGORY_MAP = {
   seriesflix: 'series',
   seriesturcas: 'series',
   hdfull: 'movies',
+  gnulaone: 'movies',
+  repelis24: 'movies',
   verpeliculasonline: 'movies',
 };
 

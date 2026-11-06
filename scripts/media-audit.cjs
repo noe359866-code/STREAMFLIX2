@@ -54,6 +54,10 @@ const WEAPONS = {
   id: 'weapons', mediaType: 'movie', title: 'Weapons', originalTitle: 'La hora de la desaparición',
   titles: ['Weapons', 'La hora de la desaparición'], imdbId: '', year: '2025',
 };
+const MONEY_FIGHT = {
+  id: 'money-fight', mediaType: 'movie', title: 'Money Fight', originalTitle: 'Money Fight',
+  titles: ['Money Fight'], imdbId: '', year: '2021',
+};
 const TURKISH = {
   id: 'kara-sevda', mediaType: 'tv', title: 'Kara Sevda', originalTitle: 'Amor eterno',
   titles: ['Kara Sevda', 'Amor eterno'], imdbId: '', year: '2015',
@@ -66,6 +70,7 @@ function sampleFor(scraper) {
   if (id === 'doramasflix') return DORAMA;
   if (id === 'seriesturcas') return TURKISH;
   if (['seriesflix'].includes(id)) return SERIES;
+  if (['repelis24', 'gnulaone'].includes(id)) return MONEY_FIGHT;
   if (['hdfull', 'pelisgo'].includes(id)) return WEAPONS;
   if (!scraper.supportedTypes.includes('movie')) return SERIES;
   return MOVIE;

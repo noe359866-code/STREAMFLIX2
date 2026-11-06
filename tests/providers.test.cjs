@@ -509,6 +509,65 @@ test('PlayLatinSRC: usa IMDb y la ruta de reproductor personalizado sin devolver
   assert.ok(!result.streams.some((stream) => /playlatinsrc\.co\/custom/.test(stream.url)));
 });
 
+test('Repelis24: busca la película real, usa wp_json y desenvuelve el Waaw explícito', async () => {
+  const detail = '<script>var dtAjax = {"play_method":"wp_json"};</script>'
+    + '<li class="dooplay_player_option" data-type="movie" data-post="186263" data-nume="1"><span class="title">Nupload</span></li>'
+    + '<li class="dooplay_player_option" data-type="movie" data-post="186263" data-nume="2"><span class="title">Waaw</span></li>';
+  const result = await run('repelis24', {
+    mediaType: 'movie', routes: [
+      ['repelis24.de/?s=Contenido%20Demo', '<a href="/pelicula/%3Cid%3E/">Contenido Demo</a><a href="/pelicula/contenido-demo/">Película</a><a href="/pelicula/contenido-demo/" title="Contenido Demo">Contenido Demo</a>'],
+      ['repelis24.de/pelicula/contenido-demo/', detail],
+      ['repelis24.de/wp-json/dooplayer/v2/186263/movie/1', { embed_url: '<iframe src="https://nupload.me/watch/abc"></iframe>' }],
+      ['repelis24.de/wp-json/dooplayer/v2/186263/movie/2', { embed_url: '<iframe src="https://nupload.me/iframe/?url=https%3A%2F%2Fwaaw.tv%2Fwatch_video.php%3Fv%3Dabc"></iframe>' }],
+      ['https://nupload.me/watch/abc', '<script>file:"https://cdn.example/video/nupload.mp4"</script>'],
+      ['https://waaw.tv/watch_video.php?v=abc', '<iframe src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result, 2);
+  assert.ok(result.calls.some((call) => call.url.endsWith('/wp-json/dooplayer/v2/186263/movie/2')));
+  assert.ok(!result.calls.some((call) => call.url.includes('/pelicula/%3Cid%3E/') || call.url.includes('/iframe/?url=')));
+  assert.ok(result.streams.every((stream) => stream.provider === 'repelis24'));
+  assert.ok(result.streams.every((stream) => !/nupload\.me|waaw\.tv/.test(stream.url)));
+});
+
+test('Repelis24: TV no fabrica episodios de una ficha /serie/ sin enlaces comprobados', async () => {
+  const result = await run('repelis24', {
+    routes: [['repelis24.de/?s=', card('/serie/contenido-demo/')]],
+  });
+  assert.deepEqual(result.streams, []);
+  assert.ok(!result.calls.some((call) => call.url.includes('repelis24.de/')));
+});
+
+test('Gnula One: /search/<título> y ?trembed resuelven solo un iframe de la película', async () => {
+  const result = await run('gnulaone', {
+    mediaType: 'movie', routes: [
+      ['ver.gnula.one/search/Contenido%20Demo', card('/movies/contenido-demo/')],
+      ['ver.gnula.one/movies/contenido-demo/', '<a href="/?trembed=1">Subtitulado · Voe</a><a href="/download/file.mp4">Descargar</a>'],
+      ['ver.gnula.one/?trembed=1', '<title>Reproductor</title><iframe src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es-SUB');
+  assert.equal(result.streams[0].provider, 'gnulaone');
+  assert.ok(result.calls.some((call) => call.url === 'https://ver.gnula.one/search/Contenido%20Demo'));
+  assert.ok(!result.calls.some((call) => call.url.includes('ver.gnula.one/?s=')));
+});
+
+test('Gnula One: ignora la portada devuelta por ?trembed y no mezcla vídeos ajenos', async () => {
+  const result = await run('gnulaone', {
+    mediaType: 'movie', routes: [
+      ['ver.gnula.one/search/Contenido%20Demo', card('/movies/contenido-demo/')],
+      ['ver.gnula.one/movies/contenido-demo/', '<a href="/?trembed=1">Subtitulado · Voe</a>'],
+      ['ver.gnula.one/?trembed=1', '<title>G Nula - G Nula es un blog para ver películas online</title><iframe src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assert.deepEqual(result.streams, []);
+  assert.ok(!result.calls.some((call) => call.url.includes('sw.example')));
+  const tv = await run('gnulaone');
+  assert.deepEqual(tv.streams, []);
+  assert.ok(!tv.calls.some((call) => call.url.includes('ver.gnula.one/')));
+});
+
 test('RepelisPlus: búsqueda y selección del episodio solicitado antes de resolver el player', async () => {
   const result = await run('repelisplus', {
     routes: [

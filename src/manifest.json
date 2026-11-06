@@ -126,6 +126,17 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "gnulaone",
+      "name": "Gnula One",
+      "description": "Películas en ver.gnula.one; búsqueda /search y opciones ?trembed. Actualmente sus opciones pueden redirigir a la portada, sin medio comprobado.",
+      "version": "1.0.0",
+      "filename": "providers/gnulaone.js",
+      "supportedTypes": ["movie"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
       "id": "hdfull",
       "name": "HDFull",
       "description": "Solo películas: search-route y contentUrl específico de la ficha; TV y clip publicitario excluidos.",
@@ -242,6 +253,17 @@
       "version": "1.0.0",
       "filename": "providers/poseidonhd2.js",
       "supportedTypes": ["movie", "tv"],
+      "enabled": true,
+      "contentLanguage": ["es"],
+      "supportedFormats": ["hls", "mp4", "mkv", "webm"]
+    },
+    {
+      "id": "repelis24",
+      "name": "Repelis24",
+      "description": "Películas de repelis24.de: búsqueda pública y DooPlayer REST wp_json. Nupload/Waaw dependen del hoster; HLS/MP4 aún sin validar en vivo.",
+      "version": "1.0.0",
+      "filename": "providers/repelis24.js",
+      "supportedTypes": ["movie"],
       "enabled": true,
       "contentLanguage": ["es"],
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]

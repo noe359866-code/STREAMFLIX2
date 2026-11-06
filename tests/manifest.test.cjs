@@ -9,9 +9,9 @@ const { ACTIVE_IDS } = require('../stremio/config.cjs');
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
 const ids = manifest.scrapers.map((item) => item.id);
 
-test('el manifiesto tiene 32 IDs únicos y rutas de bundle válidas', () => {
-  assert.equal(manifest.scrapers.length, 32);
-  assert.equal(new Set(ids).size, 32);
+test('el manifiesto tiene 34 IDs únicos y rutas de bundle válidas', () => {
+  assert.equal(manifest.scrapers.length, 34);
+  assert.equal(new Set(ids).size, 34);
   assert.ok(manifest.name && manifest.version);
   for (const scraper of manifest.scrapers) {
     assert.ok(scraper.id && scraper.name && scraper.version && scraper.filename);
@@ -26,7 +26,7 @@ test('los proveedores solo de series y los inactivos están marcados correctamen
   for (const id of ['animeav1', 'danimados', 'lacartoons', 'seriesflix', 'seriesturcas']) {
     assert.deepEqual(manifest.scrapers.find((item) => item.id === id).supportedTypes, ['tv']);
   }
-  for (const id of ['hdfull', 'verpeliculasonline']) {
+  for (const id of ['hdfull', 'gnulaone', 'repelis24', 'verpeliculasonline']) {
     assert.deepEqual(manifest.scrapers.find((item) => item.id === id).supportedTypes, ['movie']);
   }
   for (const id of ['pelisforte', 'pelisgo']) {
@@ -36,7 +36,11 @@ test('los proveedores solo de series y los inactivos están marcados correctamen
     assert.equal(manifest.scrapers.find((item) => item.id === id).enabled, false);
     assert.ok(!ACTIVE_IDS.includes(id), `${id} no debe aparecer en la configuración de Stremio`);
   }
-  assert.equal(manifest.scrapers.filter((item) => item.enabled).length, 30);
+  for (const id of ['gnulaone', 'repelis24']) {
+    assert.equal(manifest.scrapers.find((item) => item.id === id).enabled, true);
+    assert.ok(ACTIVE_IDS.includes(id), `${id} debe estar disponible en Stremio`);
+  }
+  assert.equal(manifest.scrapers.filter((item) => item.enabled).length, 32);
 });
 
 test('cada bundle exporta getStreams y no depende de builtins de Node', async () => {

@@ -225,6 +225,22 @@ async function repelis() {
               .replace(/https?:\/\/[^\s"']+/gi, '<url>')
               .replace(/(["'`])[^"'`]{0,250}\1/g, '<string>')
               .replace(/[a-z0-9_-]{20,}/gi, '<token>').slice(0, 150)),
+            numericDecoderShape: (() => {
+              const index = hoster.html.indexOf('atob(value)');
+              if (index < 0) return null;
+              return hoster.html.slice(Math.max(0, index - 1200), index + 210)
+                .replace(/https?:\/\/[^\s"']+/gi, '<url>')
+                .replace(/(["'`])(?:\\.|(?!\1)[^\\])*?\1/g, (literal) => `<string:${literal.length - 2}>`)
+                .replace(/[a-z0-9_-]{20,}/gi, '<token>').slice(-1000);
+            })(),
+            setupShape: (() => {
+              const index = hoster.html.indexOf('player.setup({');
+              if (index < 0) return null;
+              return hoster.html.slice(index, index + 500)
+                .replace(/https?:\/\/[^\s"']+/gi, '<url>')
+                .replace(/(["'`])(?:\\.|(?!\1)[^\\])*?\1/g, (literal) => `<string:${literal.length - 2}>`)
+                .replace(/[a-z0-9_-]{20,}/gi, '<token>');
+            })(),
           };
         }
       }
