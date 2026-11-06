@@ -12,7 +12,7 @@ const HEADERS = {
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.7',
   'Accept-Language': 'es-MX,es;q=0.9,en;q=0.6',
 };
-const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one', 'nupload.me', 'nupload.my']);
+const ALLOWED = new Set(['repelis24.de', 'ver.gnula.one', 'nupload.me', 'nupload.my', 'waaw.tv']);
 const MAX = 260000;
 
 function clean(text) {
@@ -176,10 +176,22 @@ async function repelis() {
       };
       let playerData;
       try { playerData = JSON.parse(reply.html); } catch (_) { /* sin JSON */ }
+      let wrappedTarget;
       try {
         const wrapper = new URL(playerData?.embed_url);
-        item.wrapperTarget = safeUrl(wrapper.searchParams.get('url'));
+        wrappedTarget = wrapper.searchParams.get('url');
+        item.wrapperTarget = safeUrl(wrappedTarget);
       } catch (_) { /* no es URL o no lleva destino anidado */ }
+      if (summary.players.length === 1 && /^https:\/\/waaw\.tv\//i.test(wrappedTarget || '')) {
+        const target = await get(wrappedTarget, url);
+        item.hoster = { status: target.status, error: target.error, contentType: target.contentType,
+          redirectChain: target.redirectChain, redirectLocations: target.redirectLocations, location: target.location,
+          title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(target.html)?.[1]),
+          iframes: iframeInfo(target.html, target.url || wrappedTarget), media: mediaHints(target.html),
+          scripts: [...target.html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)]
+            .slice(0, 12).map((m) => safeUrl(m[1], target.url || wrappedTarget)),
+        };
+      }
       if (summary.players.length === 0 && item.response.embed?.host === 'nupload.me') {
         let data;
         try { data = JSON.parse(reply.html); } catch (_) { /* sin JSON, no hay embed */ }
@@ -190,6 +202,10 @@ async function repelis() {
             redirectLocations: hoster.redirectLocations, location: hoster.location, contentType: hoster.contentType,
             title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(hoster.html)?.[1]),
             iframes: iframeInfo(hoster.html, hoster.url || embedded), media: mediaHints(hoster.html),
+            scripts: [...hoster.html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/gi)]
+              .slice(0, 12).map((m) => safeUrl(m[1], hoster.url || embedded)),
+            signals: ['jwplayer', 'hls', 'base64', 'atob(', 'plyr', 'playerjs', 'fetch(', 'eval(', 'iframe', 'source:']
+              .filter((marker) => hoster.html.toLowerCase().includes(marker)),
           };
         }
       }
@@ -220,9 +236,16 @@ async function gnula() {
       const frameUrl = new URL(link.href, url);
       if (frameUrl.hostname !== 'ver.gnula.one' || !frameUrl.searchParams.has('trembed')) continue;
       const frame = await get(frameUrl.href, url);
+      const param = frameUrl.searchParams.get('trembed') || '';
+      let decoded;
+      try { decoded = Buffer.from(param, 'base64').toString('utf8'); } catch (_) { /* no base64 */ }
+      const external = /^https?:\/\//i.test(param) ? param : /^https?:\/\//i.test(decoded || '') ? decoded : null;
       summary.frames.push({ status: frame.status, error: frame.error, contentType: frame.contentType,
-        url: safeUrl(frameUrl.href, base), redirectChain: frame.redirectChain, redirectLocations: frame.redirectLocations,
+        url: safeUrl(frameUrl.href, base), paramLength: param.length,
+        paramKind: /^\d+$/.test(param) ? 'numeric' : external ? 'external-url' : 'other',
+        paramTarget: safeUrl(external), redirectChain: frame.redirectChain, redirectLocations: frame.redirectLocations,
         location: frame.location, finalUrl: safeUrl(frame.url || frameUrl.href),
+        title: clean(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(frame.html)?.[1]),
         iframes: iframeInfo(frame.html, frame.url || frameUrl.href),
         media: mediaHints(frame.html), response: responseInfo(frame.html, frame.url || frameUrl.href),
       });
