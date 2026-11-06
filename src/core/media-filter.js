@@ -7,7 +7,8 @@ const MEDIA_BYTES = 2048;
 // QuickJS carga la respuesta completa antes de exponer arrayBuffer(): incluso
 // un GET con Range podría bajar el vídeo entero si el servidor ignora Range.
 const NATIVE_BODY_LIMIT = 128 * 1024;
-const PROBE_BUDGET_MS = 1800;
+const PROBE_BUDGET_MS = 2400;
+const CONFIRM_DELAY_MS = 120;
 const MAX_PROBES = 6;
 
 function publicUrl(url) {
@@ -258,7 +259,14 @@ export async function filterUnplayableStreams(streams, options = {}) {
     while (cursor < eligible.length && !controller?.signal.aborted) {
       const { stream, index } = eligible[cursor++];
       try {
-        if (await probeStream(stream, { ...options, signal: controller?.signal }) === 'bad') removed.add(index);
+        const context = { ...options, signal: controller?.signal };
+        if (await probeStream(stream, context) !== 'bad' || controller?.signal.aborted) continue;
+        // Un CDN puede alternar HTML/403 con vídeo válido (observado en
+        // AnimeAV1 desde Actions). Confirmar el fallo en otra petición antes
+        // de ocultar la URL; con 1 fallo y timeout/éxito se conserva.
+        await new Promise((resolve) => setTimeout(resolve, CONFIRM_DELAY_MS));
+        if (!controller?.signal.aborted && await probeStream(stream, context) === 'bad'
+          && !controller?.signal.aborted) removed.add(index);
       } catch (_) { /* un fallo de red no prueba que el vídeo esté roto */ }
     }
   };

@@ -386,7 +386,8 @@ async function resolveMetadata(contentId, mediaType) {
 var PLAYLIST_BYTES = 64 * 1024;
 var MEDIA_BYTES = 2048;
 var NATIVE_BODY_LIMIT = 128 * 1024;
-var PROBE_BUDGET_MS = 1800;
+var PROBE_BUDGET_MS = 2400;
+var CONFIRM_DELAY_MS = 120;
 var MAX_PROBES = 6;
 function publicUrl(url) {
   const match = String(url || "").match(/^https?:\/\/([^/?#]+)(?:[/?#]|$)/i);
@@ -622,7 +623,10 @@ async function filterUnplayableStreams(streams2, options = {}) {
     while (cursor < eligible.length && !controller?.signal.aborted) {
       const { stream, index } = eligible[cursor++];
       try {
-        if (await probeStream(stream, { ...options, signal: controller?.signal }) === "bad") removed.add(index);
+        const context = { ...options, signal: controller?.signal };
+        if (await probeStream(stream, context) !== "bad" || controller?.signal.aborted) continue;
+        await new Promise((resolve) => setTimeout(resolve, CONFIRM_DELAY_MS));
+        if (!controller?.signal.aborted && await probeStream(stream, context) === "bad" && !controller?.signal.aborted) removed.add(index);
       } catch (_) {
       }
     }

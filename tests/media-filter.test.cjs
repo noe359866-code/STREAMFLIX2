@@ -216,11 +216,45 @@ test('plugin Nuvio y addon Stremio usan providerGuard: quitan solo el enlace mal
     assert.deepEqual(filtered.map((item) => item.url), [good]);
     global.__STREAMFLIX_AUDIT_RAW_MEDIA = true;
     assert.deepEqual((await guarded('550', 'movie')).map((item) => item.url), [bad, good]);
-    assert.equal(mock.calls.length, 2, 'la auditoría no pierde los 403 ni consulta medios dos veces');
+    assert.equal(mock.calls.length, 3, 'el fallo se confirma dos veces; la auditoría no hace sondas adicionales');
   } finally {
     delete global.__STREAMFLIX_AUDIT_RAW_MEDIA;
     global.fetch = originalFetch;
   }
+});
+
+test('un 403/HTML transitorio no elimina un HLS/MP4 que funciona al confirmar', async () => {
+  const url = 'https://cdn.example/intermitente.mp4';
+  let attempts = 0;
+  const recovered = mockFetch({ [url]: () => (++attempts === 1)
+    ? { body: '<html>rate limit</html>', mime: 'text/html' }
+    : { body: MP4, status: 206 } });
+  const kept = await filterUnplayableStreams([movie(url)], { fetchImpl: recovered.fetchImpl });
+  assert.equal(kept.length, 1);
+  assert.equal(attempts, 2);
+
+  let blocked = 0;
+  const failsThenTimesOut = mockFetch({ [url]: () => (++blocked === 1)
+    ? { status: 403 }
+    : blocked === 2 ? { status: 403 } : { status: 503 } });
+  assert.equal((await filterUnplayableStreams([movie(url)], { fetchImpl: failsThenTimesOut.fetchImpl })).length, 1,
+    'un segundo fallo de red incierto no confirma la primera denegación');
+});
+
+test('una variante HLS con segmentos transitoriamente inválidos se conserva al confirmar reproducción', async () => {
+  const playlist = 'https://cdn.example/main.m3u8';
+  const first = 'https://cdn.example/1.ts';
+  const second = 'https://cdn.example/2.ts';
+  let segmentRequests = 0;
+  const mock = mockFetch({
+    [playlist]: { body: '#EXTM3U\n#EXTINF:4,\n1.ts\n#EXTINF:4,\n2.ts\n' },
+    [first]: () => (++segmentRequests === 1)
+      ? { body: '<html>expirado</html>', mime: 'text/html' }
+      : { body: TS, status: 206 },
+    [second]: { body: '<html>expirado</html>', mime: 'text/html' },
+  });
+  assert.equal((await filterUnplayableStreams([hls(playlist)], { fetchImpl: mock.fetchImpl })).length, 1);
+  assert.equal(segmentRequests, 2, 'la segunda comprobación descubre un segmento MPEG-TS real');
 });
 
 test('addon vía proxy no descarga películas completas si un host ignora Range', async () => {
