@@ -109,3 +109,23 @@ test('la cookie de sesión se limita al dominio y se reenvía', async () => {
     await http.fetchText('https://other.example/private');
   } finally { mock.restore(); }
 });
+
+test('candidates embed: descubre iframes lazy y hosts anunciados por los cinco proveedores', () => {
+  const html = [
+    '<iframe data-src="https://vid.example/e/demo"></iframe>',
+    '<button data-server-url="https://streamhg.example/embed/abc">StreamHG</button>',
+    '<a href="https://dropload.example/e/lat">Dropload</a>',
+    '<a href="https://unlimplay.example/e/sub">UnlimPlay</a>',
+    '<script>const file="https://cdn.example/video/master.m3u8";</script>',
+  ].join('');
+  const found = extractors.embedCandidatesFromHtml(html, 'https://catalog.example/movie/1');
+  assert.deepEqual(found.map((item) => item.url).sort(), [
+    'https://vid.example/e/demo',
+    'https://streamhg.example/embed/abc',
+    'https://dropload.example/e/lat',
+    'https://unlimplay.example/e/sub',
+  ].sort());
+  assert.deepEqual(extractors.directMediaInHtml(html, 'https://catalog.example/movie/1'), [
+    'https://cdn.example/video/master.m3u8',
+  ]);
+});

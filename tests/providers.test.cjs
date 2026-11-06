@@ -451,3 +451,81 @@ for (const item of wordpressCases) {
     assertStream(result);
   });
 }
+
+test('Embed69: IMDb de TMDB, dataLink y resolución a un medio directo', async () => {
+  const result = await run('embed69', {
+    mediaType: 'movie',
+    routes: [
+      ['embed69.org/f/tt1234567', fixture('datalink-player.html')],
+    ],
+  });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === 'https://embed69.org/f/tt1234567'));
+  assert.equal(result.streams[0].language, 'es-LAT');
+});
+
+test('TukiPlay: usa el endpoint público de embed y solo entrega el hoster resuelto', async () => {
+  const result = await run('tukiplay', {
+    mediaType: 'movie',
+    routes: [
+      ['tukiplay.com/embed/movie/123', '<iframe data-src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === 'https://tukiplay.com/embed/movie/123'));
+  assert.ok(!result.streams.some((stream) => /tukiplay\.com\/embed/.test(stream.url)));
+});
+
+test('VideoAPI: consulta exists, valida la ruta interna y extrae solo el stream', async () => {
+  const result = await run('videoapi', {
+    mediaType: 'movie',
+    routes: [
+      ['videoapi.la/api/v1/public/exists/movie/123', { exists: true, path: '/e/movie/123' }],
+      ['videoapi.la/e/movie/123', '<script>const source = { file: "https://cdn.example/video/playlist.m3u8", type: "application/x-mpegURL" };</script>'],
+    ],
+  });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url.endsWith('/api/v1/public/exists/movie/123')));
+  assert.ok(!result.streams.some((stream) => /videoapi\.la\/e\//.test(stream.url)));
+
+  const rejected = await run('videoapi', {
+    mediaType: 'movie',
+    routes: [['videoapi.la/api/v1/public/exists/movie/123', { exists: true, path: 'https://evil.example/e/movie/123' }]],
+  });
+  assert.deepEqual(rejected.streams, []);
+  assert.equal(rejected.calls.length, 1);
+});
+
+test('PlayLatinSRC: usa IMDb y la ruta de reproductor personalizado sin devolver el iframe', async () => {
+  const result = await run('playlatinsrc', {
+    mediaType: 'movie',
+    routes: [
+      ['playlatinsrc.co/custom/movie/tt1234567', '<a href="https://dropload.example/e/demo">Servidor Dropload</a>'],
+      ['dropload.example/e/demo', fixture('player-hls.html')],
+    ],
+  });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url === 'https://playlatinsrc.co/custom/movie/tt1234567'));
+  assert.ok(!result.streams.some((stream) => /playlatinsrc\.co\/custom/.test(stream.url)));
+});
+
+test('RepelisPlus: búsqueda y selección del episodio solicitado antes de resolver el player', async () => {
+  const result = await run('repelisplus', {
+    routes: [
+      ['repelisplus.asia/buscar?', card('/series/contenido-demo')],
+      [/https:\/\/repelisplus\.asia\/series\/contenido-demo$/, '<a href="/series/contenido-demo/temporada/2/episodio/3">S02E03</a>'],
+      ['repelisplus.asia/series/contenido-demo/temporada/2/episodio/3', '<iframe data-src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result);
+  assert.ok(result.calls.some((call) => call.url.endsWith('/series/contenido-demo/temporada/2/episodio/3')));
+  const missing = await run('repelisplus', {
+    episode: 4,
+    routes: [
+      ['repelisplus.asia/buscar?', card('/series/contenido-demo')],
+      [/https:\/\/repelisplus\.asia\/series\/contenido-demo$/, '<a href="/series/contenido-demo/temporada/2/episodio/3">S02E03</a>'],
+    ],
+  });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/4')));
+});

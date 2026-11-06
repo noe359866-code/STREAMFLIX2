@@ -24,12 +24,28 @@ if (!providerId || !tmdbId || !['movie', 'tv'].includes(mediaType)) {
   process.exitCode = 2;
   return;
 }
-if (providerId !== 'cinehax' && !process.env.TMDB_API_KEY) {
-  console.error('Falta TMDB_API_KEY. Nuvio la inyecta desde ajustes; este script la lee del entorno.');
+const imdbId = /^tt\d+$/i.test(String(tmdbId || '')) ? String(tmdbId) : '';
+if (providerId !== 'cinehax' && !process.env.TMDB_API_KEY && !imdbId) {
+  console.error('Falta TMDB_API_KEY. Alternativamente, pasa un IMDb ID (tt...) para resolver metadatos con Cinemeta.');
   process.exitCode = 2;
   return;
 }
 global.TMDB_API_KEY = process.env.TMDB_API_KEY || '';
+if (imdbId) {
+  const { resolveStremioMetadata } = require('../stremio/metadata.cjs');
+  const parsed = {
+    mediaType: mediaType === 'movie' ? 'movie' : 'tv',
+    imdbId,
+    tmdbId: '',
+    season: mediaType === 'tv' ? season : null,
+    episode: mediaType === 'tv' ? episode : null,
+  };
+  global.__STREAMFLIX_METADATA_HOOK = async () => {
+    const metadata = await resolveStremioMetadata(parsed, { useCache: false });
+    if (!metadata) throw new Error(`Cinemeta no devolvió metadatos para ${imdbId}.`);
+    return { ...metadata, id: metadata.tmdbId || imdbId, mediaType: parsed.mediaType };
+  };
+}
 const root = path.resolve(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
 const registration = manifest.scrapers.find((item) => item.id === providerId);
