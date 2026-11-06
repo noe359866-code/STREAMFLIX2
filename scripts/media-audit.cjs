@@ -12,6 +12,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const zlib = require('node:zlib');
+const { buildSync } = require('esbuild');
 const { checkMedia, classifyProvider, hostOf, discoveryStage } = require('./media-audit-lib.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -20,6 +21,21 @@ const ATTEMPTS = 3;
 const MAX_MEDIA = 6;
 const CONCURRENCY = 4;
 const ATTEMPT_TIMEOUT_MS = 65000;
+
+let runtimeFilterPromise;
+function runtimeFilter() {
+  if (!runtimeFilterPromise) {
+    // La misma fuente que se empaqueta en Nuvio: cargarla en Node para medir
+    // también qué enlaces descartaría el addon, sin exponer las URLs firmadas.
+    const source = buildSync({
+      entryPoints: [path.join(ROOT, 'src/core/media-filter.js')],
+      bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'silent',
+    }).outputFiles[0].text;
+    runtimeFilterPromise = import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+      .then((loaded) => loaded.filterUnplayableStreams);
+  }
+  return runtimeFilterPromise;
+}
 
 function arg(name) {
   const index = process.argv.indexOf(`--${name}`);
@@ -158,8 +174,21 @@ async function auditOne(scraper) {
           discoveryEvents,
           warnings,
           media: [],
+          runtimeFilter: { tested: 0, discarded: 0, hosts: [] },
         };
         phase = 'medio';
+        if (candidates.length && !controller.signal.aborted) {
+          try {
+            const filter = await runtimeFilter();
+            const selected = candidates.slice(0, MAX_MEDIA);
+            const remaining = await filter(selected);
+            attempt.runtimeFilter = {
+              tested: selected.length,
+              discarded: selected.length - remaining.length,
+              hosts: [...new Set(selected.filter((stream) => !remaining.includes(stream)).map((stream) => hostOf(stream.url)))],
+            };
+          } catch (_) { /* sin muestra de filtro: la auditoría cruda sigue */ }
+        }
         for (const stream of candidates.slice(0, MAX_MEDIA)) {
           if (controller.signal.aborted) break;
           try {
@@ -225,6 +254,7 @@ function annotateResults(results, proposedRemoval) {
       discovery403: attempt.discovery403,
       discoveryEvents: attempt.discoveryEvents,
       timedOut: attempt.timedOut,
+      runtimeFilter: attempt.runtimeFilter,
       media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host,
         outcome: media.outcome, bytesRead: media.bytesRead, signature: media.signature, mime: media.mime, error: media.error })),
     })),
@@ -244,12 +274,12 @@ function appendSummary(results, output) {
     '',
     'Se prueban URLs recién resueltas, variantes y segmentos HLS o el inicio del MP4. Un 403 de catálogo, un título ausente o un timeout **NO** justifican retirar un proveedor. Un 403 persistente se atribuye solamente a la red de GitHub Actions.',
     '',
-    '| Proveedor | Intentos con medio | 403 en medios | Otros/OK | Decisión |',
-    '| - | -: | -: | -: | - |',
+    '| Proveedor | Intentos con medio | 403 en medios | Otros/OK | Descartes del filtro (hasta 6/intento) | Decisión |',
+    '| - | -: | -: | -: | -: | - |',
   ];
   for (const item of results) {
     const media = item.attempts.flatMap((entry) => entry.media || []);
-    lines.push(`| ${item.provider} | ${item.attempts.filter((entry) => entry.mediaCount).length}/${ATTEMPTS} | ${media.filter((entry) => entry.outcome === 'http403').length} | ${media.filter((entry) => entry.outcome !== 'http403').length} | ${item.decision} |`);
+    lines.push(`| ${item.provider} | ${item.attempts.filter((entry) => entry.mediaCount).length}/${ATTEMPTS} | ${media.filter((entry) => entry.outcome === 'http403').length} | ${media.filter((entry) => entry.outcome !== 'http403').length} | ${item.attempts.reduce((count, entry) => count + (entry.runtimeFilter?.discarded || 0), 0)} | ${item.decision} |`);
   }
   lines.push('', `Informe detallado sin URLs firmadas: \`${path.basename(output)}\`.`, '');
   fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
