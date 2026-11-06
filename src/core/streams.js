@@ -1,4 +1,5 @@
 import { hostName } from './text.js';
+import { filterUnplayableStreams } from './media-filter.js';
 
 export function mediaKind(url, explicit) {
   if (explicit) return explicit;
@@ -80,7 +81,15 @@ export function providerGuard(provider, getStreams) {
     if (type === 'tv' && (!Number(season) || !Number(episode))) return [];
     try {
       const streams = await getStreams(String(contentId), type, Number(season) || null, Number(episode) || null);
-      return finalizeStreams(streams || []);
+      const finalized = finalizeStreams(streams || []);
+      // Actions comprueba por separado *todos* los HLS/MP4 descubiertos en
+      // cada uno de sus tres intentos, sin perder los 403 por este filtro.
+      if (globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA === true) return finalized;
+      // El proxy del addon almacena la respuesta íntegra antes de entregarla;
+      // un MP4 que ignore Range se descargaría entero. Allí, no sondear.
+      if (typeof globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED === 'function'
+        && !globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED()) return finalized;
+      return await filterUnplayableStreams(finalized);
     } catch (error) {
       try { console.warn(`[${provider}] ${error && error.message ? error.message : error}`); } catch (_) { /* noop */ }
       return [];

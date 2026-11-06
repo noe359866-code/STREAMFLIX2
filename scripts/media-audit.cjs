@@ -125,6 +125,10 @@ async function auditOne(scraper) {
     return response;
   };
   const originalWarn = console.warn;
+  const previousAuditMode = globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA;
+  // El filtro del runtime omite enlaces claramente malos, pero la auditoría
+  // necesita observarlos para clasificar los HLS/MP4 originales en tres intentos.
+  globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA = true;
   let warnings = 0;
   // providerGuard escribe la URL original en sus avisos. No publicarla en CI.
   console.warn = () => { warnings += 1; };
@@ -175,6 +179,8 @@ async function auditOne(scraper) {
   } finally {
     console.warn = originalWarn;
     globalThis.fetch = rawFetch;
+    if (previousAuditMode === undefined) delete globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA;
+    else globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA = previousAuditMode;
     delete globalThis.__STREAMFLIX_METADATA_HOOK;
   }
   return {

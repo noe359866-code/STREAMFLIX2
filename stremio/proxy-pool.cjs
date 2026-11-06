@@ -691,9 +691,15 @@ function runWithProxy(proxy, fn) {
   return proxyContext.run(proxy, fn);
 }
 
+// El proxy de scraping lee respuestas completas: no hacer sondas de MP4/HLS
+// a través de él si un hoster ignora Range. AsyncLocalStorage evita mezclar
+// el estado de dos peticiones concurrentes al addon.
+const mediaProbeAllowed = () => !proxyContext.getStore();
+
 function installProxyFetchHook() {
   if (hookInstalled) return;
   if (typeof globalThis.fetch !== 'function') return;
+  globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED = mediaProbeAllowed;
   previousFetch = globalThis.fetch.bind(globalThis);
   proxyAwareFetch = function (input, init) {
     const proxy = proxyContext.getStore();
@@ -714,6 +720,9 @@ function uninstallProxyFetchHook() {
   }
   proxyAwareFetch = null;
   hookInstalled = false;
+  if (globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED === mediaProbeAllowed) {
+    delete globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED;
+  }
 }
 
 module.exports = {

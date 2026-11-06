@@ -23,7 +23,7 @@ const {
   clearResultCache,
 } = require('../stremio/addon.cjs');
 const { createAddonServer } = require('../stremio/server.cjs');
-const { ROOT, fixture, response } = require('./helpers.cjs');
+const { ROOT, fixture, response, loadSource } = require('./helpers.cjs');
 
 test('Stremio manifest pasa stremio-addon-linter (validación check-deploy de Beamup) sin errores ni avisos', () => {
   const defaultManifest = buildManifest({}, { baseUrl: 'https://7e2a912be9c9-streamflix2.baby-beamup.club' });
@@ -167,6 +167,46 @@ test('fallback Cinemeta sin TMDB_API_KEY alimenta tanto CineHax (moviedb_id) com
     assert.equal(result.streams[1].behaviorHints.notWebReady, true);
   } finally {
     global.fetch = originalFetch;
+    clearMetadataCache();
+  }
+});
+
+test('el addon Stremio no publica el MP4 HTML que el plugin filtró y conserva otro medio válido', async () => {
+  clearResultCache();
+  clearMetadataCache();
+  const originalFetch = global.fetch;
+  const { providerGuard, makeStream } = loadSource('src/core/streams.js');
+  const calls = [];
+  global.fetch = async (input, init = {}) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt0137523.json')) {
+      return response({ meta: { id: 'tt0137523', moviedb_id: 550, name: 'Fight Club', releaseInfo: '1999' } }, url);
+    }
+    if (url === 'https://cdn.example/bad.mp4') {
+      return new Response('<html>No es vídeo</html>', { headers: { 'Content-Type': 'text/html' } });
+    }
+    if (url === 'https://cdn.example/good.mp4') {
+      return new Response(Buffer.from([0, 0, 0, 16, 102, 116, 121, 112, 105, 115, 111, 109]), { status: 206 });
+    }
+    throw new Error(`Petición inesperada: ${url}`);
+  };
+  const testProvider = { getStreams: providerGuard('CineHax', async () => [
+    makeStream('CineHax', 'https://cdn.example/bad.mp4', { providerId: 'cinehax' }),
+    makeStream('CineHax', 'https://cdn.example/good.mp4', { providerId: 'cinehax' }),
+  ]) };
+  try {
+    const params = {
+      type: 'movie', id: 'tt0137523', config: { providers: ['cinehax'] },
+      env: { PROXY_SCRAPING: 'off' }, providerLoader: () => testProvider, useMetadataCache: false,
+    };
+    const result = await getStremioStreams(params);
+    assert.deepEqual(result.streams.map((item) => item.url), ['https://cdn.example/good.mp4']);
+    assert.ok(calls.some((item) => item.url.endsWith('/bad.mp4') && item.init.headers?.Range));
+    assert.equal((await getStremioStreams(params)).streams.length, 1, 'no cachear el medio inválido');
+  } finally {
+    global.fetch = originalFetch;
+    clearResultCache();
     clearMetadataCache();
   }
 });
