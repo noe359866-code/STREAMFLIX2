@@ -145,7 +145,7 @@ TMDB_API_KEY=... npm run test:playback -- \
 
 El workflow **Validate Nuvio plugins** ejecuta `npm ci`, `npm run check`, valida el servidor y publica un artifact con el paquete instalable. Puede lanzarse manualmente con proveedor, ID TMDB, tipo, temporada, episodio y opción de playback; para proveedores que resuelven metadatos necesita el secreto `TMDB_API_KEY` del repositorio.
 
-También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Resultados:
+También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Para sondear en paralelo los cinco adaptadores añadidos, usa `[live-providers]`; la Actions ejecuta descubrimiento y validación de hasta 4 KiB por URL y publica un informe por proveedor. En la opción manual de workflow se puede elegir un proveedor y pasar TMDb o IMDb (Cinemeta). Resultados:
 
 - [Run 41983314335](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983314335): validación offline inicial correcta.
 - [Run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): validación offline y prueba real de CineHax correctas; al menos un stream descubierto y un medio con firma válida.
