@@ -42,8 +42,8 @@ Estado al **6 de noviembre de 2026**. “Fixture” valida el recorrido offline,
 
 ## Resultado de validación
 
-- Compilación esbuild/CommonJS y export `getStreams`: **35/35** (validación local; CI pendiente del commit final).
-- Recorrido offline con fixtures, pruebas de denegación HTML y filtro AES-128: **114/114** (sujeto a ejecución final); un fixture no equivale a disponibilidad real.
+- Compilación esbuild/CommonJS y export `getStreams`: **35/35**. [Build y lint Beamup en Actions 42330339238/42330343647](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42330343647) correctos.
+- Recorrido offline con fixtures, denegación HTML y filtro AES-128: **114/114**. Un fixture no equivale a disponibilidad real.
 - **33 activos** (incluye TuDorama TV y VixSrc con idiomas declarados), **2 inactivos** (WarezCDN y AnimeBum). CineHax y TukiPlay ya no están en manifiesto ni bundles.
 - [Contraste detallado de los seis sitios y retirada solicitada](revision-seis-sitios-2026.md).
 Los resultados a continuación son **históricos** (antes de retirar CineHax/TukiPlay y activar los conectores nuevos); sus cifras no son el inventario actual.

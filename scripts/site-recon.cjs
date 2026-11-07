@@ -148,6 +148,15 @@ async function inspect(url, target, referer, redirects = 0) {
           src: typeof value?.src === 'string' && /^\/(?!\/)/.test(value.src)
             ? safeUrl(value.src, request.href) : null,
           hasData: Boolean(value?.data),
+          ...(/^\/api\/tidb\//.test(request.pathname) ? { tidbFields: Object.fromEntries(
+            ['intro', 'credits'].map((key) => [key, {
+              type: Array.isArray(value?.[key]) ? 'array' : typeof value?.[key],
+              keys: value?.[key] && typeof value[key] === 'object' ? Object.keys(value[key]).slice(0, 10) : [],
+              count: Array.isArray(value?.[key]) ? value[key].length : null,
+              hasMediaPath: typeof value?.[key] === 'string'
+                && /\.m3u8|\.mp4|\/playlist\//i.test(value[key]),
+            }]),
+          ) } : {}),
         };
       } catch (_) { result.json = { kind: 'invalid' }; }
     }
