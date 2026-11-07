@@ -14,6 +14,18 @@ El repositorio publica un objeto JSON de nivel superior con `name`, `version` y 
 
 Las rutas `providers/<id>.js` se resuelven relativas a la URL del manifiesto.
 
+## Distribución por jsDelivr
+
+El mismo `manifest.json` y los bundles versionados pueden servirse desde:
+
+```text
+https://cdn.jsdelivr.net/gh/noe359866-code/STREAMFLIX2@main/manifest.json
+```
+
+No se necesitan rutas absolutas ni un manifiesto distinto: al resolver `providers/<id>.js` contra esa URL, Nuvio descarga los bundles del mismo repositorio y referencia del CDN. El repositorio debe ser público y la referencia debe estar publicada. `npm run nuvio:cdn` valida el paquete local y genera la URL; `npm run nuvio:cdn -- --ref HEAD --check` comprueba las descargas sin ejecutar el código remoto. Las pruebas offline no consultan jsDelivr.
+
+Consulta [caché, versiones inmutables y diagnóstico](nuvio-jsdelivr.md). Esta distribución no cambia el runtime QuickJS ni sustituye el servidor HTTP del addon de Stremio.
+
 ## Entrada y salida
 
 El runtime invoca la función asíncrona:

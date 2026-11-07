@@ -1,0 +1,28 @@
+name: Verificar Nuvio en jsDelivr
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Referencia publicada: main, etiqueta semver o SHA de commit"
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Descargar manifiesto y bundles desde jsDelivr
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Comprobar publicación sin ejecutar plugins ni abrir vídeos
+        env:
+          CDN_REF: ${{ inputs.ref }}
+        run: node scripts/nuvio-cdn.cjs --check --ref "$CDN_REF"

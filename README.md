@@ -7,7 +7,7 @@ Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**
 
 Incluye **33 conectores activos**, entre ellos **TuDorama solo para series** y **VixSrc con audio italiano/inglés en las muestras**; **AnimeBum y WarezCDN están deshabilitados**. CineHax y TukiPlay se eliminaron por petición expresa, no solo se ocultaron del selector. [Estado de los seis dominios y evidencia](docs/revision-seis-sitios-2026.md).
 
-> **Estado:** paquete instalable para pruebas en Nuvio (sideload) y addon HTTP v3 de Stremio validado con `stremio-addon-linter`; [PR #10](https://github.com/noe359866-code/STREAMFLIX2/pull/10) abierta, **sin desplegar**. Compilan **35 bundles** y pasan **114 pruebas offline**. [GitHub Actions 42329031195](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42329031195) comprobó en TuDorama TV segmentos MPEG-TS HTTP 206 en 3/3; [Actions 42329798420](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42329798420) verificó en VixSrc master y clave AES-128 200, más firma MPEG-TS **tras descifrar** un segmento 206 en 3/3 para película y episodio. Ese master anuncia italiano/inglés, **no** español en esas muestras. WarezCDN respondió 403 de Cloudflare antes del medio, por lo que permanece inactivo; Cinejoy, Atlantic y Cinema Army siguen sin medio contrastado. **Nada de esto sustituye la reproducción completa en Nuvio.** [Alcance y seis sitios](docs/revision-seis-sitios-2026.md) · [matriz actual](docs/providers.md).
+> **Estado:** paquete instalable para pruebas en Nuvio (sideload) y addon HTTP v3 de Stremio validado con `stremio-addon-linter`; [PR #10](https://github.com/noe359866-code/STREAMFLIX2/pull/10) fusionada. Compilan **36 bundles** y pasan **160 pruebas offline**. [GitHub Actions 42329031195](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42329031195) comprobó en TuDorama TV segmentos MPEG-TS HTTP 206 en 3/3; [Actions 42329798420](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42329798420) verificó en VixSrc master y clave AES-128 200, más firma MPEG-TS **tras descifrar** un segmento 206 en 3/3 para película y episodio. Ese master anuncia italiano/inglés, **no** español en esas muestras. WarezCDN respondió 403 de Cloudflare antes del medio, por lo que permanece inactivo; Cinejoy, Atlantic y Cinema Army siguen sin medio contrastado. **Nada de esto sustituye la reproducción completa en Nuvio.** [Alcance y seis sitios](docs/revision-seis-sitios-2026.md) · [matriz actual](docs/providers.md).
 >
 > También se [revisó CNCVerse Cloud Stream Extension](docs/revision-cncverse-cloudstream.md): publica extensiones `.cs3` para CloudStream, ninguna declarada en español y sin licencia de reutilización de sus binarios actuales. **No se importaron plugins ni se modificaron proveedores** en esa revisión; la aplicación independiente CNCVerse Bridge se describe solo como alternativa externa.
 >
@@ -34,13 +34,29 @@ npm start
 No hace falta instalar Node.js para usar los bundles ya generados en Nuvio.
 
 1. Usa una compilación de Nuvio con soporte para plugins locales/sideloaded. Los archivos `providers/*.js` son plugins nativos de Nuvio (para usarlos en Stremio utiliza el servidor del addon descrito arriba).
-2. Añade este manifiesto como repositorio de plugins:
+2. Añade este manifiesto de **jsDelivr** como repositorio de plugins:
+
+   ```text
+   https://cdn.jsdelivr.net/gh/noe359866-code/STREAMFLIX2@main/manifest.json
+   ```
+
+   No uses la portada `https://www.jsdelivr.com/` como URL de instalación. El repositorio debe seguir siendo público y los archivos deben estar publicados en la referencia indicada. Nuvio descarga cada `filename` de forma relativa al manifiesto, por lo que `providers/*.js` se sirve desde el mismo CDN sin cambiar el manifiesto. La referencia `@main` puede conservar cambios anteriores en caché hasta 12 horas; para una instalación reproducible usa una etiqueta o un SHA de commit publicado. Consulta [instalación y diagnóstico de jsDelivr](docs/nuvio-jsdelivr.md).
+
+   Desde un checkout con Node.js puedes generar la URL y comprobar la descarga después de publicar:
+
+   ```bash
+   npm run nuvio:cdn                              # URL de @main; solo valida archivos locales
+   npm run nuvio:cdn -- --ref HEAD                # URL inmutable del commit actual
+   npm run nuvio:cdn -- --ref HEAD --check        # descarga manifiesto + bundles, sin ejecutarlos
+   ```
+
+   El commit elegido para `HEAD` debe estar publicado en GitHub. La alternativa raw sigue disponible si necesitas evitar la caché del CDN:
 
    ```text
    https://raw.githubusercontent.com/noe359866-code/STREAMFLIX2/main/manifest.json
    ```
 
-   La [PR #10](https://github.com/noe359866-code/STREAMFLIX2/pull/10) sigue abierta: hasta fusionarla, `main` **no** incluye estos cambios; para revisar el paquete de la PR cambia `main` por `arena/4ed49b30-streamflix2`. Nuvio descarga cada `filename` de forma relativa al manifiesto. **Actualmente el repositorio es privado**: para que la URL raw funcione directamente en Nuvio hay que hacerlo público o alojar `manifest.json` y `providers/` en un servidor accesible (también se sirven bajo `/nuvio/manifest.json` en el servidor Stremio). No uses URLs con tokens temporales; como alternativa, utiliza el servidor local descrito abajo.
+   No uses URLs con tokens temporales. jsDelivr distribuye los plugins de Nuvio; **no sustituye el servidor del addon de Stremio** ni resuelve bloqueos de los sitios de vídeo.
 3. **No necesitas añadir otra clave TMDB dentro de Nuvio en condiciones normales.** El runtime inyecta automáticamente `TMDB_API_KEY` con la clave efectiva de Nuvio: la personal si la configuraste o la predeterminada de la app si dejaste el campo vacío. Este repositorio no incrusta ninguna clave. VideoAPI y VixSrc usan directamente el ID TMDB; WarezCDN (inactivo) usa los IDs IMDb/TMDB documentados. Los proveedores que buscan por título consultan TMDB para obtener título, año y alternativas. La clave secreta solo es necesaria para probar externamente los conectores que la requieren, donde no existe el runtime de Nuvio.
 4. Activa individualmente los proveedores que quieras probar. AnimeBum y WarezCDN aparecen intencionadamente deshabilitados.
 
@@ -123,9 +139,10 @@ Requisito: **Node.js 20 o superior**.
 
 ```bash
 npm ci
-npm run check       # compila 35 bundles + ejecuta las pruebas offline
+npm run check       # compila los bundles + ejecuta las pruebas offline
 npm run build       # solo compila src/providers/*/index.js y manifest.json
 npm test            # no hace peticiones externas
+npm run nuvio:cdn   # valida el paquete local y muestra la URL jsDelivr; sin red
 ```
 
 - `src/core/`: HTTP con timeouts, cookies por dominio, TMDB, comparación de títulos, HTML, Base64, AES/PoW y extractores.
@@ -160,6 +177,8 @@ TMDB_API_KEY=... npm run test:playback -- \
 ### GitHub Actions
 
 El workflow **Validate Nuvio plugins** ejecuta `npm ci`, `npm run check`, valida el servidor y publica un artifact con el paquete instalable. Puede lanzarse manualmente con proveedor, ID TMDB, tipo, temporada, episodio y opción de playback; para proveedores que resuelven metadatos necesita el secreto `TMDB_API_KEY` del repositorio.
+
+El workflow manual **Verificar Nuvio en jsDelivr** (`nuvio-cdn.yml`) descarga el manifiesto y los bundles de la referencia publicada que elijas (`main`, etiqueta o SHA), sin secretos y sin ejecutar plugins. Es independiente de las pruebas de medios y de la instalación en Nuvio.
 
 El marcador `[live]` ejecuta por defecto VideoAPI, y `[live-providers]` sondea los seis adaptadores vigentes de su matriz. Para las webs nuevas: `[recon-five-sites]` revisa estructura de los cinco dominios originales, `[player-five-sites]` prueba TuDorama/VixSrc sin publicar tokens, `[assets-five-sites]` revisa sus SPA, `[audit-tudorama]` y `[audit-vixsrc]` auditan sus adaptadores (película/TV); `[recon-warezcdn]` contrasta la API documentada. `[audit-new-sites]` conserva los tres intentos de Repelis24/Gnula. En el workflow manual se puede elegir un proveedor e ID TMDb/IMDb (Cinemeta). Resultados **históricos** anteriores a las retiradas y añadidos recientes:
 

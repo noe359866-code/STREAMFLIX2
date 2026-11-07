@@ -16,6 +16,7 @@
     "start": "node stremio/server.cjs",
     "start:stremio": "node stremio/server.cjs",
     "start:nuvio": "node server.cjs",
+    "nuvio:cdn": "node scripts/nuvio-cdn.cjs",
     "deploy:beamup": "bash scripts/deploy-beamup.sh"
   },
   "dependencies": {
