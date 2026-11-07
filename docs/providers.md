@@ -1,6 +1,6 @@
 # Matriz de proveedores
 
-Estado al **7 de noviembre de 2026**. “Fixture” valida el recorrido offline, **no** reproducción. [La revisión de los seis dominios solicitados](revision-seis-sitios-2026.md) verificó segmentos de TuDorama TV y VixSrc en Actions; VixSrc ofreció en las muestras pistas **italianas/inglesas**, no españolas. CineHax (antes con algunas pruebas válidas) y TukiPlay se retiraron **por petición del usuario**. WarezCDN está incorporado pero desactivado por desafíos de Cloudflare desde Actions; Cinejoy, Atlantic y Cinema Army no tienen medio verificable. Ningún conector se ha probado en el reproductor de Nuvio.
+Estado al **6 de noviembre de 2026**. “Fixture” valida el recorrido offline, **no** reproducción. [La revisión de los seis dominios solicitados](revision-seis-sitios-2026.md) verificó segmentos de TuDorama TV y VixSrc en Actions; VixSrc ofreció en las muestras pistas **italianas/inglesas**, no españolas. CineHax (antes con algunas pruebas válidas) y TukiPlay se retiraron **por petición del usuario**. WarezCDN está incorporado pero desactivado por desafíos de Cloudflare desde Actions; Cinejoy, Atlantic y Cinema Army no tienen medio verificable. Ningún conector se ha probado en el reproductor de Nuvio.
 
 | ID | Nombre y dominio portado | Tipos | Manifiesto | Fixture | Implementación / limitación principal |
 |---|---|---|---|---|---|
