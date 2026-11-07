@@ -317,6 +317,51 @@ jobs:
           path: audit-tudorama-${{ matrix.sample }}.json
           if-no-files-found: warn
 
+  vixsrc-media:
+    name: Auditar el conector VixSrc ${{ matrix.sample }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-vixsrc]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [movie, tv]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver película/episodio real y comprobar que el runtime conserva HLS cifrado
+        run: >-
+          node scripts/media-audit.cjs --provider vixsrc --sample "${{ matrix.sample }}"
+          --output "audit-vixsrc-${{ matrix.sample }}.json"
+      - name: Publicar solamente estados, hostnames e idiomas del master
+        env:
+          SAMPLE: ${{ matrix.sample }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const sample = process.env.SAMPLE;
+          const report = JSON.parse(fs.readFileSync(`audit-vixsrc-${sample}.json`, 'utf8'));
+          const attempts = report.attempts.map(({ discovered, mediaCount, languages, runtimeFilter, discoveryEvents, media }) => ({
+            discovered, mediaCount, languages, runtimeFilter, discoveryEvents,
+            media: media.map(({ format, stage, status, host, outcome, signature }) =>
+              ({ format, stage, status, host, outcome, signature })),
+          }));
+          console.log(`::notice file=scripts/media-audit.cjs,title=vixsrc-${sample}::${JSON.stringify({ attempts, decision: report.decision })}`);
+          NODE
+      - name: Guardar informe sanitizado de los tres intentos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vixsrc-${{ matrix.sample }}-media
+          path: audit-vixsrc-${{ matrix.sample }}.json
+          if-no-files-found: warn
+
   cuevana-reference:
     name: Contrastar dominios y estructura de cuevana3 (3 intentos)
     if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-cuevana3]')

@@ -35,15 +35,15 @@ test('los proveedores solo de series y los inactivos están marcados correctamen
   for (const id of ['pelisforte', 'pelisgo']) {
     assert.deepEqual(manifest.scrapers.find((item) => item.id === id).supportedTypes, ['movie', 'tv']);
   }
-  for (const id of ['animebum', 'vixsrc', 'warezcdn']) {
+  for (const id of ['animebum', 'warezcdn']) {
     assert.equal(manifest.scrapers.find((item) => item.id === id).enabled, false);
     assert.ok(!ACTIVE_IDS.includes(id), `${id} no debe aparecer en la configuración de Stremio`);
   }
-  for (const id of ['gnulaone', 'repelis24', 'tudorama']) {
+  for (const id of ['gnulaone', 'repelis24', 'tudorama', 'vixsrc']) {
     assert.equal(manifest.scrapers.find((item) => item.id === id).enabled, true);
     assert.ok(ACTIVE_IDS.includes(id), `${id} debe estar disponible en Stremio`);
   }
-  assert.equal(manifest.scrapers.filter((item) => item.enabled).length, 32);
+  assert.equal(manifest.scrapers.filter((item) => item.enabled).length, 33);
 });
 
 test('cada bundle exporta getStreams y no depende de builtins de Node', async () => {

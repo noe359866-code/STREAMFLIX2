@@ -543,12 +543,14 @@ async function checkHls(url, options, depth = 0) {
     }
     return !playlist.truncated && variants.length <= 3 && verdicts2.every((item) => item === "bad") ? "bad" : "unknown";
   }
+  let encryptedWithKey = false;
   if (key) {
     if (!/\bMETHOD=AES-128(?:,|$)/i.test(key)) return "unknown";
     const keyUrl = absoluteUrl(attributeUri(key), playlist.url);
     const secret = await checkedSample(keyUrl, options, 32);
     if (mediaStatus(secret) === "bad" || secret.bytes && secret.bytes.length < 16) return playlist.truncated ? "unknown" : "bad";
     if (!secret.bytes) return "unknown";
+    encryptedWithKey = secret.bytes.length === 16;
   }
   if (init) {
     const initUrl = absoluteUrl(attributeUri(init), playlist.url);
@@ -560,8 +562,20 @@ async function checkHls(url, options, depth = 0) {
   const verdicts = [];
   for (const ref of segments.slice(0, 2)) {
     const segment = absoluteUrl(ref, playlist.url);
-    verdicts.push(publicUrl(segment) ? binaryStatus(await checkedSample(segment, options, MEDIA_BYTES)) : "unknown");
-    if (verdicts[verdicts.length - 1] === "good") return "good";
+    if (!publicUrl(segment)) {
+      verdicts.push("unknown");
+      continue;
+    }
+    const sampled = await checkedSample(segment, options, MEDIA_BYTES);
+    let verdict = binaryStatus(sampled);
+    if (encryptedWithKey && verdict === "bad" && sampled.status >= 200 && sampled.status < 300 && /^text\/html\b/i.test(sampled.mime) && sampled.bytes?.length >= 188) {
+      const bytes = sampled.bytes.subarray(0, Math.min(256, sampled.bytes.length));
+      let printable = 0;
+      for (const byte of bytes) if (byte === 9 || byte === 10 || byte === 13 || byte >= 32 && byte <= 126) printable += 1;
+      if (printable < bytes.length * 0.6) verdict = "unknown";
+    }
+    verdicts.push(verdict);
+    if (verdict === "good") return "good";
   }
   return verdicts.every((item) => item === "bad") ? "bad" : "unknown";
 }

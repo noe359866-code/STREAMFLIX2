@@ -94,6 +94,7 @@ const TUDORAMA_TV = {
 function sampleFor(scraper) {
   const id = scraper.id;
   if (id === 'tudorama') return arg('sample') === 'tv' ? TUDORAMA_TV : TUDORAMA_MOVIE;
+  if (id === 'vixsrc') return arg('sample') === 'tv' ? SERIES : MOVIE;
   // Cuevana.gs redirige a cuevanas3.pro; su búsqueda de Joker devolvió
   // `animes` (3/3). Fight Club daba 0 fuentes en la muestra de película.
   if (['animeav1', 'animeonlineninja', 'jkanime', 'latanime', 'tioanime', 'cuevana'].includes(id)) return ANIME;
@@ -181,6 +182,7 @@ async function auditOne(scraper) {
           discovered: streams.length,
           mediaCount: candidates.length,
           otherFormats: streams.length - candidates.length,
+          languages: [...new Set(streams.map((stream) => stream.language || 'und'))].slice(0, 8),
           discovery403: [...new Set(discovery403)],
           discoveryEvents,
           warnings,

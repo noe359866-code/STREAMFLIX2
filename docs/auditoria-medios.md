@@ -1,5 +1,7 @@
 # Auditoría de medios HLS/MP4 desde GitHub Actions
 
+> Resultados de las ejecuciones antiguas: CineHax y TukiPlay se retiraron después por petición expresa. Las altas posteriores y el análisis AES-128 de VixSrc están en [el estado actual de seis sitios](revision-seis-sitios-2026.md) y en [la matriz](providers.md).
+
 Para ejecutar la auditoría en la rama que contiene el workflow, ve a **Actions → Validate Nuvio plugins → Run workflow** y escribe `audit-media` en el campo **provider**. Desde la CLI:
 
 ```bash

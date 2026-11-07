@@ -89,6 +89,28 @@ test('HLS: no entrega HTML como playlist ni segmentos HTML de un HLS 200', async
   assert.equal(await probeStream(hls(master), playable), 'good');
 });
 
+test('HLS AES-128: conservar bytes cifrados con MIME HTML engañoso, descartar HTML legible', async () => {
+  const playlist = 'https://cdn.example/encrypted/master.m3u8';
+  const key = 'https://cdn.example/encrypted/key.bin';
+  const segment = 'https://cdn.example/encrypted/part.ts';
+  const manifest = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXTINF:4,\npart.ts\n';
+  const cipher = Buffer.alloc(2048);
+  for (let index = 0; index < cipher.length; index += 1) cipher[index] = (index * 149 + 31) % 256;
+  const real = mockFetch({
+    [playlist]: { body: manifest },
+    [key]: { body: Buffer.alloc(16, 3) },
+    [segment]: { body: cipher, mime: 'text/html', status: 206 },
+  });
+  assert.equal(await probeStream(hls(playlist), real), 'unknown', 'el filtro no puede descifrar en QuickJS');
+  assert.equal((await filterUnplayableStreams([hls(playlist)], { fetchImpl: real.fetchImpl })).length, 1);
+  const fake = mockFetch({
+    [playlist]: { body: manifest },
+    [key]: { body: Buffer.alloc(16, 3) },
+    [segment]: { body: '<html>Bloqueado</html>'.repeat(20), mime: 'text/html', status: 206 },
+  });
+  assert.equal(await probeStream(hls(playlist), fake), 'bad');
+});
+
 test('HLS: variante accesible conserva el master, mientras clave o inicialización 403 verificadas lo descartan', async () => {
   const root = 'https://cdn.example/main.m3u8';
   const variant = 'https://cdn.example/valid.m3u8';

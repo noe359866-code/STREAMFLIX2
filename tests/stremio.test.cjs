@@ -35,12 +35,14 @@ test('Stremio manifest pasa stremio-addon-linter (validación check-deploy de Be
   assert.deepEqual(defaultManifest.types, ['movie', 'series']);
   assert.equal(defaultManifest.behaviorHints.configurable, true);
   assert.equal(defaultManifest.behaviorHints.configurationRequired, false);
-  assert.match(defaultManifest.description, /32 proveedores activos/);
+  assert.match(defaultManifest.description, /33 proveedores activos/);
   assert.ok(ACTIVE_IDS.includes('gnulaone'));
   assert.ok(ACTIVE_IDS.includes('repelis24'));
   assert.ok(!ACTIVE_IDS.includes('tukiplay'));
   assert.ok(!ACTIVE_IDS.includes('cinehax'));
   assert.ok(ACTIVE_IDS.includes('tudorama'));
+  assert.ok(ACTIVE_IDS.includes('vixsrc'));
+  assert.ok(!ACTIVE_IDS.includes('warezcdn'));
 
   const customManifest = buildManifest({
     providers: ['videoapi', 'cuevana'],

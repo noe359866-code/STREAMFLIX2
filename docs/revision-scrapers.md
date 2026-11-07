@@ -1,10 +1,10 @@
 # Revisión integral de los 34 scrapers — 6 de noviembre de 2026
 
-> Esta tabla conserva los resultados de la auditoría `42295795690`. La comparación posterior con el proyecto Android, los cambios portados y la nueva auditoría `42298326175` se documentan en [porte-streamflix-reborn2.md](porte-streamflix-reborn2.md); no interpretar los resultados históricos de Zilla/CineHax como el estado actual de esas fuentes.
+> **Inventario histórico de 34 scrapers.** Esta tabla conserva los resultados de `42295795690`, previos a la retirada solicitada de CineHax/TukiPlay y las altas de TuDorama/VixSrc/WarezCDN. [Matriz vigente](providers.md) · [contraste actual de los seis sitios](revision-seis-sitios-2026.md). La comparación con el proyecto Android y la auditoría `42298326175` están en [porte-streamflix-reborn2.md](porte-streamflix-reborn2.md).
 
 ## Alcance y criterio
 
-Se revisaron los **34 adaptadores** de `src/providers/` frente a los manifiestos Nuvio y Stremio, la capa compartida (`src/core/`) y las pruebas offline. Hay **32 activos**; `animebum` y `tukiplay` siguen inactivos. Los 34 compilan y tienen pruebas offline de sus rutas principales, pero los fixtures no demuestran disponibilidad real ni reproducción en un dispositivo.
+Se revisaron los **34 adaptadores** de `src/providers/` frente a los manifiestos Nuvio y Stremio, la capa compartida (`src/core/`) y las pruebas offline. Había **32 activos**; `animebum` y `tukiplay` estaban inactivos en esa auditoría. Los 34 compilan y tienen pruebas offline de sus rutas principales, pero los fixtures no demuestran disponibilidad real ni reproducción en un dispositivo.
 
 La comprobación externa se ejecutó **desde GitHub Actions**, con **tres intentos por cada uno de los 32 activos**, un título de muestra por proveedor, límites de descarga y sin publicar URL firmadas ni cookies. Se distingue búsqueda/ficha/player de la petición al **HLS o MP4**. Un 403 del catálogo, una página 200 o una playlist 200 **no** demuestran ni bloqueo del vídeo ni reproducción. `medio-accesible` significa que al menos una muestra de un segmento/MP4 tuvo firma reconocible; no que la película completa funcione en Nuvio/Stremio, desde otra IP o para todos los títulos. Solo se propone retirar un proveedor cuando **todos** sus medios encontrados dan 403 en los tres intentos y no existen fuentes alternativas sin verificar.
 

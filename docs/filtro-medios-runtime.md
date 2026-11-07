@@ -1,5 +1,7 @@
 # Filtrado conservador de medios al servir Nuvio y Stremio
 
+> Las cifras de 34 bundles y la mención de CineHax corresponden a la auditoría histórica citada. [Inventario vigente](providers.md); CineHax y TukiPlay fueron retirados posteriormente por petición. El filtro ahora también **conserva como inconclusos** los segmentos AES-128 con clave válida y bytes cifrados aunque el CDN anuncie `text/html`; sigue rechazando HTML legible y 403 confirmados (caso [VixSrc](revision-seis-sitios-2026.md)).
+
 Cambio independiente en `src/core/media-filter.js`, integrado en `providerGuard` (`src/core/streams.js`): **los 34 bundles** usados por Nuvio y por el addon Stremio intentan descartar enlaces de HLS/MP4 *individuales* que muestran evidencia de no ser vídeo. No procede de código de CNCVerse: su [revisión](revision-cncverse-cloudstream.md) no identificó fuentes actuales reutilizables bajo Apache-2.0.
 
 ## Qué se prueba

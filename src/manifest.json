@@ -369,12 +369,12 @@
     },
     {
       "id": "vixsrc",
-      "name": "VixSrc (audio no español confirmado)",
-      "description": "API por ID TMDB y HLS firmado: italiano/inglés observados; en evaluación hasta confirmar segmentos de vídeo.",
+      "name": "VixSrc (audio italiano/inglés)",
+      "description": "API por ID TMDB y HLS AES-128; MPEG-TS verificado tras descifrar 3/3. El audio español no consta en las muestras.",
       "version": "1.0.0",
       "filename": "providers/vixsrc.js",
       "supportedTypes": ["movie", "tv"],
-      "enabled": false,
+      "enabled": true,
       "contentLanguage": ["it", "en"],
       "supportedFormats": ["hls"]
     },

@@ -8,7 +8,7 @@ El repositorio publica un objeto JSON de nivel superior con `name`, `version` y 
 
 - `supportedTypes`: `movie`, `tv` o ambos.
 - `enabled`: permite conservar AnimeBum sin activarlo.
-- `contentLanguage`: `es` en todos los conectores.
+- `contentLanguage`: idiomas declarados/observados según conector; TuDorama incluye `es`/`en`, VixSrc `it`/`en` y WarezCDN inactivo declara idioma no verificado (`und`). No se infiere español de `lang=es` en la URL.
 - `supportedFormats`: formatos que el código puede entregar.
 - `description`: alcance y limitaciones visibles.
 
@@ -24,7 +24,7 @@ getStreams(tmdbId, mediaType, season, episode)
 
 Nuvio normaliza IDs `tmdb:`/`tmdb/` y los sufijos de episodio antes de llamar al scraper. Los adaptadores también toleran IDs prefijados y validan los números para evitar episodios por defecto incorrectos.
 
-El runtime ejecuta `globalThis.TMDB_API_KEY = __get_tmdb_api_key()`, y ese binding devuelve `TmdbSettingsRepository.effectiveApiKey()`: la clave personal si existe o la predeterminada de Nuvio si el ajuste está vacío. Por tanto, los conectores usan automáticamente la misma clave efectiva que la app. **No reciben el objeto del catálogo ya cargado ni su título/año**: la firma solo contiene ID, tipo, temporada y episodio. Por eso los proveedores basados en búsqueda necesitan hacer sus propias consultas TMDB, aunque aprovechen la misma clave inyectada. CineHax es la excepción y trabaja directamente con el ID.
+El runtime ejecuta `globalThis.TMDB_API_KEY = __get_tmdb_api_key()`, y ese binding devuelve `TmdbSettingsRepository.effectiveApiKey()`: la clave personal si existe o la predeterminada de Nuvio si el ajuste está vacío. Por tanto, los conectores usan automáticamente la misma clave efectiva que la app. **No reciben el objeto del catálogo ya cargado ni su título/año**: la firma solo contiene ID, tipo, temporada y episodio. Por eso los proveedores basados en búsqueda necesitan hacer sus propias consultas TMDB, aunque aprovechen la misma clave inyectada. VideoAPI y VixSrc trabajan directamente con el ID; WarezCDN (inactivo) utiliza los IDs documentados.
 
 Los resultados siguen `PluginRuntimeResult`: `title`, `name`, `url`, `quality`, `language`, `provider`, `type`, `headers` y, cuando existen, `subtitles`. No se implementa catálogo ni metadata: ese no es el contrato de un plugin local de streams.
 

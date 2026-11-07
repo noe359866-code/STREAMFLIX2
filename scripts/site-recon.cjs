@@ -17,7 +17,7 @@ const REQUESTED_TARGETS = [
   { id: 'vixsrc', base: 'https://vixsrc.to', paths: ['/api/movie/550', '/api/tv/1396/1/1', '/movie/550?lang=es'], title: /fight|club|breaking|bad/i },
   { id: 'cinejoy', base: 'https://cinejoy.pk', paths: ['/watch/movie/550', '/watch/tv/1396/1/1', '/api/movie/550'], title: /one\s*piece/i },
   { id: 'atlantic', base: 'https://atlantic.bz', paths: ['/watch/movie/550', '/movie/550', '/api/movie/550', '/embed/movie/550', '/embed/tv/1396/1/1'], title: /fight|club/i },
-  { id: 'cinemaarmy', base: 'https://cinema.army', paths: ['/watch?id=550&type=movie', '/api/tcloud/movie/550', '/api/cookiebakers/movie/550'], title: /fight|club/i },
+  { id: 'cinemaarmy', base: 'https://cinema.army', paths: ['/watch?id=550&type=movie', '/api/tcloud/movie/550', '/api/cookiebakers/movie/550', '/api/tidb/movie/550', '/api/tidb/tv/1396/1/1'], title: /fight|club/i },
 ];
 const targetIndex = process.argv.indexOf('--target');
 const targetId = targetIndex >= 0 ? process.argv[targetIndex + 1] : '';
