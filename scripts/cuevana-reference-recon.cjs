@@ -145,4 +145,4 @@ if (require.main === module) main().catch((error) => {
   console.error(`Diagnóstico de Cuevana no completado: ${error.name || 'error'}`);
   process.exitCode = 1;
 });
-module.exports = { inspectBody };
+module.exports = { inspectBody, inspect };

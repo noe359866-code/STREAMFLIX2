@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { inspectBody } = require('../scripts/cuevana-reference-recon.cjs');
+const { inspectBody, inspect } = require('../scripts/cuevana-reference-recon.cjs');
 
 test('diagnóstico: distingue catálogo, ficha, episodios e idiomas del HTML antiguo', () => {
   const sample = `<div id="aa-wp"><div class="TPost C"></div></div>
@@ -17,7 +17,7 @@ test('diagnóstico: distingue catálogo, ficha, episodios e idiomas del HTML ant
   });
 });
 
-test('diagnóstico: HTML 403 o protección web no se interpreta como medio fallido', () => {
+test('diagnóstico: HTML sin marcadores legacy no representa una ficha', () => {
   assert.deepEqual(inspectBody('<h1>Forbidden</h1>', 'text/html'), {
     kind: 'html', legacyCatalog: false, legacyDetail: false, legacySeason: false,
     options: { L: 0, E: 0, S: 0 }, lazyIframes: 0,
@@ -29,4 +29,30 @@ test('diagnóstico: HTML 403 o protección web no se interpreta como medio falli
   ] } }), 'application/json'), {
     kind: 'json', posts: 2, types: ['movie', 'tvshows'], jokerMoviesWithId: 1,
   });
+});
+
+test('diagnóstico: un 403 de catálogo no se examina como HTML/medio ni sigue a un tercero', async () => {
+  const previous = global.fetch;
+  const calls = [];
+  try {
+    global.fetch = async (url) => {
+      calls.push(String(url));
+      return new Response('<div id="OptL1"><iframe data-src="//host/player"></iframe></div>', {
+        status: 403, headers: { 'Content-Type': 'text/html' },
+      });
+    };
+    const blocked = await inspect('https://cuevana3.me/21711/joker');
+    assert.equal(blocked.status, 403);
+    assert.equal(blocked.body, null);
+    assert.equal(blocked.host, 'cuevana3.me');
+
+    global.fetch = async (url) => {
+      calls.push(String(url));
+      return new Response(null, { status: 302, headers: { Location: 'https://unrelated.example/player' } });
+    };
+    const redirected = await inspect('https://cuevana.gs/');
+    assert.equal(redirected.stopped, 'outside-known-domains');
+    assert.deepEqual(redirected.redirects, [{ status: 302, host: 'unrelated.example' }]);
+    assert.equal(calls.length, 2, 'no debe seguir el redirect fuera de los dominios revisados');
+  } finally { global.fetch = previous; }
 });
