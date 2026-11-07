@@ -5,6 +5,7 @@
 // nonces, tokens y URL firmadas se usan solo en memoria: nunca se serializan.
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { checkHls } = require('./media-audit-lib.cjs');
 const BASES = { tudorama: 'https://tudorama.com', vixsrc: 'https://vixsrc.to' };
 const site = process.argv[process.argv.indexOf('--site') + 1];
@@ -107,6 +108,85 @@ function mediaDeclarations(html) {
     .find((url) => /\/playlist\/|\.m3u8(?:[?#]|$)/i.test(url)) || '';
   return { token, expires, playlist };
 }
+// Si un segmento AES-128 no muestra firma MPEG-TS *antes* de descifrarlo,
+// comprobar con la clave publicada en la propia playlist (sin guardarla).
+function mediaUrl(uri, base) {
+  try {
+    const url = new URL(uri, base);
+    if (url.protocol !== 'https:' || !/^(?:[a-z0-9-]+\.)*(?:vixsrc\.to|vixcloud\.(?:co|cc)|secretanchor\d+\.boats|crystalharbor\d+\.boats)$/i.test(url.hostname)) return null;
+    return url;
+  } catch (_) { return null; }
+}
+async function smallSample(url, referer, maximum, range = false) {
+  try {
+    const response = await fetch(url, { headers: {
+      'User-Agent': UA, Referer: referer, Origin: BASE,
+      ...(range ? { Range: `bytes=0-${maximum - 1}` } : {}),
+    }, redirect: 'manual', signal: AbortSignal.timeout(9000) });
+    const reader = response.body?.getReader();
+    const chunks = [];
+    let size = 0;
+    if (reader) {
+      try {
+        while (size < maximum) {
+          const part = await reader.read();
+          if (part.done) break;
+          const bytes = Buffer.from(part.value).subarray(0, maximum - size);
+          chunks.push(bytes); size += bytes.length;
+        }
+      } finally { await reader.cancel().catch(() => {}); }
+    }
+    return { status: response.status, body: Buffer.concat(chunks), mime: (response.headers.get('content-type') || '').split(';')[0] };
+  } catch (error) { return { status: null, error: error?.name || 'red', body: Buffer.alloc(0) }; }
+}
+function tsSignature(bytes) {
+  return bytes?.length >= 376 && bytes[0] === 0x47 && bytes[188] === 0x47 ? 'mpeg-ts'
+    : bytes?.length >= 12 && ['ftyp', 'styp', 'moof'].includes(bytes.toString('ascii', 4, 8)) ? 'mp4'
+      : bytes?.length >= 3 && bytes.toString('ascii', 0, 3) === 'ID3' ? 'id3-audio' : 'desconocida';
+}
+async function inspectEncrypted(playlistUrl, embedUrl) {
+  const master = await smallSample(playlistUrl, embedUrl, 128000);
+  if (master.status !== 200 || !master.body.toString('utf8').startsWith('#EXTM3U')) return { master: master.status };
+  const lines = master.body.toString('utf8').split(/\r?\n/).map((line) => line.trim());
+  const variantAt = lines.findIndex((line) => /^#EXT-X-STREAM-INF:/i.test(line));
+  const variantRef = variantAt >= 0 ? lines.slice(variantAt + 1).find((line) => line && !line.startsWith('#')) : '';
+  const variantUrl = variantRef ? mediaUrl(variantRef, playlistUrl) : mediaUrl(playlistUrl, playlistUrl);
+  if (!variantUrl) return { master: master.status, skipped: 'variante-fuera-de-dominios-observados' };
+  const variant = variantRef ? await smallSample(variantUrl.href, embedUrl, 128000) : master;
+  if (variant.status !== 200 || !variant.body.toString('utf8').startsWith('#EXTM3U')) return { master: master.status, variant: variant.status };
+  const rows = variant.body.toString('utf8').split(/\r?\n/).map((line) => line.trim());
+  const key = rows.find((line) => /^#EXT-X-KEY:/i.test(line)) || '';
+  const method = /\bMETHOD=([A-Z0-9-]+)/i.exec(key)?.[1] || 'ninguno';
+  const segmentAt = rows.findIndex((line) => /^#EXTINF:/i.test(line));
+  const segmentRef = segmentAt >= 0 ? rows.slice(segmentAt + 1).find((line) => line && !line.startsWith('#')) : '';
+  const segmentUrl = segmentRef ? mediaUrl(segmentRef, variantUrl.href) : null;
+  if (!segmentUrl) return { master: master.status, variant: variant.status, method, skipped: 'sin-segmento-observable' };
+  const segment = await smallSample(segmentUrl.href, embedUrl, 4096, true);
+  const result = { master: master.status, variant: variant.status, method,
+    segment: segment.status, mime: scrub(segment.mime), bytes: segment.body.length,
+    signatureRaw: tsSignature(segment.body) };
+  if (method !== 'AES-128' || !key) return result;
+  const keyRef = /\bURI="([^"]+)"/i.exec(key)?.[1] || '';
+  const keyUrl = keyRef ? mediaUrl(keyRef, variantUrl.href) : null;
+  if (!keyUrl) return { ...result, key: 'no-observable' };
+  const secret = await smallSample(keyUrl.href, embedUrl, 32);
+  result.key = secret.status;
+  if (secret.status !== 200 || secret.body.length !== 16) return result;
+  const ivHex = /\bIV=0x([a-f0-9]{32})(?:,|$)/i.exec(key)?.[1];
+  const iv = ivHex ? Buffer.from(ivHex, 'hex') : Buffer.alloc(16);
+  if (!ivHex) {
+    const sequence = Number(/#EXT-X-MEDIA-SEQUENCE:(\d+)/i.exec(variant.body.toString('utf8'))?.[1] || 0);
+    if (Number.isSafeInteger(sequence) && sequence >= 0) iv.writeBigUInt64BE(BigInt(sequence), 8);
+  }
+  const bytes = segment.body.subarray(0, segment.body.length - (segment.body.length % 16));
+  if (bytes.length < 384) return result;
+  try {
+    const decipher = crypto.createDecipheriv('aes-128-cbc', secret.body, iv);
+    decipher.setAutoPadding(false);
+    result.signatureDecrypted = tsSignature(Buffer.concat([decipher.update(bytes), decipher.final()]));
+  } catch (_) { result.signatureDecrypted = 'no-decodificable'; }
+  return result;
+}
 async function vixsrc() {
   const output = [];
   for (const route of ['/api/movie/550?lang=es', '/api/tv/1396/1/1?lang=es']) {
@@ -180,7 +260,11 @@ async function vixsrc() {
             // Se publica únicamente host, estado y firma de unos KB del primer
             // segmento; la URL con firma caduca y jamás sale del proceso.
             entry.segment = { outcome: sample.outcome, stage: sample.stage,
-              status: sample.status, host: sample.host, signature: sample.signature };
+              status: sample.status, host: sample.host, signature: sample.signature,
+              bytes: sample.bytesRead, mime: sample.mime };
+            if (sample.stage === 'segmento' && sample.signature === 'desconocida') {
+              entry.encryption = await inspectEncrypted(playlistUrl.href, target.href);
+            }
           }
         } catch (error) { entry.playlist = { error: error?.cause?.code || error?.name || 'red' }; }
       }

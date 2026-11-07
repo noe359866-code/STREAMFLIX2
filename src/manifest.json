@@ -357,6 +357,28 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "warezcdn",
+      "name": "WarezCDN (en evaluación)",
+      "description": "Rutas /filme/{id} y /serie/{id}/{s}/{e} documentadas; Cloudflare bloqueó catálogo y player desde Actions (3/3).",
+      "version": "1.0.0",
+      "filename": "providers/warezcdn.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": false,
+      "contentLanguage": ["und"],
+      "supportedFormats": ["hls", "mp4"]
+    },
+    {
+      "id": "vixsrc",
+      "name": "VixSrc (audio no español confirmado)",
+      "description": "API por ID TMDB y HLS firmado: italiano/inglés observados; en evaluación hasta confirmar segmentos de vídeo.",
+      "version": "1.0.0",
+      "filename": "providers/vixsrc.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": false,
+      "contentLanguage": ["it", "en"],
+      "supportedFormats": ["hls"]
+    },
+    {
       "id": "animebum",
       "name": "AnimeBum (inactivo)",
       "description": "Porte conservado porque existe en Streamflix; el proveedor está deshabilitado en el origen.",

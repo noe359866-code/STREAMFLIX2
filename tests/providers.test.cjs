@@ -234,6 +234,72 @@ test('TuDorama: episodio exacto por paginación AJAX, no inventa otro capítulo'
   assert.ok(!missing.calls.some((call) => call.url.includes('/ver/contenido-demo-s2x4/')));
 });
 
+test('VixSrc: usa API TMDB y URL /playlist declarada, devuelve HLS con idioma de audio del master', async () => {
+  const master = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Italiano",DEFAULT=YES,LANGUAGE="ita",URI="ita.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="English",DEFAULT=NO,LANGUAGE="eng",URI="en.m3u8"\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Español",LANGUAGE="spa",URI="/sub/es.vtt"\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvideo.m3u8\n';
+  const result = await run('vixsrc', {
+    mediaType: 'tv', contentId: '1396', season: 2, episode: 3,
+    routes: [
+      ['vixsrc.to/api/tv/1396/2/3?lang=es', { src: '/embed/1396/2/3?lang=es' }],
+      ['vixsrc.to/embed/1396/2/3?lang=es', `<script>const media={"url":"https:\\/\\/vixsrc.to\\/playlist\\/1396","token":"ValidToken_1234","expires":"9999999999","canPlayFHD":true};</script>`],
+      ['vixsrc.to/playlist/1396.m3u8?', master],
+    ],
+  });
+  assertStream(result);
+  const stream = result.streams[0];
+  assert.equal(stream.language, 'it', 'lang=es solicitado no convierte una pista italiana en española');
+  assert.ok(stream.url.includes('h=1') && stream.url.includes('token=ValidToken_1234'));
+  assert.equal(stream.headers.Referer, 'https://vixsrc.to/embed/1396/2/3?lang=es');
+  assert.equal(stream.subtitles[0].language, 'es');
+  assert.equal(stream.subtitles[0].url, 'https://vixsrc.to/sub/es.vtt');
+});
+
+test('VixSrc: descarta embed ajeno, token caducado y playlist HTML (no se entrega como HLS)', async () => {
+  const api = 'vixsrc.to/api/movie/123?lang=es';
+  const hostile = await run('vixsrc', { mediaType: 'movie', routes: [[api, { src: 'https://bad.vixsrc.to/embed/123' }]] });
+  assert.deepEqual(hostile.streams, []);
+  assert.ok(!hostile.calls.some((call) => call.url.includes('bad.vixsrc.to')));
+  const expired = await run('vixsrc', { mediaType: 'movie', routes: [
+    [api, { src: '/embed/123' }],
+    ['vixsrc.to/embed/123', '<script>const p={"url":"/playlist/123","token":"ValidToken_1234","expires":"1000000000"};</script>'],
+  ] });
+  assert.deepEqual(expired.streams, []);
+  assert.ok(!expired.calls.some((call) => call.url.includes('/playlist/123')));
+  const html = await run('vixsrc', { mediaType: 'movie', routes: [
+    [api, { src: '/embed/123' }],
+    ['vixsrc.to/embed/123', '<script>const p={"url":"/playlist/123","token":"ValidToken_1234","expires":"9999999999"};</script>'],
+    ['vixsrc.to/playlist/123.m3u8?', '<html>Sesión no autorizada</html>'],
+  ] });
+  assert.deepEqual(html.streams, []);
+});
+
+test('WarezCDN: rutas de película/episodio de la documentación, solo medio resuelto y audio desconocido', async () => {
+  const routes = [
+    ['warezcdn.sbs/filme/123', '<div id="PlayerContainer"><iframe src="https://earnvids.com/e/demo"></iframe></div>'],
+    ['warezcdn.sbs/serie/123/2/3', '<div id="PlayerContainer"><iframe src="https://earnvids.com/e/demo"></iframe></div>'],
+    ['earnvids.com/e/demo', fixture('player-hls.html')],
+  ];
+  for (const mediaType of ['movie', 'tv']) {
+    const result = await run('warezcdn', { mediaType, routes });
+    assertStream(result);
+    assert.equal(result.streams[0].language, 'und');
+    assert.equal(result.streams[0].url, HLS);
+    assert.ok(result.calls.some((call) => call.url.includes(mediaType === 'tv'
+      ? '/serie/123/2/3' : '/filme/123')));
+    assert.ok(result.streams.every((stream) => !stream.url.includes('warezcdn.sbs/serie')));
+  }
+});
+
+test('WarezCDN: rechaza IDs inyectados y un 403 HTML de Cloudflare sin fabricar un stream', async () => {
+  const injected = await run('warezcdn', { mediaType: 'movie', contentId: 'bad/../player' });
+  assert.deepEqual(injected.streams, []);
+  assert.equal(injected.calls.length, 0);
+  const blocked = await run('warezcdn', { mediaType: 'movie', routes: [
+    ['warezcdn.sbs/filme/123', { __response: true, status: 403, body: '<html>Just a moment...</html>' }],
+  ] });
+  assert.deepEqual(blocked.streams, []);
+  assert.ok(!blocked.calls.some((call) => call.url.includes('earnvids')));
+});
+
 test('Doramasflix: GraphQL detail/listEpisodes/links_online', async () => {
   function gql(data) {
     return (url, init) => ({ data });

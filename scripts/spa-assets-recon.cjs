@@ -13,7 +13,7 @@ if (!SITES[site]) throw new Error('Usa --site cinejoy|atlantic|cinemaarmy');
 const BASE = SITES[site];
 const HOME = { cinejoy: '/watch/movie/550', atlantic: '/watch/movie/550', cinemaarmy: '/watch?id=550&type=movie' };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-const MAX_BYTES = 1500000;
+const MAX_BYTES = 4000000;
 
 async function read(url, referer) {
   const uri = new URL(url, BASE);
@@ -64,8 +64,9 @@ function scripts(html) {
 function pathsIn(text) {
   const found = [...String(text || '').matchAll(/\/(?:api|source|sources|watch|embed|stream|playlist|search|movie|tv|tcloud|cookiebakers)\/[a-z0-9_/.-]{1,75}/gi)]
     .map(([pathname]) => pathname.replace(/\/[a-z0-9_-]{24,}(?=\/|$)/gi, '/<id>'))
-    .filter((pathname) => !/\.(?:png|jpe?g|svg|webp|css|js|map)(?:$|\/)/i.test(pathname));
-  return [...new Set(found)].slice(0, 35);
+    .filter((pathname) => !/\.(?:png|jpe?g|svg|webp|css|js|map)(?:$|\/)/i.test(pathname)
+      && !/^\/api\/(?:admin|analytics|rooms)(?:\/|$)/i.test(pathname));
+  return [...new Set(found)].slice(0, 65);
 }
 function signals(body) {
   return {

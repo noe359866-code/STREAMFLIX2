@@ -662,6 +662,9 @@ function qualityOf(...values) {
 }
 function languageOf(value, fallback = "es") {
   const text = String(value || "").toLowerCase();
+  if (/^(?:und|unknown|desconocido)$/.test(text.trim())) return "und";
+  if (/^(?:it|ita|italiano|italian)$/.test(text.trim())) return "it";
+  if (/^(?:pt|por|pt-br|portugu[eê]s|portuguese)$/.test(text.trim())) return "pt-BR";
   if (/\b(lat|latino|dub|doblaje|es-mx|es-la)\b/.test(text)) return "es-LAT";
   if (/\b(cast|castellano|esp|spanish|español|espanol|es-es)\b/.test(text)) return "es-ES";
   if (/\b(sub|subtitulad[oa]|subt[ií]tulos?|vose|sub espanol)\b/.test(text)) return "es-SUB";
