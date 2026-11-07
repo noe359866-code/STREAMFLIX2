@@ -29,7 +29,7 @@ La [auditoría final 42295795690](https://github.com/noe359866-code/STREAMFLIX2/
 | `cine24h` | 0/0/0 | Búsqueda 200, sin ficha seleccionada para la muestra; verificar título y estructura de tarjetas antes del player. |
 | `cinecalidad` | 0/0/0 | Búsqueda 200, sin ficha seleccionada; verificar coincidencia y opciones DooPlayer actuales. |
 | `cinehax` | 5/5/5 | **Medio accesible:** un HLS MPEG-TS 206 por intento. Otras variantes retornaron PNG de un CDN de anuncios (206) o 504: **no** contarlas como vídeo; priorizar la fuente válida sin fijar IDs efímeros. |
-| `cuevana` | 0/0/0 | API de búsqueda 200, sin ficha seleccionada; revisar respuesta y filtro título/año/tipo con otra muestra. |
+| `cuevana` | 0/0/0 | Muestra histórica *Fight Club*: API 200, sin ficha seleccionada. La [comprobación posterior con *One Piece* T1E1](revision-cuevana3-carlosfdezb.md) sí encontró 1/1/1 HLS y segmento MPEG-TS 206 válido en 3/3 desde Actions; no se cambió el proveedor. |
 | `danimados` | 0/0/0 | Búsqueda, episodio y cuatro AJAX 200; se descubrió **un formato distinto de HLS/MP4** no auditado aquí. Revisar el hoster antes de afirmar reproducción. |
 | `doramasflix` | 0/0/0 | GraphQL de búsqueda 403; bloqueo previo al vídeo, no criterio de retirada. |
 | `embed69` | 2/2/2 | **Medio accesible:** segmento MPEG-TS 206 al sondear la playlist larga; segunda opción HLS dio 502. Mantener alternativas separadas. |
