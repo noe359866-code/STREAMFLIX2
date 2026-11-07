@@ -62,6 +62,7 @@ jobs:
           node --check scripts/media-audit.cjs
           node --check scripts/media-audit-lib.cjs
           node --check scripts/site-recon.cjs
+          node --check scripts/requested-players-recon.cjs
           node --check scripts/site-player-recon.cjs
           node --check scripts/cuevana-reference-recon.cjs
           bash -n scripts/deploy-beamup.sh
@@ -197,6 +198,31 @@ jobs:
         with:
           name: recon-${{ matrix.site }}
           path: recon-${{ matrix.site }}.json
+          if-no-files-found: warn
+
+  requested-players-recon:
+    name: Contrastar reproductores ${{ matrix.site }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[player-five-sites]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [tudorama, vixsrc]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Examinar puertas públicas sin publicar tokens ni URL de medios
+        run: node scripts/requested-players-recon.cjs --site "${{ matrix.site }}" --output "players-${{ matrix.site }}.json"
+      - name: Publicar estados sanitizados de los tres intentos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: players-${{ matrix.site }}
+          path: players-${{ matrix.site }}.json
           if-no-files-found: warn
 
   cuevana-reference:
