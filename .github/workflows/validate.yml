@@ -63,6 +63,7 @@ jobs:
           node --check scripts/media-audit-lib.cjs
           node --check scripts/site-recon.cjs
           node --check scripts/requested-players-recon.cjs
+          node --check scripts/spa-assets-recon.cjs
           node --check scripts/site-player-recon.cjs
           node --check scripts/cuevana-reference-recon.cjs
           bash -n scripts/deploy-beamup.sh
@@ -198,6 +199,31 @@ jobs:
         with:
           name: recon-${{ matrix.site }}
           path: recon-${{ matrix.site }}.json
+          if-no-files-found: warn
+
+  requested-spa-assets:
+    name: Inspeccionar JS de ${{ matrix.site }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[assets-five-sites]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [cinejoy, atlantic, cinemaarmy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Inspeccionar únicamente los assets JS públicos del mismo dominio
+        run: node scripts/spa-assets-recon.cjs --site "${{ matrix.site }}" --output "assets-${{ matrix.site }}.json"
+      - name: Publicar estructura sanizada sin cuerpos JS ni URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assets-${{ matrix.site }}
+          path: assets-${{ matrix.site }}.json
           if-no-files-found: warn
 
   requested-players-recon:
