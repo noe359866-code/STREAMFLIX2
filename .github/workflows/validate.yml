@@ -195,6 +195,48 @@ jobs:
           path: cuevana-reference-recon.json
           if-no-files-found: warn
 
+  cuevana-media:
+    name: Auditar HLS/MP4 de Cuevana (tres intentos sobre One Piece)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-cuevana3]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver episodio y comprobar medios (no páginas HTML)
+        run: node scripts/media-audit.cjs --provider cuevana --output cuevana-media.json
+      - name: Resumir intentos sin URLs ni cabeceras de terceros
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('cuevana-media.json', 'utf8'));
+          for (const [index, attempt] of report.attempts.entries()) {
+            console.log(`::notice file=scripts/media-audit.cjs,title=cuevana-medio-${index + 1}::${JSON.stringify({
+              discovered: attempt.discovered, mediaCount: attempt.mediaCount,
+              discoveryEvents: attempt.discoveryEvents,
+              media: attempt.media.map(({ format, stage, status, host, outcome, signature }) =>
+                ({ format, stage, status, host, outcome, signature })),
+            })}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `## Cuevana: ${report.sample.title}, tres intentos\n\n`
+            + report.attempts.map((attempt, i) => `- Intento ${i + 1}: ${attempt.mediaCount} HLS/MP4, ${attempt.media.map((media) => `${media.host} HTTP ${media.status || 'sin respuesta'} ${media.outcome}`).join(', ') || 'sin medio resuelto'}`).join('\n')
+            + `\n\nDecisión: **${report.decision}**. Un 403 de catálogo o TLS no implica 403 del medio.\n`);
+          NODE
+      - name: Publicar los tres intentos sin URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuevana-media-3-attempts
+          path: cuevana-media.json
+          if-no-files-found: warn
+
   site-player:
     name: Inspeccionar opciones de video de Repelis24 y Gnula
     if: github.event_name == 'push' && contains(github.event.head_commit.message, '[site-player]')

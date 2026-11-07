@@ -85,7 +85,9 @@ const TURKISH = {
 
 function sampleFor(scraper) {
   const id = scraper.id;
-  if (['animeav1', 'animeonlineninja', 'jkanime', 'latanime', 'tioanime'].includes(id)) return ANIME;
+  // Cuevana.gs redirige a cuevanas3.pro; su búsqueda de Joker devolvió
+  // `animes` (3/3). Fight Club daba 0 fuentes en la muestra de película.
+  if (['animeav1', 'animeonlineninja', 'jkanime', 'latanime', 'tioanime', 'cuevana'].includes(id)) return ANIME;
   if (['danimados', 'lacartoons'].includes(id)) return CARTOON;
   if (id === 'doramasflix') return DORAMA;
   if (id === 'seriesturcas') return TURKISH;
