@@ -18,8 +18,8 @@ async function streams(id, media) {
   if (media.mediaType === 'movie' ? !/^(?:tt\d{5,12}|\d{1,12})$/i.test(id) : !/^\d{1,12}$/.test(id)) return [];
   const url = media.mediaType === 'movie' ? `${BASE}/filme/${id}`
     : `${BASE}/serie/${id}/${media.season}/${media.episode}`;
-  // La documentación ofrece iframe, no promete una API de vídeos directos.
-  // Cloudflare devolvió 403 a Actions; no se simula navegador ni se evade.
+
+
   const page = await fetchText(url, { referer: `${BASE}/doc`, timeoutMs: 9500 });
   if (!/^https:\/\/warezcdn\.sbs\/(?:filme|serie)\//i.test(page.url)) return [];
   const direct = directMediaInHtml(page.text, page.url)

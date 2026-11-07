@@ -8,6 +8,14 @@ Para ejecutar la auditoría en la rama que contiene el workflow, ve a **Actions 
 gh workflow run validate.yml --ref <rama> -f provider=audit-media
 ```
 
+Para limitar la auditoría a los proveedores relacionados con las mejoras recientes, el campo opcional `audit_providers` acepta IDs activos separados por comas. El informe conserva el mismo formato sanitizado y los tres intentos por proveedor:
+
+```bash
+gh workflow run validate.yml --ref <rama> -f provider=audit-media -f audit_providers=videoapi,jkanime,seriesturcas,playlatinsrc,pelisforte
+```
+
+Desde Node se puede usar `node scripts/media-audit.cjs --all --providers videoapi,jkanime,seriesturcas --output .tmp/auditoria-seleccion.json`. Una lista inválida o que incluya IDs deshabilitados falla antes de realizar solicitudes. Los proveedores elegidos son muestras de descubrimiento, no garantizan que los hosters buscados aparezcan en cada título.
+
 Si tu integración de GitHub no permite `workflow_dispatch`, el mismo job también se ejecuta al hacer push de un commit cuyo mensaje contenga `[audit-media]` a una rama cubierta por el workflow (por ejemplo `arena/**`). No se activa en los push ordinarios.
 
 La acción compila los proveedores activos y ejecuta **tres intentos por proveedor**. Durante esta auditoría el [filtro de medios del runtime](filtro-medios-runtime.md) se desactiva de forma explícita para **registrar también los enlaces que el runtime descartaría** y poder comprobar sus 403/HTML sin sesgo. Después se aplica el filtro a los candidatos y se anota cuántas URLs individuales descartaría en esa misma red (solo conteos y hosts, sin rutas ni tokens). Cada intento resuelve un título de prueba (sin necesitar clave de TMDB) y, **solo si obtiene URLs de HLS/MP4**, solicita hasta 128 KiB de cada playlist y hasta 4 KiB de sus variantes/segmentos (y clave AES-128 si la hubiera) o del MP4. En playlists más largas inspecciona únicamente líneas completas del prefijo: puede confirmar una fuente accesible, pero **no** declara retirada por un 403 de variantes/segmentos parciales. Un HLS 200 no basta; los fragmentos deben tener firma MPEG-TS, MP4 fragmentado o audio válido, y un MP4 exige `ftyp`. HTML y JSON 200 no prueban vídeo. Prueba GET con y sin `Range` si el host rechaza `Range` con 403; no descarga películas completas ni sigue controles de acceso o DRM. Los ejemplos de título por proveedor están en `scripts/media-audit.cjs`.

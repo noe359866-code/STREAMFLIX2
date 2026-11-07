@@ -24,7 +24,7 @@ export function stripTags(value) {
 
 export function normalizeTitle(value) {
   let text = decodeHtml(value).toLowerCase();
-  try { text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (_) { /* QuickJS antiguo */ }
+  try { text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (_) {                       }
   return text
     .replace(/\.(mkv|mp4|avi)$/i, '')
     .replace(/\b(19|20)\d{2}\b/g, ' ')
@@ -75,7 +75,7 @@ export function absoluteUrl(value, base) {
   if (url.startsWith('/')) return origin + url;
   const page = String(base).split(/[?#]/)[0];
   if (url.startsWith('?')) return page + url;
-  // Una base sin barra final (https://host) también tiene un directorio raíz.
+
   const directory = page === origin ? `${origin}/` : page.replace(/\/[^/]*$/, '/');
   const match = url.match(/^([^?#]*)([\s\S]*)$/);
   const path = `${directory.slice(origin.length)}${match[1]}`;

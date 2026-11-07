@@ -1,8 +1,8 @@
-#!/usr/bin/env node
+
 'use strict';
 
-// Diagnóstico acotado de fichas/opciones públicas: no guarda HTML, tokens ni
-// URLs firmadas. Solo se ejecuta manualmente en Actions con [site-player].
+
+
 const fs = require('node:fs');
 const zlib = require('node:zlib');
 const path = require('node:path');
@@ -155,7 +155,7 @@ function dooplayOptions(html) {
 }
 function responseInfo(text, base) {
   let parsed;
-  try { parsed = JSON.parse(text); } catch (_) { /* puede ser HTML */ }
+  try { parsed = JSON.parse(text); } catch (_) {                      }
   const raw = parsed?.embed_url || parsed?.url || parsed?.player || '';
   const iframe = /<iframe\b[^>]*>/i.exec(String(raw))?.[0];
   const url = iframe ? attr(iframe, 'src') : raw;
@@ -222,13 +222,13 @@ async function repelis() {
         response: responseInfo(reply.html, endpoint),
       };
       let playerData;
-      try { playerData = JSON.parse(reply.html); } catch (_) { /* sin JSON */ }
+      try { playerData = JSON.parse(reply.html); } catch (_) {                }
       let wrappedTarget;
       try {
         const wrapper = new URL(playerData?.embed_url);
         wrappedTarget = wrapper.searchParams.get('url');
         item.wrapperTarget = safeUrl(wrappedTarget);
-      } catch (_) { /* no es URL o no lleva destino anidado */ }
+      } catch (_) {                                            }
       if (summary.players.length === 1 && /^https:\/\/waaw\.tv\//i.test(wrappedTarget || '')) {
         const target = await get(wrappedTarget, url);
         item.hoster = { status: target.status, error: target.error, contentType: target.contentType,
@@ -241,7 +241,7 @@ async function repelis() {
       }
       if (summary.players.length === 0 && item.response.embed?.host === 'nupload.me') {
         let data;
-        try { data = JSON.parse(reply.html); } catch (_) { /* sin JSON, no hay embed */ }
+        try { data = JSON.parse(reply.html); } catch (_) {                              }
         const embedded = String(data?.embed_url || '').match(/<iframe\b[^>]*src\s*=\s*["']([^"']+)/i)?.[1] || data?.embed_url;
         if (typeof embedded === 'string' && /^https:\/\/nupload\.me\//i.test(embedded)) {
           const hoster = await get(embedded, url);
@@ -321,7 +321,7 @@ async function gnula() {
       const frame = await get(frameUrl.href, url);
       const param = frameUrl.searchParams.get('trembed') || '';
       let decoded;
-      try { decoded = Buffer.from(param, 'base64').toString('utf8'); } catch (_) { /* no base64 */ }
+      try { decoded = Buffer.from(param, 'base64').toString('utf8'); } catch (_) {                 }
       const external = /^https?:\/\//i.test(param) ? param : /^https?:\/\//i.test(decoded || '') ? decoded : null;
       summary.frames.push({ status: frame.status, error: frame.error, contentType: frame.contentType,
         url: safeUrl(frameUrl.href, base), paramLength: param.length,

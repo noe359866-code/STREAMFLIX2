@@ -4,7 +4,7 @@ import { cardsFromAnchors } from '../../core/html.js';
 import { resolveCandidates } from '../../core/extractors.js';
 import { absoluteUrl, attributes, stripTags, unique } from '../../core/text.js';
 
-// El dominio .org proporcionado redirige actualmente a este dominio canónico.
+
 const BASE = 'https://verpeliculasonline.net';
 
 function language(label) {

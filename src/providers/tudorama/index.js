@@ -30,8 +30,8 @@ function playerFields(html) {
 function optionLanguage(row) {
   const name = String(row.name || row.server || '');
   const lang = String(row.lang || '').toLowerCase();
-  // «sub» no demuestra el idioma de los subtítulos. La etiqueta del propio
-  // servidor indica inglés («en») o español («es»), no VOSE verificada.
+
+
   if (lang === 'en') return 'en';
   if (/\b(?:lat|latino)\b/i.test(name)) return 'es-LAT';
   if (/\b(?:cast|castellano)\b/i.test(name)) return 'es-ES';
@@ -44,7 +44,7 @@ function optionLanguage(row) {
 async function episodeUrl(show, season, episode) {
   const found = episodeLinks(show.text, show.url, season, episode);
   if (found && EPISODE.test(found.url)) return found.url;
-  // WStream pagina episodios; no fabricar una ruta /ver/<slug>-sNxM.
+
   for (const tag of String(show.text || '').match(/<div\b[^>]*>/gi) || []) {
     const fields = attributes(tag);
     if (!/(?:^|\s)eps(?:\s|$)/i.test(fields.class || '')) continue;
@@ -87,8 +87,8 @@ async function serverOptions(html, referer) {
 
 async function unwrap(option) {
   if (isPlayableUrl(option.url)) return [option];
-  // Los wrappers observados pertenecen al CDN de Tudorama. Nunca solicitar
-  // una URL arbitraria que el AJAX devuelva disfrazada de página del sitio.
+
+
   if (!/^https:\/\/(?:cdn\.)?tudorama\.com\/stream\/[^?#]+/i.test(option.url)) return [option];
   try {
     const wrapper = await fetchText(option.url, { referer: option.referer, timeoutMs: 8500 });

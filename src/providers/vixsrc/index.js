@@ -55,21 +55,35 @@ async function streams(id, media) {
   if (!/^\d{1,12}$/.test(id)) return [];
   const path = media.mediaType === 'movie' ? `/api/movie/${id}`
     : `/api/tv/${id}/${media.season}/${media.episode}`;
-  const api = await fetchJson(withQuery(`${BASE}${path}`, { lang: 'es' }), { referer: `${BASE}/` });
-  const src = api.data?.src;
-  const embedUrl = absoluteUrl(typeof src === 'string' ? src : '', BASE);
-  if (!EMBED.test(embedUrl)) return [];
-  const page = await fetchText(embedUrl, { referer: `${BASE}/`, timeoutMs: 9500 });
+  const apiUrl = withQuery(`${BASE}${path}`, { lang: 'es' });
+  const readEmbedUrl = async () => {
+    const api = await fetchJson(apiUrl, { referer: `${BASE}/` });
+    const src = api.data?.src;
+    const url = absoluteUrl(typeof src === 'string' ? src : '', BASE);
+    return EMBED.test(url) ? url : '';
+  };
+  let embedUrl = await readEmbedUrl();
+  if (!embedUrl) return [];
+  let page;
+  try {
+    page = await fetchText(embedUrl, { referer: `${BASE}/`, timeoutMs: 9500 });
+  } catch (error) {
+    if (error?.response?.status !== 410) throw error;
+    embedUrl = await readEmbedUrl();
+    if (!embedUrl) return [];
+    page = await fetchText(embedUrl, { referer: `${BASE}/`, timeoutMs: 9500 });
+  }
   const declared = mediaDeclarations(page.text);
   const expiry = Number(declared.expires) * (declared.expires.length > 10 ? 1 : 1000);
   if (!declared.playlist || !declared.token || !Number.isFinite(expiry) || expiry < Date.now() + 10000) return [];
-  // Solo se completa la URL /playlist/<id> que declara el embed. El parámetro
-  // lang=es del API NO demuestra que haya audio o subtítulos españoles.
+
+
   const pathUrl = declared.playlist.split('?')[0].replace(/(\/playlist\/[-\w]+)(?:\.m3u8)?$/, '$1.m3u8');
   const url = withQuery(pathUrl, { token: declared.token, expires: declared.expires,
+    ...(/[?&]b=1(?:&|$)/i.test(declared.playlist) ? { b: 1 } : {}),
     ...(declared.fhd ? { h: 1 } : {}), lang: 'es' });
   const headers = { ...HEADERS, Referer: page.url };
-  // Rechazar HTML/403 de playlist antes de publicar un HLS de etiqueta falsa.
+
   const sample = await fetchText(url, { headers, timeoutMs: 9000, allowError: true });
   if (!sample.ok || !sample.text.replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) return [];
   const language = audioLanguage(sample.text);

@@ -27,7 +27,7 @@ function close(server) {
   return new Promise((resolve) => server.close(resolve));
 }
 
-/** Proxy HTTP con soporte de túnel CONNECT, como los del listado público. */
+
 function createTunnelProxy() {
   const seen = [];
   const server = http.createServer((req, res) => {
@@ -51,7 +51,7 @@ function createTunnelProxy() {
   return { server, seen };
 }
 
-/** Servidor destino con los casos que usan los proveedores. */
+
 function createTargetServer(getProxyPort) {
   return http.createServer((req, res) => {
     const url = req.url.split('?')[0];
@@ -264,7 +264,7 @@ test('ensurePool valida el listado real contra un canario y entrega proxies sano
     assert.equal(status.candidates, 1);
     assert.ok(getHealthyProxy(), 'round-robin devuelve un proxy');
 
-    // Segunda llamada sin `force` reutiliza el pool (no vuelve a probar).
+
     const fresh = await ensurePool(env);
     assert.equal(fresh.length, 1);
   } finally {
@@ -297,7 +297,7 @@ test('el addon rescata por proxy los proveedores bloqueados en la IP del servido
     return originalFetch(input, init);
   };
 
-  // Falla como los sitios reales desde la IP de Beamup; solo funciona por proxy.
+
   const blockedProvider = {
     async getStreams() {
       if (!proxyContext.getStore()) throw new Error('403 bloqueado por Cloudflare');
@@ -335,7 +335,7 @@ test('el addon rescata por proxy los proveedores bloqueados en la IP del servido
     const first = await getStremioStreams(params);
     assert.ok(first.elapsedMs <= 2000, 'responde dentro del plazo aunque el proveedor esté bloqueado');
 
-    // La segunda pasada por proxy corre en segundo plano y deja el resultado en caché.
+
     let cached = null;
     for (let i = 0; i < 40 && !cached; i += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -369,7 +369,7 @@ test('el listado tiene respaldo: si la primera fuente da 429 usa la siguiente', 
 
   resetProxyPool();
   const env = {
-    // Primera fuente limitada (429), segunda en texto plano como TheSpeedX.
+
     PROXY_LIST_URL: `http://127.0.0.1:${targetPort}/list-429,http://127.0.0.1:${targetPort}/list-plain`,
     PROXY_CANARY_HOST: '127.0.0.1',
     PROXY_CANARY_PORT: String(targetPort),
@@ -385,7 +385,7 @@ test('el listado tiene respaldo: si la primera fuente da 429 usa la siguiente', 
     assert.ok(healthy.some((p) => p.id === `127.0.0.1:${proxyPort}`));
     assert.equal(proxyStatus().lastError, '');
 
-    // Un refresco posterior que falla por completo conserva el pool anterior.
+
     const brokenEnv = { ...env, PROXY_LIST_URL: `http://127.0.0.1:${targetPort}/list-429` };
     const kept = await ensurePool(brokenEnv, { force: true });
     assert.ok(kept.length >= 1, 'no se pierde un pool que ya funcionaba');

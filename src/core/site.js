@@ -14,7 +14,7 @@ export function createSiteProvider(config) {
         const found = await config.search(query, mediaType, metadata);
         if (found?.length) candidates.push(...found);
         if (bestTitleMatch(candidates, metadata, mediaType, 90)) break;
-      } catch (_) { /* prueba el siguiente título alternativo */ }
+      } catch (_) {                                              }
     }
     const match = bestTitleMatch(candidates, metadata, mediaType, config.minimumScore || 60);
     if (!match) return [];

@@ -720,6 +720,27 @@
         "mkv",
         "webm"
       ]
+    },
+    {
+      "id": "superembed",
+      "name": "SuperEmbed (experimental)",
+      "description": "Reproductor MultiEmbed por TMDB/IMDb; audio y reproducción no verificados.",
+      "version": "1.0.0",
+      "filename": "providers/superembed.js",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "und"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4",
+        "mkv",
+        "webm"
+      ]
     }
   ]
 }

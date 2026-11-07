@@ -1,9 +1,9 @@
-#!/usr/bin/env node
+
 'use strict';
 
-// Diagnóstico de assets públicos de las tres SPA. Nunca guarda el código,
-// datos de sesión, parámetros de consulta ni URLs firmadas: solo host/path
-// genéricos y presencia de familias de API observables en JS/HTML.
+
+
+
 const fs = require('node:fs');
 const path = require('node:path');
 const SITES = { cinejoy: 'https://cinejoy.pk', atlantic: 'https://atlantic.bz', cinemaarmy: 'https://cinema.army' };
@@ -51,7 +51,7 @@ function publicPath(value) {
   try {
     const url = new URL(value, BASE);
     if (url.hostname !== new URL(BASE).hostname || url.protocol !== 'https:') return '';
-    // Solo JS del propio sitio y sin parámetros. Un hash de build no es un token.
+
     return /^\/(?:assets|_next\/static|static|js)\/[a-z0-9/_-]+\.js$/i.test(url.pathname)
       ? url.pathname : '';
   } catch (_) { return ''; }

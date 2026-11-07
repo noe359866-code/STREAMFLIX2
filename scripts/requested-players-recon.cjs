@@ -1,8 +1,8 @@
-#!/usr/bin/env node
+
 'use strict';
 
-// Reconocimiento de puertas públicas, no resolución de streams. Los IDs,
-// nonces, tokens y URL firmadas se usan solo en memoria: nunca se serializan.
+
+
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -100,7 +100,7 @@ async function tudorama() {
 }
 
 function mediaDeclarations(html) {
-  // Los nombres de atributos del reproductor se detectan sin almacenar sus valores.
+
   const token = /["']token["']\s*:\s*["']([^"']+)/i.exec(html)?.[1] || '';
   const expires = /["']expires["']\s*:\s*["'](\d{9,13})/i.exec(html)?.[1] || '';
   const playlist = [...html.matchAll(/["']url["']\s*:\s*["']([^"']+)/gi)]
@@ -108,8 +108,8 @@ function mediaDeclarations(html) {
     .find((url) => /\/playlist\/|\.m3u8(?:[?#]|$)/i.test(url)) || '';
   return { token, expires, playlist };
 }
-// Si un segmento AES-128 no muestra firma MPEG-TS *antes* de descifrarlo,
-// comprobar con la clave publicada en la propia playlist (sin guardarla).
+
+
 function mediaUrl(uri, base) {
   try {
     const url = new URL(uri, base);
@@ -193,7 +193,7 @@ async function vixsrc() {
     const response = await limited(`${BASE}${route}`);
     const payload = json(response.text);
     let target = null;
-    try { if (typeof payload?.src === 'string') target = new URL(payload.src, BASE); } catch (_) { /* JSON no confiable */ }
+    try { if (typeof payload?.src === 'string') target = new URL(payload.src, BASE); } catch (_) {                         }
     const entry = { route: route.split('?')[0], api: response.status, error: response.error,
       hasEmbed: Boolean(target && target.hostname === 'vixsrc.to' && /^\/embed\/\d+/.test(target.pathname)),
       lang: scrub(target?.searchParams.get('lang')),
@@ -209,21 +209,21 @@ async function vixsrc() {
         canPlayFHD: /["']canPlayFHD["']\s*:\s*true|canPlayFHD\s*=\s*true/i.test(page.text || '') };
       if (media.playlist && media.token && media.expires && Number(media.expires) * 1000 > Date.now()
         && /^[-\w]+$/.test(media.token) && /^(?:https:\/\/|\/)/i.test(media.playlist)) {
-        // Solo una URL de playlist declarada por la página, no una derivada de
-        // un iframe; nunca se publica el token ni se descarga un segmento aquí.
+
+
         const playlistUrl = new URL(media.playlist, BASE);
         if (playlistUrl.protocol !== 'https:') { output.push(entry); continue; }
-        // El contrato del reproductor documentado en Stream4me/vixsrc.py
-        // añade .m3u8 a /playlist/<id> y h=1 cuando canPlayFHD es true.
-        // No se infiere una ruta a partir del ID de TMDB: solo se completa
-        // la URL /playlist/ declarada expresamente por el embed.
+
+
+
+
         if (/^\/playlist\/[-\w]+$/i.test(playlistUrl.pathname)) playlistUrl.pathname += '.m3u8';
         playlistUrl.searchParams.set('token', media.token);
         playlistUrl.searchParams.set('expires', media.expires);
         if (entry.embed.canPlayFHD) playlistUrl.searchParams.set('h', '1');
         if (target.searchParams.get('lang')) playlistUrl.searchParams.set('lang', target.searchParams.get('lang'));
-        // La playlist puede residir en un CDN: solo hosts conocidos y hasta
-        // 128 KiB. Los demás quedan sin sondear, no se presumen bloqueados.
+
+
         if (!/^(?:[a-z0-9-]+\.)*(?:vixcloud\.co|vixcloud\.cc|vixsrc\.to)$/i.test(playlistUrl.hostname)) {
           entry.playlist = { host: playlistUrl.hostname, skipped: 'cdn-desconocido' };
           output.push(entry);
@@ -257,8 +257,8 @@ async function vixsrc() {
               'User-Agent': UA, Referer: target.href, Origin: BASE,
               'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
             } });
-            // Se publica únicamente host, estado y firma de unos KB del primer
-            // segmento; la URL con firma caduca y jamás sale del proceso.
+
+
             entry.segment = { outcome: sample.outcome, stage: sample.stage,
               status: sample.status, host: sample.host, signature: sample.signature,
               bytes: sample.bytesRead, mime: sample.mime };

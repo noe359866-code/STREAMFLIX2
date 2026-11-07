@@ -1,9 +1,9 @@
-#!/usr/bin/env node
+
 'use strict';
 
-// Revisión reproducible de la referencia carlosfdezb/cuevana3 (2022).
-// Solo consulta catálogo y fichas públicas; NO interpreta un 403 HTML como
-// evidencia de que un HLS/MP4 esté bloqueado, ni abre embeds o descarga medios.
+
+
+
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -22,7 +22,7 @@ const TARGETS = [
       '/wp-api/v1/search?q=One%20Piece&page=1&postType=any&postsPerPage=24'],
   },
   {
-    // Destino HTTPS del 301 observado en .gs (Actions 42317819695).
+
     id: 'redirect-pro', base: 'https://cuevanas3.pro',
     paths: ['/', '/wp-api/v1/search?q=Joker&page=1&postType=any&postsPerPage=24',
       '/wp-api/v1/search?q=One%20Piece&page=1&postType=any&postsPerPage=24'],
@@ -99,7 +99,7 @@ async function inspect(url) {
         const next = new URL(location, current);
         await response.body?.cancel();
         redirects.push({ status: response.status, host: next.hostname });
-        // Nunca seguir redirecciones a sitios terceros ni a HTTP sin cifrar.
+
         if (next.protocol !== 'https:' || !HOSTS.has(next.hostname)) {
           return { status: response.status, redirects, stopped: 'outside-known-domains' };
         }
@@ -130,7 +130,7 @@ async function main() {
     report.push({ id: target.id, base: target.base, attempts });
     console.log(`${target.id}: ${attempts.map((pages) => pages.map((page) => page.status || page.error || page.stopped).join('/')).join(' | ')}`);
     if (process.env.GITHUB_ACTIONS === 'true') {
-      // Solo estados, dominios y conteos; ni HTML, ni embeds, ni URLs firmadas.
+
       console.log(`::notice file=scripts/cuevana-reference-recon.cjs,title=cuevana-reference-${target.id}::${JSON.stringify({ id: target.id, attempts })}`);
     }
   }

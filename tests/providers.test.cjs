@@ -208,7 +208,7 @@ test('TuDorama: busca película real, obtiene servidores AJAX y desenvuelve el i
     ],
   });
   assertStream(result);
-  assert.equal(result.streams[0].language, 'en'); // «sub», sin evidencia del idioma de subtítulos
+  assert.equal(result.streams[0].language, 'en');
   assert.ok(result.calls.some((call) => call.init.body?.includes('post_id=2248')));
   assert.ok(result.calls.some((call) => call.url.includes('/stream/server-2.php')
     && call.init.headers.Referer.includes('/pelicula/contenido-demo/')));
@@ -583,7 +583,8 @@ test('VideoAPI: consulta exists, valida la ruta interna y extrae solo el stream'
     routes: [['videoapi.la/api/v1/public/exists/movie/123', { exists: true, path: 'https://evil.example/e/movie/123' }]],
   });
   assert.deepEqual(rejected.streams, []);
-  assert.equal(rejected.calls.length, 1);
+  assert.equal(rejected.calls.length, 2);
+  assert.ok(rejected.calls.some((call) => call.url === 'https://videoapp.zip/e/movie/123'));
 });
 
 test('PlayLatinSRC: usa IMDb y la ruta de reproductor personalizado sin devolver el iframe', async () => {
@@ -756,4 +757,101 @@ test('Pelispedia: no mezcla episodios de otra temporada', async () => {
   const missing = await run('pelispedia', { episode: 4, routes: routes.slice(0, 2) });
   assert.deepEqual(missing.streams, []);
   assert.ok(!missing.calls.some((call) => call.url.includes('/episodio/4')));
+});
+
+test('VideoAPI incorpora Videoapp para películas y episodios sin ejecutar scripts', async () => {
+  const routes = [
+    ['videoapp.zip/e/tv/123/2/3', '<iframe id="frame" src="https://lamovie.link/embed/test"></iframe>'],
+    ['lamovie.link/embed/test', '<script>globalThis.intrusion = true; const data={"stream_urls":["https://cdn.example/video/playlist.m3u8"],"default_subs":[{"url":"https://cdn.example/es.vtt","lang":"es"}]};</script>'],
+  ];
+  const result = await run('videoapi', { routes });
+  assertStream(result);
+  assert.equal(result.streams[0].name, 'Videoapp');
+  assert.equal(result.streams[0].language, 'und');
+  assert.equal(result.streams[0].subtitles[0].language, 'es');
+  assert.equal(globalThis.intrusion, undefined);
+  const unsafe = await run('videoapi', { routes: [['videoapp.zip/e/tv/123/2/3', '<iframe id="frame" src="https://lamovie.link.evil/embed/abc"></iframe>']] });
+  assert.deepEqual(unsafe.streams, []);
+  assert.ok(!unsafe.calls.some((call) => call.url.includes('lamovie.link.evil')));
+});
+
+test('JKAnime incorpora el HLS Base64 de JKPlayer al plugin', async () => {
+  const embed = 'https://jkanime.net/jkplayer/123';
+  const encodedEmbed = Buffer.from(embed).toString('base64');
+  const encodedMedia = Buffer.from('https://cdn.example/jkanime/master.m3u8').toString('base64');
+  const result = await run('jkanime', { season: 1, routes: [
+    ['jkanime.net/ajax_search', [{ slug: 'contenido-demo', title: 'Contenido Demo', type: 'Serie' }]],
+    ['jkanime.net/ajax/episodes/42/1', { data: [{ number: 3 }] }],
+    ['jkanime.net/contenido-demo/3/', `<script>var servers = [{"server":"JKPlayer","remote":"${encodedEmbed}"}];</script>`],
+    ['jkanime.net/contenido-demo/', '<meta name="csrf-token" content="demo"><div data-anime="42"></div>'],
+    ['jkanime.net/jkplayer/123', `<script>const player = {url: atob('${encodedMedia}')};</script>`],
+    ['jkanime.net/', '<meta name="csrf-token" content="demo">'],
+  ] });
+  assert.equal(result.streams.length, 1);
+  assert.equal(result.streams[0].url, 'https://cdn.example/jkanime/master.m3u8');
+  assert.equal(result.streams[0].headers.Origin, 'https://jkanime.net');
+  assert.equal(result.streams[0].language, 'es-SUB');
+});
+
+test('PlayLatinSRC resuelve el alias Dropload y conserva sus subtítulos', async () => {
+  const result = await run('playlatinsrc', { mediaType: 'movie', routes: [
+    ['playlatinsrc.co/custom/movie/tt1234567', '<a href="https://dr0pstream.com/e/demo">Dropload</a>'],
+    ['dr0pstream.com/e/demo', '<script>player.setup({sources:[{file:"https://cdn.example/movie.m3u8"}],tracks:[{file:"https://cdn.example/es.vtt",label:"Español",kind:"captions"}]});</script>'],
+  ] });
+  assertStream(result);
+  assert.equal(result.streams[0].subtitles[0].url, 'https://cdn.example/es.vtt');
+});
+
+test('PlayLatinSRC conserva cabeceras de Goodstream en el plugin', async () => {
+  const result = await run('playlatinsrc', { mediaType: 'movie', routes: [
+    ['playlatinsrc.co/custom/movie/tt1234567', '<a href="https://goodstream.one/e/demo">Goodstream</a>'],
+    ['goodstream.one/e/demo', '<script>jwplayer("v").setup({sources:[{file:"https://cdn.example/movie.m3u8"}]});</script>'],
+  ] });
+  assertStream(result);
+  assert.equal(result.streams[0].headers.Referer, 'https://goodstream.one');
+  assert.equal(result.streams[0].headers['Accept-Language'], 'en-US,en;q=0.9');
+});
+
+test('SuperEmbed consulta película o episodio por ID y solo publica medios directos', async () => {
+  const routes = [
+    ['multiembed.mov/?video_id=123&tmdb=1&s=2&e=3', '<iframe src="https://streamwish.example/e/demo"></iframe>'],
+    ['multiembed.mov/?video_id=123&tmdb=1', '<iframe src="https://streamwish.example/e/demo"></iframe>'],
+  ];
+  for (const mediaType of ['movie', 'tv']) {
+    const result = await run('superembed', { mediaType, routes });
+    assertStream(result);
+    assert.equal(result.streams[0].language, 'und');
+    assert.equal(result.streams[0].url, HLS);
+    assert.ok(!result.streams[0].url.includes('multiembed.mov'));
+    assert.ok(result.calls.some((call) => call.url.includes(mediaType === 'tv' ? 'tmdb=1&s=2&e=3' : 'tmdb=1')));
+  }
+  const missing = await run('superembed', { mediaType: 'movie', routes: [['multiembed.mov/?video_id=123&tmdb=1', '<html><title>Player no disponible</title></html>']] });
+  assert.deepEqual(missing.streams, []);
+  const invalid = await run('superembed', { mediaType: 'movie', contentId: '../123' });
+  assert.deepEqual(invalid.streams, []);
+  assert.equal(invalid.calls.length, 0);
+});
+
+test('VixSrc conserva b=1 de la URL de la playlist sin añadir parámetros ajenos', async () => {
+  const result = await run('vixsrc', { mediaType: 'movie', routes: [
+    ['vixsrc.to/api/movie/123?lang=es', { src: '/embed/123' }],
+    ['vixsrc.to/embed/123', '<script>const p={"url":"/playlist/123?b=1&untrusted=1","token":"ValidToken_1234","expires":"9999999999"};</script>'],
+    ['vixsrc.to/playlist/123.m3u8?', '#EXTM3U\n#EXTINF:9,\nsegment.ts\n'],
+  ] });
+  assertStream(result);
+  assert.match(result.streams[0].url, /[?&]b=1(?:&|$)/);
+  assert.doesNotMatch(result.streams[0].url, /untrusted/);
+});
+
+test('VixSrc renueva el embed una sola vez si responde 410', async () => {
+  let count = 0;
+  const result = await run('vixsrc', { mediaType: 'movie', routes: [
+    ['vixsrc.to/api/movie/123?lang=es', () => ({ src: ++count === 1 ? '/embed/123?old=1' : '/embed/123?new=1' })],
+    ['vixsrc.to/embed/123?old=1', { __response: true, status: 410, body: 'Gone' }],
+    ['vixsrc.to/embed/123?new=1', '<script>const p={"url":"/playlist/123?b=1","token":"ValidToken_1234","expires":"9999999999"};</script>'],
+    ['vixsrc.to/playlist/123.m3u8?', '#EXTM3U\n#EXTINF:9,\nsegment.ts\n'],
+  ] });
+  assertStream(result);
+  assert.equal(count, 2);
+  assert.equal(result.streams[0].headers.Referer, 'https://vixsrc.to/embed/123?new=1');
 });

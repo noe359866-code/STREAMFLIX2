@@ -25,7 +25,7 @@ async function streams(match, media) {
     try {
       const response = await fetchJson(`${BASE}/wp-json/dooplayer/v1/post/${encodeURIComponent(option.postId)}?type=${encodeURIComponent(option.type)}&source=${option.number}`, { referer: page.url });
       if (response.data.embed_url) candidates.push({ url: response.data.embed_url, language: 'es-SUB', server: `Opción ${option.number}`, referer: page.url });
-    } catch (_) { /* Cloudflare u opción inexistente */ }
+    } catch (_) {                                       }
   }
   candidates.push(...embedCandidatesFromHtml(page.text, page.url, { language: 'es-SUB', referer: page.url }));
   return resolveCandidates(candidates, { provider: 'Anime Online Ninja', providerId: 'animeonlineninja', referer: page.url, maxCandidates: 8 });

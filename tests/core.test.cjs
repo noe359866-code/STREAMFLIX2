@@ -261,6 +261,9 @@ test('Zilla: conserva las cabeceras HLS del origen sin rehacer una playlist ya d
   assert.equal(result[0].type, 'hls');
   assert.equal(result[0].headers.Referer, embed);
   assert.equal(result[0].headers.Origin, 'https://player.zilla-networks.com');
+  assert.equal(result[0].headers['Sec-Fetch-Dest'], 'empty');
+  assert.equal(result[0].headers['Sec-Fetch-Mode'], 'cors');
+  assert.equal(result[0].headers['Sec-Fetch-Site'], 'same-origin');
   assert.match(result[0].headers['User-Agent'], /Firefox\/148/);
   const nested = await extractors.resolveCandidates([{ url: 'https://player.zilla-networks.com/player/embed/episode456?lang=es' }]);
   assert.equal(nested[0].url, 'https://player.zilla-networks.com/m3u8/episode456', 'usar el ID final, no /m3u8/player');
@@ -337,5 +340,201 @@ test('Maxstream: no inventa medios ni consulta castv en hosts parecidos o IDs in
     assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://maxstream.video.evil/e/abc123' }]), []);
     assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://maxstream.video/e/%2e%2e' }]), []);
     assert.equal(mock.calls.length, 2);
+  } finally { mock.restore(); }
+});
+
+test('Lamovie: lee fuentes y subtítulos JSON sin incluir publicidad ni dominios falsos', async () => {
+  const url = 'https://lamovie.link/e/abc';
+  const mock = mockFetch([[url, `<script>const advertising={stream_urls:["https://cdn.example/pre-roll.mp4"]}; const player={"stream_urls":["https://cdn.example/video/master.m3u8"],"default_subs":[{"url":"/subs/es.vtt","lang":"es"}]};</script>`]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url, language: 'und' }]);
+    assert.deepEqual(result.map((item) => item.url), ['https://cdn.example/video/master.m3u8']);
+    assert.equal(result[0].subtitles[0].url, 'https://lamovie.link/subs/es.vtt');
+    assert.equal(result[0].subtitles[0].language, 'es');
+  } finally { mock.restore(); }
+  const impostor = mockFetch([['https://lamovie.link.evil/e/abc', '<script>const player={"stream_urls":["https://cdn.example/movie.mp4"],"default_subs":[{"url":"https://cdn.example/es.vtt","lang":"es"}]}</script>']]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: 'https://lamovie.link.evil/e/abc' }]);
+    assert.ok(!result[0]?.subtitles?.length);
+  } finally { impostor.restore(); }
+});
+
+test('MixDrop: reconoce alias exactos, normaliza rutas y conserva parámetros', async () => {
+  const input = 'https://mixdrop.vip/emb/abc?token=xyz';
+  const target = 'https://mxdrop.click/e/abc?token=xyz';
+  const page = `<script>MDCore.wurl="//cdn.example/film.mp4";</script>`;
+  const mock = mockFetch([[target, page]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: input }]);
+    assert.deepEqual(result.map((item) => item.url), ['https://cdn.example/film.mp4']);
+    assert.equal(mock.calls[0].url, target);
+    assert.deepEqual(extractors.embedCandidatesFromHtml('<a href="https://mxdrop.click/emb/abc">Servidor</a>', 'https://site.example/').map((item) => item.url), ['https://mxdrop.click/emb/abc']);
+    assert.deepEqual(extractors.embedCandidatesFromHtml('<a href="https://mxdrop.click.evil/emb/abc">Falso</a>', 'https://site.example/'), []);
+  } finally { mock.restore(); }
+});
+
+test('Lamovie desempaqueta estáticamente la variante packed sin ejecutar código', async () => {
+  const packed = `<script>eval(function(p,a,c,k,e,d){return p}('0:"1://2.3/4.5"',6,6,'file|https|cdn|example|playlist|m3u8'.split('|')))</script>`;
+  const mock = mockFetch([['https://vimeos.net/e/abc', packed]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: 'https://vimeos.net/e/abc' }]);
+    assert.deepEqual(result.map((item) => item.url), ['https://cdn.example/playlist.m3u8']);
+  } finally { mock.restore(); }
+});
+
+test('Filemoon y Lamovie detectan aliases exactos sin prometer resolver retos', () => {
+  const page = '<a href="https://byselapuix.com/e/abc">Filemoon</a><a href="https://lamovie.link/e/abc">Lamovie</a><a href="https://byselapuix.com.evil/e/abc">Falso</a>';
+  assert.deepEqual(extractors.embedCandidatesFromHtml(page, 'https://site.example/').map((item) => item.url), ['https://byselapuix.com/e/abc', 'https://lamovie.link/e/abc']);
+});
+
+test('JKPlayer decodifica HLS Base64 y conserva cabeceras para reproducción', async () => {
+  const embed = 'https://jkanime.net/jkplayer/demo';
+  const source = 'https://cdn.example/jk/master.m3u8?token=abc';
+  const encoded = Buffer.from(source).toString('base64');
+  const mock = mockFetch([[embed, `<script>const player = {url: atob('${encoded}')};</script>`]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: embed, referer: 'https://catalog.example/' }]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].url, source);
+    assert.equal(mock.calls[0].init.headers.Referer, 'https://jkanime.net/');
+    assert.equal(result[0].headers.Referer, 'https://jkanime.net/');
+    assert.equal(result[0].headers.Origin, 'https://jkanime.net');
+  } finally { mock.restore(); }
+});
+
+test('JKPlayer acepta loadSource HLS y no interpreta atob de un dominio ajeno', async () => {
+  const url = 'https://jkanime.net/jkplayer/demo';
+  const bad = 'https://jkanime.net.evil/jkplayer/demo';
+  const encoded = Buffer.from('https://cdn.example/private.m3u8').toString('base64');
+  const mock = mockFetch([[url, '<script>hls.loadSource("https://cdn.example/stream.m3u8");</script>'], [bad, `<script>const p={url:atob('${encoded}')};</script>`]]);
+  try {
+    assert.equal((await extractors.resolveCandidates([{ url }]))[0].url, 'https://cdn.example/stream.m3u8');
+    assert.deepEqual(await extractors.resolveCandidates([{ url: bad }]), []);
+  } finally { mock.restore(); }
+});
+
+function encodeVoe(config) {
+  const rot13 = (value) => value.replace(/[a-z]/gi, (char) => String.fromCharCode((char <= 'Z' ? 65 : 97) + (char.charCodeAt(0) - (char <= 'Z' ? 65 : 97) + 13) % 26));
+  const inner = Buffer.from(JSON.stringify(config)).toString('base64');
+  const shifted = [...inner].reverse().map((char) => String.fromCharCode(char.charCodeAt(0) + 3)).join('');
+  return rot13(Buffer.from(shifted, 'binary').toString('base64'));
+}
+
+test('Voe recupera subtítulos del payload y reconoce aliases exactos', async () => {
+  const embed = 'https://jilliandescribecompany.com/e/demo';
+  const payload = encodeVoe({ source: 'https://cdn.example/real/master.m3u8', captions: [
+    { file: 'spanish.vtt?token=abc', label: 'Español' },
+    { file: 'https://cdn.example/english.srt', label: 'English' },
+    { file: 'javascript:bad.vtt', label: 'Falso' },
+    { file: 'https://cdn.example/thumbs.jpg', label: 'Miniatura' },
+  ] });
+  const mock = mockFetch([[embed, `<script>var base = "https://cdn.example/subs/";</script><script type="application/json">${JSON.stringify([payload])}</script>`]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: embed }]);
+    assert.equal(result.length, 1);
+    assert.deepEqual(result[0].subtitles, [
+      { url: 'https://cdn.example/subs/spanish.vtt?token=abc', language: 'Español' },
+      { url: 'https://cdn.example/english.srt', language: 'English' },
+    ]);
+    const anchors = `<a href="${embed}">Voe</a><a href="https://jilliandescribecompany.com.evil/e/demo">Falso</a>`;
+    assert.deepEqual(extractors.embedCandidatesFromHtml(anchors, 'https://site.example').map((item) => item.url), [embed]);
+  } finally { mock.restore(); }
+});
+
+test('Uqload consulta el formulario público y extrae el archivo desempaquetado sin ejecutar JS', async () => {
+  const input = 'https://uqload.cx/e/demo123?x=1';
+  const packed = `<script>eval(function(p,a,c,k,e,d){return p}('0:"1://2.3/4.5"',6,6,'file|https|cdn|example|playlist|m3u8'.split('|')))</script>`;
+  const mock = mockFetch([['https://uqload.cx/dl', (url, init) => {
+    assert.equal(init.method, 'POST');
+    assert.equal(init.redirect, 'manual');
+    assert.match(init.body, /file_code=demo123/);
+    assert.match(init.body, /op=embed/);
+    return packed;
+  }]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: input, referer: 'https://catalog.example/movie' }]);
+    assert.deepEqual(result.map((item) => item.url), ['https://cdn.example/playlist.m3u8']);
+    assert.equal(result[0].headers.Referer, 'https://uqload.cx');
+  } finally { mock.restore(); }
+});
+
+test('Uqload descarta páginas sin player empaquetado y no aplica la ruta a dominios falsos', async () => {
+  const mock = mockFetch([
+    ['https://uqload.cx/dl', '<a href="https://cdn.example/download.mp4">descargar</a>'],
+    ['https://uqload.cx.evil/e/demo', ''],
+  ]);
+  try {
+    assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://uqload.cx/e/demo' }]), []);
+    assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://uqload.cx.evil/e/demo' }]), []);
+    assert.equal(mock.calls.filter((call) => call.init.method === 'POST').length, 1);
+  } finally { mock.restore(); }
+});
+
+test('LuluVdo y Dropload descubren alias exactos y filtran pistas no válidas', async () => {
+  const alias = 'https://dr0pstream.com/e/demo';
+  const page = `<script>player.setup({sources:[{file:"https://cdn.example/movie.m3u8"}],tracks:[{file:"https://cdn.example/es.vtt",label:"Español",kind:"captions"},{file:"https://cdn.example/thumb.vtt",label:"Miniaturas",kind:"thumbnails"},{file:"https://cdn.example/upload.vtt",label:"Upload captions"}]});</script>`;
+  const mock = mockFetch([[alias, page]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: alias }]);
+    assert.deepEqual(result[0].subtitles.map((sub) => sub.url), ['https://cdn.example/es.vtt']);
+    const links = '<a href="https://luluvdoo.com/e/a">Lulu</a><a href="https://dr0pstream.com/e/b">Dropload</a><a href="https://luluvdoo.com.evil/e/c">Falso</a>';
+    assert.deepEqual(extractors.embedCandidatesFromHtml(links, 'https://site.example/').map((item) => item.url), ['https://luluvdoo.com/e/a', 'https://dr0pstream.com/e/b']);
+  } finally { mock.restore(); }
+});
+
+test('LuluVdo extrae pistas desde código empaquetado sin ejecutarlo', async () => {
+  const packed = `<script>eval(function(p,a,c,k,e,d){return p}('player.setup({sources:[{0:"1://2.3/4.5"}],tracks:[{0:"1://2.3/6.7",label:"Español",kind:"captions"}]});',8,8,'file|https|cdn|example|playlist|m3u8|subs|vtt'.split('|')))</script>`;
+  const mock = mockFetch([['https://luluvdo.com/e/demo', packed]]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: 'https://luluvdo.com/e/demo' }]);
+    assert.equal(result[0].url, 'https://cdn.example/playlist.m3u8');
+    assert.equal(result[0].subtitles[0].url, 'https://cdn.example/subs.vtt');
+  } finally { mock.restore(); }
+});
+
+test('Goodstream conserva User-Agent, idioma y Referer compatibles en el medio', async () => {
+  const embed = 'https://goodstream.one/e/abc';
+  const mock = mockFetch([[embed, '<script type="text/javascript">jwplayer("video").setup({sources:[{file:"https://cdn.example/movie.m3u8"}]});</script>']]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: embed, referer: 'https://catalog.example/' }]);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].url, 'https://cdn.example/movie.m3u8');
+    assert.match(mock.calls[0].init.headers['User-Agent'], /Chrome\/120\.0\.0\.0/);
+    assert.equal(mock.calls[0].init.headers['Accept-Language'], 'en-US,en;q=0.9');
+    assert.equal(result[0].headers.Referer, 'https://goodstream.one');
+    assert.equal(result[0].headers['User-Agent'], mock.calls[0].init.headers['User-Agent']);
+    assert.equal(result[0].headers['Accept-Language'], 'en-US,en;q=0.9');
+  } finally { mock.restore(); }
+});
+
+test('VidMoly normaliza .me a .to sin perder el token y mantiene Referer', async () => {
+  const requested = 'https://vidmoly.me/embed-abc.html?token=xyz';
+  const expected = 'https://vidmoly.to/embed-abc.html?token=xyz';
+  const mock = mockFetch([[expected, '<script>jwplayer("v").setup({sources:[{file:"https://cdn.example/video/master.m3u8"}]});</script>']]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: requested }]);
+    assert.equal(mock.calls[0].url, expected);
+    assert.equal(mock.calls[0].init.headers.Referer, 'https://vidmoly.to/');
+    assert.match(mock.calls[0].init.headers['User-Agent'], /Chrome\/91\.0\.4472\.124/);
+    assert.equal(result[0].headers.Referer, 'https://vidmoly.to/');
+    assert.equal(result[0].headers['User-Agent'], mock.calls[0].init.headers['User-Agent']);
+  } finally { mock.restore(); }
+});
+
+test('Goodstream y VidMoly no aplican perfiles a dominios falsos o redirecciones ajenas', async () => {
+  const links = '<a href="https://vidmoly.net/e/a">V</a><a href="https://goodstream.one/e/b">G</a><a href="https://vidmoly.to.evil/e/c">Falso</a><a href="https://goodstream.one.evil/e/d">Falso</a>';
+  assert.deepEqual(extractors.embedCandidatesFromHtml(links, 'https://site.example/').map((item) => item.url), ['https://vidmoly.net/e/a', 'https://goodstream.one/e/b']);
+  const mock = mockFetch([['https://goodstream.one/e/abc', { __response: true, body: '<video src="https://cdn.example/video.mp4"></video>', url: 'https://other.example/e/abc' }]]);
+  try { assert.deepEqual(await extractors.resolveCandidates([{ url: 'https://goodstream.one/e/abc' }]), []); }
+  finally { mock.restore(); }
+});
+
+test('VidMoly mantiene los dominios alternativos y sus parámetros', async () => {
+  const embed = 'https://vidmoly.org/e/abc?token=123';
+  const mock = mockFetch([[embed, '<video src="https://cdn.example/video.m3u8"></video>']]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: embed }]);
+    assert.equal(mock.calls[0].url, embed);
+    assert.equal(result[0].headers.Referer, 'https://vidmoly.to/');
   } finally { mock.restore(); }
 });

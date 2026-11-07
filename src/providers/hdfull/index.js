@@ -30,7 +30,7 @@ function contentUrls(html, base) {
       for (const item of Array.isArray(data) ? data : [data]) {
         if (item?.['@type'] === 'VideoObject' && item.contentUrl) output.push(absoluteUrl(item.contentUrl, base));
       }
-    } catch (_) { /* un bloque JSON-LD ajeno no invalida los demás */ }
+    } catch (_) {                                                     }
   }
   for (const match of String(html || '').matchAll(/<video\b[^>]*>/gi)) {
     const url = absoluteUrl(attributes(match[0]).src || '', base);
@@ -39,15 +39,15 @@ function contentUrls(html, base) {
   const slug = base.match(/\/peliculas\/([^/?#]+)/i)?.[1] || '';
   return unique(output.filter((url) => {
     if (!isPlayableUrl(url) || /cdn\.zss90\.pl\/vod-video\.mp4/i.test(url)) return false;
-    // Solo el HTTPS del propio sitio y la fuente declarada para esta ficha;
-    // evitar URL (no garantizado por todos los runtimes QuickJS de Nuvio).
+
+
     const path = url.match(/^https:\/\/hdfull\.company(\/[^?#]*)/i)?.[1] || '';
     return path === `/vod-movie/v1/${slug}.mp4`;
   }));
 }
 
 async function streams(match, media) {
-  // En el episodio observado ModernPlayer solo carga un video genérico con fines publicitarios.
+
   if (media.mediaType !== 'movie') return [];
   const page = await fetchText(match.url, { referer: `${BASE}/` });
   const candidates = contentUrls(page.text, page.url).map((url) => ({

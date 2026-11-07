@@ -1,8 +1,8 @@
-#!/usr/bin/env node
+
 'use strict';
 
-// Diagnóstico público de warezcdn.sbs/doc. Solo estructura de JSON/HTML y
-// estados HTTP; nunca se guardan iframes completos, URLs firmadas ni tokens.
+
+
 const fs = require('node:fs');
 const path = require('node:path');
 const BASE = 'https://warezcdn.sbs';

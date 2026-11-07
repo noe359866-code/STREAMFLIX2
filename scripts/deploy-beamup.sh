@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# =============================================================================
-# Despliegue automático en un comando a Stremio Beamup (sin instalar beamup-cli)
-# Preconfigurado para el propietario del repositorio: noe359866-code / streamflix2
-# =============================================================================
 set -euo pipefail
 
 BEAMUP_HOST="${BEAMUP_HOST:-a.baby-beamup.club}"

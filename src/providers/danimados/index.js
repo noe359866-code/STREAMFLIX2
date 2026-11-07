@@ -8,7 +8,7 @@ import { languageOf } from '../../core/streams.js';
 const BASE = 'https://danimados.cc';
 
 async function search(query) {
-  // Danimados declara el tipo movies, pero actualmente devuelve una colección vacía.
+
   const page = await fetchText(`${BASE}/?s=${encodeURIComponent(query)}`, { referer: `${BASE}/` });
   return cardsFromAnchors(page.text, page.url, { path: /\/series\//i, mediaType: 'tv' });
 }
@@ -23,7 +23,7 @@ function optionLanguage(raw) {
   return 'es';
 }
 
-// playerOptions conserva solo el <li> inicial; aquí necesitamos también servidor y bandera.
+
 function playerOptions(html) {
   const output = [];
   const regex = /<li\b[^>]*\bdata-nume\s*=\s*["'][^"']+["'][^>]*>[\s\S]*?<\/li>/gi;

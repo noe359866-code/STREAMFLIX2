@@ -14,8 +14,8 @@ export function cardsFromAnchors(html, base, options = {}) {
     if (options.mediaType === 'tv' && type === 'movie') continue;
     const index = seen.get(url);
     if (index !== undefined) {
-      // Las tarjetas WordPress suelen enlazar primero «Película» y después
-      // el nombre del mismo título: no descartar ese enlace más informativo.
+
+
       if (!normalizeTitle(output[index].title) && normalizeTitle(title)) {
         output[index] = { ...output[index], title, year: output[index].year || yearOf(anchor.raw), raw: anchor.raw };
       }

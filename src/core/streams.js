@@ -12,18 +12,18 @@ export function mediaKind(url, explicit) {
 
 export function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ''))) return false;
-  // Voe puede incrustar Big Buck Bunny de test-videos.co.uk como señuelo, nunca es el título pedido.
+
   if (/^https?:\/\/(?:[^/@]+\.)?test-videos\.co\.uk(?::\d+)?\//i.test(url)) return false;
-  // Nombres inequívocos de creatividades publicitarias (incluso si el MP4
-  // tiene firma ftyp). No excluir rutas /ads/ o dominios por coincidencia
-  // parcial: una película legítima también puede vivir en esos CDN.
+
+
+
   const path = String(url).split(/[?#]/, 1)[0];
   if (/\/(?:pre[-_]?roll|mid[-_]?roll|post[-_]?roll|vast[-_]?ad|advert(?:isement)?|commercial|ad[-_]?(?:video|clip|break)|promo[-_]?clip)(?:[-_]?\d{1,3}(?:s|sec)?)?\.(?:m3u8|mp4|webm)$/i.test(path)) return false;
-  // ModernPlayer de VODCMS usa este clip genérico con publicidad, no la película/episodio pedido.
+
   if (/^https?:\/\/cdn\.zss90\.pl\/vod-video\.mp4(?:$|[?#])/i.test(url)) return false;
-  // Byse y algunos mirrors usan /e/<id>/<nombre>.mp4 para una página HTML, no para el medio.
+
   if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
-  if (/\.mpd(?:$|[?#])/i.test(url)) return false; // Se evita entregar DASH/DRM sin licencia.
+  if (/\.mpd(?:$|[?#])/i.test(url)) return false;
   return /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i.test(url)
     || /\/m3u8\/|\/get_video\?|\/videoplayback(?:\?|$)|\/manifest\.m3u8/i.test(url);
 }
@@ -90,16 +90,16 @@ export function providerGuard(provider, getStreams) {
     try {
       const streams = await getStreams(String(contentId), type, Number(season) || null, Number(episode) || null);
       const finalized = finalizeStreams(streams || []);
-      // Actions comprueba por separado *todos* los HLS/MP4 descubiertos en
-      // cada uno de sus tres intentos, sin perder los 403 por este filtro.
+
+
       if (globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA === true) return finalized;
-      // El proxy del addon almacena la respuesta íntegra antes de entregarla;
-      // un MP4 que ignore Range se descargaría entero. Allí, no sondear.
+
+
       if (typeof globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED === 'function'
         && !globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED()) return finalized;
       return await filterUnplayableStreams(finalized);
     } catch (error) {
-      try { console.warn(`[${provider}] ${error && error.message ? error.message : error}`); } catch (_) { /* noop */ }
+      try { console.warn(`[${provider}] ${error && error.message ? error.message : error}`); } catch (_) {            }
       return [];
     }
   };

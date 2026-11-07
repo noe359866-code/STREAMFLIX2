@@ -13,7 +13,7 @@ function isMoviePage(url) {
 
 async function search(query, mediaType) {
   if (mediaType !== 'movie') return [];
-  // /?s=... dio 403 en Actions; /search/<texto> devolvió resultados 200.
+
   const page = await fetchText(`${BASE}/search/${encodeURIComponent(query)}`, { referer: `${BASE}/` });
   return cardsFromAnchors(page.text, page.url, {
     mediaType: 'movie', path: /^https:\/\/ver\.gnula\.one\/movies\/[^/?#]+\/?$/i,
@@ -41,8 +41,8 @@ async function frameCandidates(option, movieUrl) {
   try {
     const frame = await fetchText(option.url, { referer: movieUrl });
     const title = stripTags(frame.text.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
-    // Actualmente ?trembed=1/2/3 redirige a la portada: NO leer sus
-    // sugerencias, anuncios ni otros títulos como si fueran la película elegida.
+
+
     if (/^G Nula\s*-\s*G Nula\b/i.test(title)) return [];
     const referer = frame.url || option.url;
     const direct = directMediaInHtml(frame.text, referer).map((url) => ({ ...option, url, referer }));
@@ -66,7 +66,7 @@ async function streams(match, media) {
   });
 }
 
-// Se observó /series/ pero no una ficha de episodio con un contrato estable.
+
 module.exports = { getStreams: createSiteProvider({
   name: 'Gnula One', search, streams, maxQueries: 3, minimumScore: 70,
 }) };

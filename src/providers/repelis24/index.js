@@ -7,7 +7,7 @@ const BASE = 'https://repelis24.de';
 
 function isMoviePage(url) {
   return /^https:\/\/repelis24\.de\/pelicula\/[^/?#]+\/?$/i.test(url)
-    && !/%3c|%3e|[<>]/i.test(url); // El catálogo publica también el literal /pelicula/<id>/ (404).
+    && !/%3c|%3e|[<>]/i.test(url);
 }
 
 async function search(query, mediaType) {
@@ -26,7 +26,7 @@ function language(label) {
   if (/\blatino|\blat\b/i.test(label)) return 'es-LAT';
   if (/castellano|espa[nñ]ol|\bcas\b/i.test(label)) return 'es-ES';
   if (/subtitulad|\bsub\b/i.test(label)) return 'es-SUB';
-  return 'es'; // Las opciones observadas solo identifican Nupload/Waaw, no la pista de audio.
+  return 'es';
 }
 
 function playerOptions(html) {
@@ -50,15 +50,15 @@ function embedUrl(data, base) {
   const src = raw.match(/<iframe\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i)?.[1] || raw;
   const url = absoluteUrl(src, base);
   if (!/^https?:\/\//i.test(url) || /youtube\.com|youtu\.be|\/download\/|download\.php/i.test(url)) return '';
-  // En Repelis24 la opción Waaw está envuelta en nupload.me/iframe/?url=...;
-  // tomar solo el destino explícito, nunca inventar una URL de medio.
+
+
   if (/^https:\/\/nupload\.me\/iframe\//i.test(url)) {
     const target = url.match(/[?&]url=([^&#]+)/i)?.[1];
     if (target) {
       try {
         const decoded = decodeURIComponent(target);
         if (/^https:\/\/waaw\.(?:tv|to)\/watch_video\.php\?v=/i.test(decoded)) return decoded;
-      } catch (_) { /* mantener el wrapper si está mal codificado */ }
+      } catch (_) {                                                  }
     }
   }
   return url;
@@ -82,8 +82,8 @@ async function streams(match, media) {
   });
 }
 
-// La ficha /serie/ observada no ofrece aún un enlace de episodio verificable.
-// No se declara TV ni se fabrica una ruta SxxExx sin comprobarla.
+
+
 module.exports = { getStreams: createSiteProvider({
   name: 'Repelis24', search, streams, maxQueries: 3, minimumScore: 70,
 }) };
