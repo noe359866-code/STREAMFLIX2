@@ -101,7 +101,9 @@ function mediaDeclarations(html) {
   // Los nombres de atributos del reproductor se detectan sin almacenar sus valores.
   const token = /["']token["']\s*:\s*["']([^"']+)/i.exec(html)?.[1] || '';
   const expires = /["']expires["']\s*:\s*["'](\d{9,13})/i.exec(html)?.[1] || '';
-  const playlist = /["']url["']\s*:\s*["'](https?:\/\/[^"']+)/i.exec(html)?.[1] || '';
+  const playlist = [...html.matchAll(/["']url["']\s*:\s*["']([^"']+)/gi)]
+    .map((match) => match[1].replace(/\\u002F/gi, '/').replace(/\\\//g, '/'))
+    .find((url) => /\/playlist\/|\.m3u8(?:[?#]|$)/i.test(url)) || '';
   return { token, expires, playlist };
 }
 async function vixsrc() {
@@ -119,12 +121,16 @@ async function vixsrc() {
       const page = await limited(target.href, { referer: `${BASE}${route.replace('/api/', '/')}` });
       const media = mediaDeclarations(page.text || '');
       entry.embed = { status: page.status, error: page.error, token: Boolean(media.token),
-        expires: Boolean(media.expires), playlistHost: host(media.playlist) };
+        expires: Boolean(media.expires), playlistHost: host(media.playlist),
+        playlistShape: /^https:\/\//i.test(media.playlist) ? 'absolute' : media.playlist.startsWith('//')
+          ? 'protocol-relative' : media.playlist.startsWith('/') ? 'relative' : media.playlist ? 'other' : 'absent',
+        playlistExtension: /\.m3u8(?:[?#]|$)/i.test(media.playlist) };
       if (media.playlist && media.token && media.expires && Number(media.expires) * 1000 > Date.now()
-        && /^[-\w]+$/.test(media.token) && /^https:\/\//.test(media.playlist)) {
+        && /^[-\w]+$/.test(media.token) && /^(?:https:\/\/|\/)/i.test(media.playlist)) {
         // Solo una URL de playlist declarada por la página, no una derivada de
         // un iframe; nunca se publica el token ni se descarga un segmento aquí.
-        const playlistUrl = new URL(media.playlist);
+        const playlistUrl = new URL(media.playlist, BASE);
+        if (playlistUrl.protocol !== 'https:') { output.push(entry); continue; }
         playlistUrl.searchParams.set('token', media.token);
         playlistUrl.searchParams.set('expires', media.expires);
         if (target.searchParams.get('lang')) playlistUrl.searchParams.set('lang', target.searchParams.get('lang'));
