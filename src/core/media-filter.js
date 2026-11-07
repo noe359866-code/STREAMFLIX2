@@ -158,14 +158,27 @@ function playlistRefs(text) {
   const variants = [];
   const segments = [];
   let variant = false;
+  let adBreak = false;
+  let adSegments = 0;
+  let otherSegments = 0;
   for (const line of lines) {
-    if (/^#EXT-X-STREAM-INF(?::|$)/i.test(line)) variant = true;
+    if (/^#EXT-X-(?:CUE-OUT|SCTE35-OUT)(?:[:\-]|$)/i.test(line)) adBreak = true;
+    else if (/^#EXT-X-(?:CUE-IN|SCTE35-IN)(?:[:\-]|$)/i.test(line)) adBreak = false;
+    else if (/^#EXT-X-PART:/i.test(line)) { if (!adBreak) otherSegments += 1; }
+    else if (/^#EXT-X-STREAM-INF(?::|$)/i.test(line)) variant = true;
     else if (!line || line.startsWith('#')) continue;
     else if (variant) { variants.push(line); variant = false; }
-    else segments.push(line);
+    else {
+      segments.push(line);
+      if (adBreak) adSegments += 1;
+      else otherSegments += 1;
+    }
   }
   return {
     variants, segments,
+    // Solo un VOD terminado y ENTERAMENTE entre CUE-OUT/CUE-IN prueba
+    // que la playlist es un corte publicitario, no una película con anuncios.
+    adOnly: lines.some((line) => /^#EXT-X-ENDLIST(?:\s|$)/i.test(line)) && adSegments > 0 && otherSegments === 0,
     key: lines.find((line) => /^#EXT-X-KEY:/i.test(line) && !/\bMETHOD=NONE(?:,|$)/i.test(line)) || '',
     init: lines.find((line) => /^#EXT-X-MAP:/i.test(line)) || '',
   };
@@ -186,7 +199,10 @@ async function checkHls(url, options, depth = 0) {
   // La firma HLS tiene prioridad sobre un Content-Type mal configurado.
   if (!/^#EXTM3U(?:\r?\n|$)/.test(text)) return 'bad';
   const full = playlist.truncated ? text.slice(0, text.lastIndexOf('\n') + 1) : text;
-  const { variants, segments, key, init } = playlistRefs(full);
+  const { variants, segments, adOnly, key, init } = playlistRefs(full);
+  // ENDLIST presente (línea completa) permite decidir incluso si un bridge
+  // marca cualquier 206 como «truncado»; sin él, la muestra es inconclusa.
+  if (adOnly) return 'bad';
   if (variants.length) {
     if (depth >= 2) return 'unknown';
     const verdicts = [];

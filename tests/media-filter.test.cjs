@@ -89,6 +89,34 @@ test('HLS: no entrega HTML como playlist ni segmentos HTML de un HLS 200', async
   assert.equal(await probeStream(hls(master), playable), 'good');
 });
 
+test('HLS: rechaza VOD compuesto solo por un corte publicitario, no una obra que contenga anuncios', async () => {
+  const ad = 'https://cdn.example/only-ads.m3u8';
+  const movieUrl = 'https://cdn.example/movie.m3u8';
+  const live = 'https://cdn.example/live.m3u8';
+  const master = 'https://cdn.example/master.m3u8';
+  const scte = 'https://cdn.example/scte-ad.m3u8';
+  const adBreak = '#EXTM3U\n#EXT-X-CUE-OUT:DURATION=10\n#EXTINF:5,\nad1.ts\n#EXTINF:5,\nad2.ts\n#EXT-X-CUE-IN\n';
+  const movieBreak = `${adBreak}#EXTINF:180,\nmovie.ts\n#EXT-X-ENDLIST\n`;
+  const mock = mockFetch({
+    [ad]: { body: `${adBreak}#EXT-X-ENDLIST\n` },
+    [scte]: { body: '#EXTM3U\n#EXT-X-SCTE35-OUT:abc\n#EXTINF:5,\nad1.ts\n#EXT-X-SCTE35-IN:abc\n#EXT-X-ENDLIST\n' },
+    [movieUrl]: { body: movieBreak },
+    [live]: { body: adBreak },
+    [master]: { body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nonly-ads.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\nmovie.m3u8\n' },
+    'https://cdn.example/ad1.ts': { body: TS, status: 206 },
+    'https://cdn.example/ad2.ts': { body: TS, status: 206 },
+    'https://cdn.example/movie.ts': { body: TS, status: 206 },
+  });
+  assert.equal(await probeStream(hls(ad), mock), 'bad');
+  assert.deepEqual(mock.calls.map((call) => call.url), [ad], 'no descargar segmentos de un anuncio confirmado');
+  assert.equal(await probeStream(hls(scte), mock), 'bad');
+  assert.equal(await probeStream(hls(movieUrl), mock), 'good');
+  assert.equal(await probeStream(hls(live), mock), 'good', 'un preroll en un directo no prueba que todo sea publicidad');
+  assert.equal(await probeStream(hls(master), mock), 'good', 'una variante publicitaria no oculta otra con la obra');
+  assert.deepEqual((await filterUnplayableStreams([hls(ad), hls(movieUrl)], { fetchImpl: mock.fetchImpl }))
+    .map((item) => item.url), [movieUrl]);
+});
+
 test('HLS AES-128: conservar bytes cifrados con MIME HTML engañoso, descartar HTML legible', async () => {
   const playlist = 'https://cdn.example/encrypted/master.m3u8';
   const key = 'https://cdn.example/encrypted/key.bin';

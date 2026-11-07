@@ -62,10 +62,52 @@ test('no inventa MP4 ni HLS recortando el nombre de un hoster', () => {
   const page = '<a href="https://www.mp4upload.com/e/demo">MP4Upload</a>'
     + '<iframe src="https://a4.mp4upload.com/embed/demo"></iframe>'
     + '<iframe src="https://cdn.m3u8host.com/watch/demo"></iframe>'
-    + '<script>file:"https://a4.mp4upload.com/video/real.mp4?token=abc"</script>';
+    + '<script>player.setup({file:"https://a4.mp4upload.com/video/real.mp4?token=abc"})</script>';
   assert.deepEqual(extractors.directMediaInHtml(page, 'https://site.example/movie'), [
     'https://a4.mp4upload.com/video/real.mp4?token=abc',
   ]);
+});
+
+test('el scraper sigue el iframe de la obra y no publica MP4/HLS de preroll ni URLs sueltas del padre', async () => {
+  const page = fixture('ad-player.html');
+  const base = 'https://catalog.example/movie/demo';
+  const embed = 'https://streamwish.example/e/movie123';
+  const actual = 'https://cdn.example/movie/master.m3u8';
+  assert.deepEqual(extractors.directMediaInHtml(page, base), []);
+  assert.deepEqual(extractors.directMediaInHtml(`<script>const src="https://cdn.example/creative-xyz.mp4";</script><iframe src="${embed}"></iframe>`,
+    base), [], 'un src genérico no se atribuye al reproductor frente a un iframe');
+  assert.deepEqual(extractors.embedCandidatesFromHtml(page, base).map((item) => item.url), [embed]);
+  assert.deepEqual(extractors.embedCandidatesFromHtml('<div class="publicidad" data-server-url="https://streamwish.example/e/ad123"></div>', base), []);
+  const mock = mockFetch([
+    [base, page],
+    [embed, `<script>player.setup({sources:[{src:"${actual}"}]})</script>`],
+  ]);
+  try {
+    const result = await extractors.resolveCandidates([{ url: base }], { provider: 'Prueba' });
+    assert.deepEqual(result.map((item) => item.url), [actual]);
+    assert.deepEqual(mock.calls.map((call) => call.url), [base, embed], 'no visitar el iframe publicitario');
+  } finally { mock.restore(); }
+});
+
+test('fuente declarada por el reproductor gana a publicidad adyacente sin bloquear títulos normales', () => {
+  const actual = 'https://cdn.example/movie/about-advertising.m3u8?token=abc';
+  const page = `<script>player.setup({advertising:{schedule:[{file:"https://cdn.example/a1b2c3.mp4"}]},`
+    + `sources:[{file:"${actual}"}],preview:"https://cdn.example/preview.mp4"})</script>`;
+  assert.deepEqual(extractors.directMediaInHtml(page, 'https://player.example/e/demo'), [actual]);
+  assert.deepEqual(extractors.directMediaInHtml('<script>const ads = [{file:"https://cdn.example/a1b2c3.mp4"}];</script>',
+    'https://player.example/e/demo'), []);
+  assert.deepEqual(extractors.directMediaInHtml('<video src="/movie/real.mp4"></video>',
+    'https://player.example/e/demo'), ['https://player.example/movie/real.mp4']);
+  assert.deepEqual(extractors.directMediaInHtml('<script>const file="https://cdn.example/movie/real.m3u8";</script>',
+    'https://player.example/e/demo'), ['https://cdn.example/movie/real.m3u8'], 'sin iframe, mantener el player heredado');
+  assert.deepEqual(extractors.directMediaInHtml('<video class="preroll"><source src="https://cdn.example/creative-xyz.mp4"></video>',
+    'https://player.example/e/demo'), []);
+  for (const ad of ['preroll-15s.mp4', 'vast-ad.m3u8', 'ad-video.mp4']) {
+    assert.equal(streams.isPlayableUrl(`https://cdn.example/${ad}`), false);
+  }
+  assert.equal(streams.isPlayableUrl(actual), true);
+  assert.equal(streams.isPlayableUrl('https://cdn.example/ads/movie/real.mp4'), true);
+  assert.equal(streams.isPlayableUrl('https://cdn.example/movie.mp4?ref=/pre-roll.mp4'), true);
 });
 
 test('Nupload: decodifica la expresión pública sin eval y solo sigue un Location de medio del mismo host', async () => {
@@ -107,12 +149,38 @@ test('Voe F7 recupera el HLS del título y rechaza el MP4 Big Buck Bunny de mues
   assert.deepEqual(extractors.directMediaInHtml(source, 'https://voe.example/e/cast'), []);
 });
 
+test('Voe F7 desplaza un MP4 publicitario válido y el fallback antiguo no lee HLS de páginas ajenas', async () => {
+  const base = 'https://voe.example/e/cast';
+  const decoy = 'https://cdn.example/campaign/creative-xyz.mp4';
+  const actual = extractors.voeUrls(fixture('voe-embed.html'))[0];
+  const mock = mockFetch([[base, fixture('voe-embed.html').replace(
+    'https://test-videos.co.uk/vids/bigbuckbunny/mp4/av1/1080/Big_Buck_Bunny_1080_10s_5MB.mp4', decoy,
+  )]]);
+  try {
+    const found = await extractors.resolveCandidates([{ url: base }]);
+    assert.deepEqual(found.map((item) => item.url), [actual]);
+  } finally { mock.restore(); }
+  const otherPage = 'https://catalog.example/movie/demo';
+  const iframe = 'https://streamwish.example/e/movie123';
+  const other = mockFetch([
+    [otherPage, `<script>const ads = { source:"https://cdn.example/campaign/creative-xyz.m3u8" };</script><iframe src="${iframe}"></iframe>`],
+    [iframe, '<script>player.setup({file:"https://cdn.example/movie/real.m3u8"})</script>'],
+  ]);
+  try {
+    const found = await extractors.resolveCandidates([{ url: otherPage }]);
+    assert.deepEqual(found.map((item) => item.url), ['https://cdn.example/movie/real.m3u8']);
+  } finally { other.restore(); }
+});
+
 test('resuelve dataLink y omite servidores de descarga', () => {
   const source = '<script>var dataLink = [{"video_language":"LAT","sortedEmbeds":[{"servername":"download","link":"https://download.example/file.mp4"},{"servername":"StreamWish","link":"eyJhbGciOiJub25lIn0.eyJsaW5rIjoiaHR0cHM6Ly9zdy5leGFtcGxlL2UvZGVtbyJ9.signature"}]}];</script>';
   const result = extractors.dataLinkCandidates(source, 'https://embed.example/f/demo');
   assert.equal(result.length, 1);
   assert.equal(result[0].url, 'https://sw.example/e/demo');
   assert.equal(result[0].language, 'LAT');
+  const withAd = source.replace('"sortedEmbeds":[', '"sortedEmbeds":[{"servername":"PreRoll","link":"https://cdn.example/creative.mp4"},');
+  assert.deepEqual(extractors.dataLinkCandidates(withAd, 'https://embed.example/f/demo').map((item) => item.url),
+    ['https://sw.example/e/demo']);
 });
 
 test('descifra AES-CBC después de resolver la prueba de trabajo', () => {
@@ -172,7 +240,7 @@ test('candidates embed: descubre iframes lazy y hosts anunciados por los cinco p
     '<button data-server-url="https://streamhg.example/embed/abc">StreamHG</button>',
     '<a href="https://dropload.example/e/lat">Dropload</a>',
     '<a href="https://unlimplay.example/e/sub">UnlimPlay</a>',
-    '<script>const file="https://cdn.example/video/master.m3u8";</script>',
+    '<script>player.setup({file:"https://cdn.example/video/master.m3u8"})</script>',
   ].join('');
   const found = extractors.embedCandidatesFromHtml(html, 'https://catalog.example/movie/1');
   assert.deepEqual(found.map((item) => item.url).sort(), [

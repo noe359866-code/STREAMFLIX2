@@ -1,6 +1,6 @@
 # Matriz de proveedores
 
-Estado al **6 de noviembre de 2026**. “Fixture” valida el recorrido offline, **no** reproducción. [La revisión de los seis dominios solicitados](revision-seis-sitios-2026.md) verificó segmentos de TuDorama TV y VixSrc en Actions; VixSrc ofreció en las muestras pistas **italianas/inglesas**, no españolas. CineHax (antes con algunas pruebas válidas) y TukiPlay se retiraron **por petición del usuario**. WarezCDN está incorporado pero desactivado por desafíos de Cloudflare desde Actions; Cinejoy, Atlantic y Cinema Army no tienen medio verificable. Ningún conector se ha probado en el reproductor de Nuvio.
+Estado al **7 de noviembre de 2026**. “Fixture” valida el recorrido offline, **no** reproducción. [La revisión de los seis dominios solicitados](revision-seis-sitios-2026.md) verificó segmentos de TuDorama TV y VixSrc en Actions; VixSrc ofreció en las muestras pistas **italianas/inglesas**, no españolas. CineHax (antes con algunas pruebas válidas) y TukiPlay se retiraron **por petición del usuario**. WarezCDN está incorporado pero desactivado por desafíos de Cloudflare desde Actions; Cinejoy, Atlantic y Cinema Army no tienen medio verificable. Ningún conector se ha probado en el reproductor de Nuvio.
 
 | ID | Nombre y dominio portado | Tipos | Manifiesto | Fixture | Implementación / limitación principal |
 |---|---|---|---|---|---|
@@ -43,7 +43,7 @@ Estado al **6 de noviembre de 2026**. “Fixture” valida el recorrido offline,
 ## Resultado de validación
 
 - Compilación esbuild/CommonJS y export `getStreams`: **35/35**. [Build y lint Beamup en Actions 42330339238/42330343647](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42330343647) correctos.
-- Recorrido offline con fixtures, denegación HTML y filtro AES-128: **114/114**. Un fixture no equivale a disponibilidad real.
+- Recorrido offline con fixtures, denegación HTML, filtro AES-128 y regresiones publicitarias: **119/119** localmente. Un fixture no equivale a disponibilidad real.
 - **33 activos** (incluye TuDorama TV y VixSrc con idiomas declarados), **2 inactivos** (WarezCDN y AnimeBum). CineHax y TukiPlay ya no están en manifiesto ni bundles.
 - [Contraste detallado de los seis sitios y retirada solicitada](revision-seis-sitios-2026.md).
 Los resultados a continuación son **históricos** (antes de retirar CineHax/TukiPlay y activar los conectores nuevos); sus cifras no son el inventario actual.
@@ -69,6 +69,8 @@ Los resultados a continuación son **históricos** (antes de retirar CineHax/Tuk
 - Reproducción dentro de Nuvio/dispositivo: **no verificada**.
 
 ## Formatos y hosters
+
+[Revisión del scraper frente a publicidad reproducible](filtro-medios-runtime.md#publicidad-reproducible-revisión-de-noviembre-de-2026): se priorizan fuentes declaradas por el player frente a anuncios del HTML y se reconocen playlists VOD compuestas únicamente por cortes publicitarios. Es una protección conservadora basada en fixtures, no una garantía de que todos los hosters entreguen la obra solicitada.
 
 La capa común sigue hasta cuatro opciones públicas de iframe/hoster por página, con concurrencia limitada y profundidad máxima de dos; reconoce `src` y atributos lazy (`data-src`, `data-embed`, `data-url`), enlaces DropLoad/UnlimPlay/StreamHG/Earnvids y formatos HLS/MP4 declarados directamente, además de JavaScript Dean Edwards empaquetado sin `eval`, Streamtape, MixDrop, Voe, Zilla, pCloud, MovieMaster y fallback público `castv` de Maxstream. Un nombre de hoster en esta lista no garantiza compatibilidad con todas sus variantes: ver [comparación del origen y exclusiones](porte-streamflix-reborn2.md).
 

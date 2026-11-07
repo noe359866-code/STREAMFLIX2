@@ -102,6 +102,17 @@ test('HLS: un JSON 200 no es vídeo, pero un segmento MPEG-TS sí lo es', async 
   assert.equal((await checkMedia(hls(url), valid)).outcome, 'ok');
 });
 
+test('la auditoría no llama medio accesible a un HLS que solo contiene anuncios', async () => {
+  const root = 'https://cdn.example/only-ads.m3u8';
+  const playlist = '#EXTM3U\n#EXT-X-CUE-OUT:DURATION=15\n#EXTINF:5,\nad.ts\n#EXT-X-CUE-IN\n#EXT-X-ENDLIST\n';
+  const mock = mockFetch({ [root]: { body: playlist } });
+  const result = await checkMedia(hls(root), mock);
+  assert.equal(result.outcome, 'otro');
+  assert.equal(result.stage, 'playlist-solo-anuncios');
+  assert.equal(mock.calls.length, 1);
+  assert.equal(classifyProvider([{ mediaCount: 1, media: [result] }]), 'no-concluyente');
+});
+
 test('HLS: sonda el prefijo de una playlist larga, sin concluir retirada por un 403 parcial', async () => {
   const url = 'https://cdn.example/large.m3u8';
   const segment = 'https://cdn.example/first.ts';

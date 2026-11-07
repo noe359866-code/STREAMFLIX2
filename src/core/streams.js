@@ -14,6 +14,11 @@ export function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ''))) return false;
   // Voe puede incrustar Big Buck Bunny de test-videos.co.uk como señuelo, nunca es el título pedido.
   if (/^https?:\/\/(?:[^/@]+\.)?test-videos\.co\.uk(?::\d+)?\//i.test(url)) return false;
+  // Nombres inequívocos de creatividades publicitarias (incluso si el MP4
+  // tiene firma ftyp). No excluir rutas /ads/ o dominios por coincidencia
+  // parcial: una película legítima también puede vivir en esos CDN.
+  const path = String(url).split(/[?#]/, 1)[0];
+  if (/\/(?:pre[-_]?roll|mid[-_]?roll|post[-_]?roll|vast[-_]?ad|advert(?:isement)?|commercial|ad[-_]?(?:video|clip|break)|promo[-_]?clip)(?:[-_]?\d{1,3}(?:s|sec)?)?\.(?:m3u8|mp4|webm)$/i.test(path)) return false;
   // ModernPlayer de VODCMS usa este clip genérico con publicidad, no la película/episodio pedido.
   if (/^https?:\/\/cdn\.zss90\.pl\/vod-video\.mp4(?:$|[?#])/i.test(url)) return false;
   // Byse y algunos mirrors usan /e/<id>/<nombre>.mp4 para una página HTML, no para el medio.

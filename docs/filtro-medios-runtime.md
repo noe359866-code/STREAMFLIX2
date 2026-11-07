@@ -2,7 +2,15 @@
 
 > Las cifras de 34 bundles y la mención de CineHax corresponden a la auditoría histórica citada. [Inventario vigente](providers.md); CineHax y TukiPlay fueron retirados posteriormente por petición. El filtro ahora también **conserva como inconclusos** los segmentos AES-128 con clave válida y bytes cifrados aunque el CDN anuncie `text/html`; sigue rechazando HTML legible y 403 confirmados (caso [VixSrc](revision-seis-sitios-2026.md)).
 
-Cambio independiente en `src/core/media-filter.js`, integrado en `providerGuard` (`src/core/streams.js`): **los 34 bundles** usados por Nuvio y por el addon Stremio intentan descartar enlaces de HLS/MP4 *individuales* que muestran evidencia de no ser vídeo. No procede de código de CNCVerse: su [revisión](revision-cncverse-cloudstream.md) no identificó fuentes actuales reutilizables bajo Apache-2.0.
+Cambio independiente en `src/core/media-filter.js`, integrado en `providerGuard` (`src/core/streams.js`): los bundles usados por Nuvio y por el addon Stremio intentan descartar enlaces de HLS/MP4 *individuales* que muestran evidencia de no ser vídeo. No procede de código de CNCVerse: su [revisión](revision-cncverse-cloudstream.md) no identificó fuentes actuales reutilizables bajo Apache-2.0.
+
+## Publicidad reproducible (revisión de noviembre de 2026)
+
+Un MP4 con `ftyp` o un HLS con segmentos MPEG-TS puede ser **un anuncio válido**, no la obra buscada. La sonda de firmas no puede averiguar por sí sola la identidad del contenido. Por eso el scraper común ahora prioriza `sources`/`file` en la configuración explícita de Playerjs/JWPlayer/Clappr y las etiquetas `<video>/<source>` frente a URLs aisladas en la página. Si hay un iframe y no hay fuente atribuible al reproductor, sigue el iframe en lugar de ofrecer el primer MP4 que encuentre en el HTML padre; omite iframes, vídeos y servidores etiquetados expresamente como anuncios, tráilers o prerolls. En Voe, el payload F7 decodificado desplaza los MP4 decorativos; el fallback HLS antiguo solo se usa en páginas del hoster. Se rechazan nombres inequívocos de creatividades como `preroll-15s.mp4` sin bloquear arbitrariamente un CDN o una ruta `/ads/` que pueda contener contenido legítimo.
+
+El filtro HLS descarta únicamente un **VOD terminado** (`#EXT-X-ENDLIST`) cuyos segmentos estén *todos* dentro de un corte `#EXT-X-CUE-OUT`/`CUE-IN` (o `SCTE35-OUT`/`IN`). Si la lista incluye segmentos de la obra, no tiene `ENDLIST` o no contiene marcadores de corte, **no se retira por duración estimada**. La auditoría independiente lo registra como `playlist-solo-anuncios`, no como medio accesible. Se confirma dos veces un descarte en el runtime, igual que otros negativos. Las pruebas de regresión son sintéticas: `tests/fixtures/ad-player.html`, `tests/core.test.cjs`, `tests/media-filter.test.cjs` y `tests/media-audit.test.cjs`.
+
+**Límite:** un servidor que entregue un anuncio MP4 con nombre opaco como única fuente `file`, o un HLS sin señales publicitarias, puede seguir pasando la sonda; tampoco se verifica la duración, el título, el audio ni la reproducción final. Sin ejemplos concretos de sitios, títulos y enlaces de player no es responsable inventar excepciones por dominio ni afirmar que un hoster determinado ya está corregido.
 
 ## Qué se prueba
 

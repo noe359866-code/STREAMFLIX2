@@ -510,17 +510,31 @@ function playlistRefs(text) {
   const variants = [];
   const segments = [];
   let variant = false;
+  let adBreak = false;
+  let adSegments = 0;
+  let otherSegments = 0;
   for (const line of lines) {
-    if (/^#EXT-X-STREAM-INF(?::|$)/i.test(line)) variant = true;
+    if (/^#EXT-X-(?:CUE-OUT|SCTE35-OUT)(?:[:\-]|$)/i.test(line)) adBreak = true;
+    else if (/^#EXT-X-(?:CUE-IN|SCTE35-IN)(?:[:\-]|$)/i.test(line)) adBreak = false;
+    else if (/^#EXT-X-PART:/i.test(line)) {
+      if (!adBreak) otherSegments += 1;
+    } else if (/^#EXT-X-STREAM-INF(?::|$)/i.test(line)) variant = true;
     else if (!line || line.startsWith("#")) continue;
     else if (variant) {
       variants.push(line);
       variant = false;
-    } else segments.push(line);
+    } else {
+      segments.push(line);
+      if (adBreak) adSegments += 1;
+      else otherSegments += 1;
+    }
   }
   return {
     variants,
     segments,
+    // Solo un VOD terminado y ENTERAMENTE entre CUE-OUT/CUE-IN prueba
+    // que la playlist es un corte publicitario, no una película con anuncios.
+    adOnly: lines.some((line) => /^#EXT-X-ENDLIST(?:\s|$)/i.test(line)) && adSegments > 0 && otherSegments === 0,
     key: lines.find((line) => /^#EXT-X-KEY:/i.test(line) && !/\bMETHOD=NONE(?:,|$)/i.test(line)) || "",
     init: lines.find((line) => /^#EXT-X-MAP:/i.test(line)) || ""
   };
@@ -536,7 +550,8 @@ async function checkHls(url, options, depth = 0) {
   const text = textOf(playlist.bytes).replace(/^\uFEFF/, "").trimStart();
   if (!/^#EXTM3U(?:\r?\n|$)/.test(text)) return "bad";
   const full = playlist.truncated ? text.slice(0, text.lastIndexOf("\n") + 1) : text;
-  const { variants, segments, key, init } = playlistRefs(full);
+  const { variants, segments, adOnly, key, init } = playlistRefs(full);
+  if (adOnly) return "bad";
   if (variants.length) {
     if (depth >= 2) return "unknown";
     const verdicts2 = [];
@@ -651,6 +666,8 @@ function mediaKind(url, explicit) {
 function isPlayableUrl(url) {
   if (!/^https?:\/\//i.test(String(url || ""))) return false;
   if (/^https?:\/\/(?:[^/@]+\.)?test-videos\.co\.uk(?::\d+)?\//i.test(url)) return false;
+  const path = String(url).split(/[?#]/, 1)[0];
+  if (/\/(?:pre[-_]?roll|mid[-_]?roll|post[-_]?roll|vast[-_]?ad|advert(?:isement)?|commercial|ad[-_]?(?:video|clip|break)|promo[-_]?clip)(?:[-_]?\d{1,3}(?:s|sec)?)?\.(?:m3u8|mp4|webm)$/i.test(path)) return false;
   if (/^https?:\/\/cdn\.zss90\.pl\/vod-video\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\/e\/[^?#]+\.mp4(?:$|[?#])/i.test(url)) return false;
   if (/\.mpd(?:$|[?#])/i.test(url)) return false;
@@ -954,22 +971,74 @@ function cleanMediaUrl(value, base) {
   const url = absoluteUrl(decodeHtml(value).replace(/\\u0026/gi, "&"), base);
   return isPlayableUrl(url) ? url : "";
 }
+var AD_LABEL = /(?:^|[\s_-])(?:ad(?:s|frame|slot|video|player|container)?|advert(?:isement|ising)?|anuncio|publicidad|banner|vast|(?:pre|mid|post)[-_]?roll|promo|tr[aá]iler)(?=$|[\s_-])/i;
+function adLabeledTag(tag) {
+  const attrs = attributes(tag);
+  const label = [attrs.id, attrs.class, attrs.title, attrs["aria-label"], attrs["data-role"]].join(" ");
+  return AD_LABEL.test(label);
+}
+function withoutAdContexts(html) {
+  let text = unpackAll(html);
+  text = text.replace(/<(script|video|iframe)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, (block) => adLabeledTag(block.slice(0, block.indexOf(">") + 1)) ? " ".repeat(block.length) : block);
+  text = text.replace(/<(?:iframe|video|source)\b[^>]*>/gi, (tag) => adLabeledTag(tag) ? " ".repeat(tag.length) : tag);
+  const spans = [];
+  const adKey = /\b(?:ads?|advertising|advertisement|anuncio|publicidad|ad(?:Tag|Src|Url|Video|Config|Schedule)(?:Url)?|vast(?:Url)?|(?:pre|mid|post)[-_]?roll(?:Url)?|promo(?:Url)?|trailer(?:Url)?)\b["']?\s*[:=]\s*([\[{"'])/gi;
+  for (const match of text.matchAll(adKey)) {
+    const start = match.index + match[0].length - 1;
+    const open = text[start];
+    if (open === "{" || open === "[") {
+      const block = extractBalanced(text.slice(start), "", open, open === "{" ? "}" : "]");
+      if (block) spans.push([match.index, start + block.length]);
+    } else {
+      let end = start + 1;
+      for (; end < text.length; end += 1) {
+        if (text[end] === "\\") {
+          end += 1;
+          continue;
+        }
+        if (text[end] === open) break;
+      }
+      if (end < text.length) spans.push([match.index, end + 1]);
+    }
+  }
+  for (const [start, end] of spans.sort((a, b) => b[0] - a[0])) {
+    text = text.slice(0, start) + " ".repeat(end - start) + text.slice(end);
+  }
+  return text;
+}
 function directMediaInHtml(html, base) {
-  const text = unpackAll(html);
+  const text = withoutAdContexts(html);
+  const declared = [];
+  const sourcePattern = /\b(?:file|src|source|hls[1-4]?|wurl)\s*[:=]\s*["']([^"']+)["']/gi;
+  const addSources = (source, pattern, output2) => {
+    for (const match of source.matchAll(pattern)) {
+      const raw = match[1].replace(/\\\//g, "/");
+      const url = cleanMediaUrl(raw.startsWith("//") ? `https:${raw}` : raw, base);
+      if (url) output2.push(url);
+    }
+  };
+  const setup = /\b(?:player\s*\.setup|jwplayer(?:\([^)]{0,300}\))?\s*\.setup|new\s+(?:Playerjs|Clappr\.Player))\s*\(\s*\{/gi;
+  for (const match of text.matchAll(setup)) {
+    const block = extractBalanced(text.slice(match.index + match[0].length - 1), "", "{", "}");
+    if (block) addSources(block, sourcePattern, declared);
+  }
+  addSources(text, /<(?:video|source)\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi, declared);
+  if (declared.length) return unique(declared);
+  if (/<iframe\b[^>]*\b(?:src|data-src)\s*=/i.test(text)) return [];
+  const weak = [];
+  addSources(text, sourcePattern, weak);
+  if (weak.length) return unique(weak);
   const output = [];
   const patterns = [
     // El sufijo debe terminar en un separador real: mp4upload.com no es
     // https://a4.mp4, ni m3u8host.com una playlist truncada.
     /https?:\\?\/\\?\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?(?![\w.-])/gi,
     /https?:\\?\/\\?\/[^\s"'<>\\]+?\.mp4(?:\?[^\s"'<>\\]*)?(?![\w.-])/gi,
-    /(?:file|src|source|url|hls[1-4]?)\s*[:=]\s*["']([^"']+?\.(?:m3u8|mp4)(?:\?[^"']*)?)["']/gi,
     /["']([^"']*?\/m3u8\/[a-zA-Z0-9_-]+[^"']*)["']/g,
-    /\bwurl\b[\s\S]{0,80}?["']([^"']+)["']/gi,
-    /file\s*:\s*["']([^"']+)["']/gi
+    /\bwurl\b[\s\S]{0,80}?["']([^"']+)["']/gi
   ];
   for (const pattern of patterns) {
-    let match;
-    while (match = pattern.exec(text)) {
+    for (const match of text.matchAll(pattern)) {
       const raw = (match[1] || match[0]).replace(/\\\//g, "/");
       const url = cleanMediaUrl(raw.startsWith("//") ? `https:${raw}` : raw, base);
       if (url) output.push(url);
@@ -993,7 +1062,7 @@ function streamtapeUrl(html, base) {
   return absoluteUrl(path.startsWith("http") ? path : `https:${path.startsWith("//") ? path : `//streamtape.com/${path.replace(/^\/+/, "")}`}`, base);
 }
 function mixdropUrl(html, base) {
-  const match = unpackAll(html).match(/\bwurl\b[\s\S]{0,120}?=\s*["']([^"']+)["']/i);
+  const match = withoutAdContexts(html).match(/\bwurl\b[\s\S]{0,120}?=\s*["']([^"']+)["']/i);
   if (!match) return "";
   const value = match[1];
   return cleanMediaUrl(value.startsWith("//") ? `https:${value}` : value.startsWith("http") ? value : `https://${value}`, base);
@@ -1017,7 +1086,7 @@ function decodeVoeConfig(encoded) {
     return null;
   }
 }
-function voeUrls(html) {
+function voeUrls(html, allowLegacy = true) {
   const text = String(html || "");
   const scripts = text.matchAll(/<script\b(?=[^>]*\btype\s*=\s*["']application\/json["'])[^>]*>([\s\S]*?)<\/script>/gi);
   for (const script of scripts) {
@@ -1035,8 +1104,9 @@ function voeUrls(html) {
     const fallback = (Array.isArray(config.fallback) ? config.fallback : []).map((item) => item?.file).filter((url) => isPlayableUrl(url));
     if (fallback.length) return unique(fallback);
   }
+  if (!allowLegacy) return [];
   const output = [];
-  const candidates = [...text.matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
+  const candidates = [...withoutAdContexts(text).matchAll(/(?:source|hls|file)\s*[:=]\s*["']([^"']+)["']/gi)];
   for (const match of candidates) {
     if (/\.m3u8/i.test(match[1]) && isPlayableUrl(match[1])) output.push(match[1]);
     else if (/^[a-zA-Z0-9+/=_-]{40,}$/.test(match[1])) {
@@ -1057,7 +1127,7 @@ function dataLinkCandidates(html, base) {
         const embeds = item.sortedEmbeds || item.sorted_embeds || item.embeds || [];
         for (const embed of embeds) {
           const label = embed.servername || embed.server || hostName(embed.link || "");
-          if (/download|1fichier/i.test(label)) continue;
+          if (/download|1fichier/i.test(label) || AD_LABEL.test(label)) continue;
           const link = decodeTokenLink(embed.link) || (/^https?:\/\//i.test(embed.link || "") ? embed.link : "");
           if (link) output.push({ url: absoluteUrl(link, base), language, server: label });
         }
@@ -1095,7 +1165,7 @@ function protectedDataLinkCandidates(html, base) {
     const output = [...plain];
     for (const item of items) {
       for (const embed of item.sortedEmbeds || []) {
-        if (/download|1fichier/i.test(embed.servername || "") || String(embed.link || "").split(".").length === 3) continue;
+        if (/download|1fichier/i.test(embed.servername || "") || AD_LABEL.test(embed.servername || "") || String(embed.link || "").split(".").length === 3) continue;
         const decoded = CryptoJS.enc.Base64.parse(embed.link);
         const iv = CryptoJS.lib.WordArray.create(decoded.words.slice(0, 4), 16);
         const ciphertext = CryptoJS.lib.WordArray.create(decoded.words.slice(4), Math.max(0, decoded.sigBytes - 16));
@@ -1177,12 +1247,12 @@ async function resolveOne(candidate, context, depth) {
   }
   const html = response.text;
   const pageUrl = response.url || candidate.url;
-  const direct = unique([
-    // El JSON autenticado de Voe tiene prioridad sobre MP4 de muestra incrustados en su página.
-    ...voeUrls(html),
+  const isVoe = /^https?:\/\/(?:[^/]+\.)?voe\.[^/:?#]+(?:[:?#]|\/|$)/i.test(pageUrl);
+  const voe = voeUrls(html, isVoe);
+  const direct = unique(voe.length ? voe : [
     ...directMediaInHtml(html, pageUrl),
-    streamtapeUrl(html, pageUrl),
-    mixdropUrl(html, pageUrl)
+    /^https?:\/\/(?:[^/]+\.)?streamtape\.[^/]+\//i.test(pageUrl) ? streamtapeUrl(html, pageUrl) : "",
+    /^https?:\/\/(?:[^/]+\.)?mixdrop\.[^/]+\//i.test(pageUrl) ? mixdropUrl(html, pageUrl) : ""
   ].filter(Boolean));
   if (direct.length) return direct.map((url) => ({ ...candidate, url, referer: pageUrl, subtitles: subtitlesInHtml(html, pageUrl) }));
   if (maxstreamCastvUrl(candidate.url)) {
@@ -1245,17 +1315,20 @@ function embedCandidatesFromHtml(html, base, defaults = {}) {
   const source = String(html || "");
   const output = dataLinkCandidates(source, base);
   for (const match of source.matchAll(/<iframe\b[^>]*>/gi)) {
+    if (adLabeledTag(match[0])) continue;
     const attrs = attributes(match[0]);
     const raw = attrs.src || attrs["data-src"] || attrs["data-lazy-src"] || attrs["data-embed"] || attrs["data-url"];
     const url = absoluteUrl(raw || "", base);
     if (url) output.push({ ...defaults, url });
   }
   for (const anchor of anchors(source)) {
+    if (adLabeledTag(anchor.raw.slice(0, anchor.raw.indexOf(">") + 1))) continue;
     const url = absoluteUrl(anchor.href, base);
     if (!url || !isSupportedEmbedUrl(url)) continue;
     output.push({ ...defaults, url, title: anchor.title || defaults.title });
   }
   for (const match of source.matchAll(/<(?:a|button|div|li)\b[^>]*>/gi)) {
+    if (adLabeledTag(match[0])) continue;
     const attrs = attributes(match[0]);
     const raw = attrs["data-server-url"] || attrs["data-embed"] || attrs["data-src"] || attrs["data-link"] || attrs["data-url"];
     const url = absoluteUrl(raw || "", base);

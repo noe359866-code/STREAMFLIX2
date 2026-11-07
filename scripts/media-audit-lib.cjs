@@ -170,6 +170,23 @@ function classifySamples(samples, stage, format) {
   return publicResult('otro', stage, samples.find((item) => item.status !== 403) || samples[0], format);
 }
 
+function adOnlyPlaylist(text) {
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map((line) => line.trim());
+  if (!lines.some((line) => /^#EXT-X-ENDLIST(?:\s|$)/i.test(line))) return false;
+  let inBreak = false;
+  let adSegments = 0;
+  let contentSegments = 0;
+  for (const line of lines) {
+    if (/^#EXT-X-(?:CUE-OUT|SCTE35-OUT)(?:[:\-]|$)/i.test(line)) inBreak = true;
+    else if (/^#EXT-X-(?:CUE-IN|SCTE35-IN)(?:[:\-]|$)/i.test(line)) inBreak = false;
+    else if (/^#EXT-X-PART:/i.test(line) || (line && !line.startsWith('#'))) {
+      if (inBreak) adSegments += 1;
+      else contentSegments += 1;
+    }
+  }
+  return adSegments > 0 && contentSegments === 0;
+}
+
 async function checkHls(url, options = {}, depth = 0) {
   const playlist = await sampleUrl(url, { ...options, maximum: MAX_PLAYLIST_BYTES });
   if (playlist.status === 403) return publicResult('http403', depth ? 'variante' : 'playlist', playlist, 'hls');
@@ -196,6 +213,9 @@ async function checkHls(url, options = {}, depth = 0) {
     if (results.every((item) => item.outcome === 'http403')) return results[0];
     return results.find((item) => item.outcome !== 'http403');
   }
+  // Una firma TS/MP4 válida en el primer segmento puede ser solo un anuncio.
+  // Únicamente ENDLIST con TODOS los segmentos dentro del corte lo demuestra.
+  if (adOnlyPlaylist(prefix)) return publicResult('otro', 'playlist-solo-anuncios', playlist, 'hls');
   if (encryption) {
     if (!/\bMETHOD=AES-128(?:,|$)/i.test(encryption)) return publicResult('otro', 'cifrado-no-verificado', playlist, 'hls');
     const keyUrl = resolveUri(firstUri(encryption), playlist.url);
