@@ -55,6 +55,10 @@ npm run start:nuvio
 
 El servidor de Nuvio escucha en `0.0.0.0:3000` y publica `/manifest.json` y `/providers/*.js`. Desde otro dispositivo usa la IP de la máquina, no `localhost`. Para cambiar el puerto: `PORT=8080 npm run start:nuvio`.
 
+## Mejoras compartidas de extractores
+
+VideoAPI consulta Videoapp en paralelo para películas y episodios con ID TMDB; los reproductores Lamovie/Vimeos pueden aportar fuentes y subtítulos sin ejecutar JavaScript remoto. El audio se marca como no verificado. También se reconocen alias y rutas de MixDrop y el alias Filemoon `byselapuix.com`. Uqload admite el formulario público de embed y LuluVdo/Dropload aportan alias y subtítulos filtrados. Goodstream y VidMoly conservan sus cabeceras específicas; los enlaces VidMoly .me se normalizan a .to conservando sus parámetros. JKPlayer admite HLS directo o codificado en Base64, con sus cabeceras de reproducción; Voe reconoce alias exactos y subtítulos de su configuración decodificada. Estas mejoras se incluyen tanto en los bundles del plugin como en el addon. Las pruebas usan fixtures: no garantizan reproducción en vivo ni resuelven los retos de attestation de Filemoon.
+
 ## Cobertura
 
 | Grupo | Conectores |

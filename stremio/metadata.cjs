@@ -5,7 +5,7 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const CINEMETA_BASE = 'https://v3-cinemeta.strem.io';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
 const CACHE_MAX_ENTRIES = 500;
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 horas
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 const requestContext = new AsyncLocalStorage();
 const metadataCache = new Map();
@@ -64,11 +64,11 @@ function extractYear(value) {
   return match ? match[0] : '';
 }
 
-/**
- * Parsea cualquier identificador enviado por Stremio:
- * - Películas: `tt0137523`, `imdb:tt0137523`, `tmdb:550`
- * - Series: `tt0903747:2:3`, `tt0903747%3A2%3A3`, `tmdb:1396:2:3`
- */
+
+
+
+
+
 function parseStremioId(rawType, rawId) {
   const normalizedType = String(rawType || '').trim().toLowerCase();
   const mediaType = normalizedType === 'movie'
@@ -237,7 +237,7 @@ function getCached(cacheKey) {
     metadataCache.delete(cacheKey);
     return null;
   }
-  // Refrescar orden LRU
+
   metadataCache.delete(cacheKey);
   metadataCache.set(cacheKey, entry);
   return entry.value;

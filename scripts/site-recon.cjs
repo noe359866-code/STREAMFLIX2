@@ -1,8 +1,8 @@
-#!/usr/bin/env node
+
 'use strict';
 
-// Diagnóstico de HTML público desde Actions. No ejecuta JS ni persiste cuerpos,
-// tokens, cookies o URLs de medios; solo expone estructura y estado HTTP.
+
+
 const fs = require('node:fs');
 const zlib = require('node:zlib');
 
@@ -10,8 +10,8 @@ const ORIGINAL_TARGETS = [
   { id: 'repelis24', base: 'https://repelis24.de' },
   { id: 'gnulaone', base: 'https://ver.gnula.one' },
 ];
-// Los nuevos sitios se examinan en trabajos independientes de Actions: cada
-// dominio recibe tres intentos, incluidos errores de TLS/DNS y páginas 403.
+
+
 const REQUESTED_TARGETS = [
   { id: 'tudorama', base: 'https://tudorama.com', paths: ['/?s=Minamahal', '/pelicula/minamahal/', '/serie/el-precio-de-una-confesion/'], title: /minamahal|precio|confesi[oó]n/i },
   { id: 'vixsrc', base: 'https://vixsrc.to', paths: ['/api/movie/550', '/api/tv/1396/1/1', '/movie/550?lang=es'], title: /fight|club|breaking|bad/i },
@@ -127,8 +127,8 @@ async function inspect(url, target, referer, redirects = 0) {
       }
       return result;
     }
-    // Una ruta de player puede devolver un vídeo: no descargarlo en un
-    // reconocimiento de HTML (la auditoría HLS/MP4 es un trabajo aparte).
+
+
     if (result.contentType && !/html|json|text|xml/i.test(result.contentType)) {
       if (response.body) await response.body.cancel().catch(() => {});
       return result;
@@ -143,8 +143,8 @@ async function inspect(url, target, referer, redirects = 0) {
         result.json = {
           kind: Array.isArray(value) ? 'array' : typeof value,
           keys: Object.keys(value || {}).slice(0, 12),
-          // Solo la ruta de un embed del MISMO dominio; jamás el valor de una
-          // URL firmada ni su query. No se publica el cuerpo de la respuesta.
+
+
           src: typeof value?.src === 'string' && /^\/(?!\/)/.test(value.src)
             ? safeUrl(value.src, request.href) : null,
           hasData: Boolean(value?.data),
@@ -173,8 +173,8 @@ async function main() {
       for (const subpath of target.paths || PATHS) {
         pages.push(await inspect(new URL(subpath, target.base).href, target, target.base + '/'));
       }
-      // Solo se sigue un enlace del mismo dominio si el texto/slug coincide con
-      // el título consultado. No se descargan vídeos ni se abren hosters.
+
+
       const allowedHost = new URL(target.base).hostname;
       const candidates = pages.flatMap((page) => page.page?.anchors || []).filter((item) =>
         (item.host === allowedHost || item.host.endsWith(`.${allowedHost}`))
@@ -188,7 +188,7 @@ async function main() {
       attempts.push({ pages, detail });
       console.log(`${target.id} intento ${attempt + 1}: ${pages.map((p) => p.status || p.error).join('/')} / ficha ${detail.map((p) => p.status || p.error).join('/')}`);
     }
-    // Mantener el esquema anterior para el trabajo Repelis24/Gnula existente.
+
     report.push(targetId ? { id: target.id, base: target.base, attempts }
       : { id: target.id, base: target.base, ...attempts[0] });
   }

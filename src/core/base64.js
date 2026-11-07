@@ -9,7 +9,7 @@ export function decodeBase64(value) {
   if (typeof TextDecoder !== 'undefined') {
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    try { return new TextDecoder('utf-8').decode(bytes); } catch (_) { /* fallback */ }
+    try { return new TextDecoder('utf-8').decode(bytes); } catch (_) {                }
   }
   try { return decodeURIComponent(binary.split('').map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`).join('')); }
   catch (_) { return binary; }

@@ -3,12 +3,12 @@ import { absoluteUrl } from './text.js';
 import { isPlayableUrl } from './streams.js';
 import { requestHeaders } from './http.js';
 
-/**
- * Nupload codifica el origen del player como una matriz de números Base64 y
- * concatena un token efímero `sesz`. Solo se interpreta esa expresión literal;
- * no se ejecuta JavaScript de terceros ni se reutiliza el token para otro título.
- * El resultado aún es una puerta (?s=), NO una URL de vídeo.
- */
+
+
+
+
+
+
 export function nuploadEndpointFromHtml(html) {
   const source = String(html || '');
   if (source.length > 400000) return '';
@@ -30,7 +30,7 @@ export function nuploadEndpointFromHtml(html) {
       base += String.fromCharCode(code);
     }
   } catch (_) { return ''; }
-  // La puerta observada pertenece exclusivamente a svN.ibra.lat.
+
   if (!/^https:\/\/sv\d+\.ibra\.lat\/$/i.test(base)) return '';
   const file = /\bfile\s*:\s*([a-z_$][\w$]*)\s*\+\s*(["'])([^"']*)\2\s*\+\s*([a-z_$][\w$]*)\s*\+\s*(["'])([^"']*)\5/i.exec(source);
   if (!file || file[1] !== outputName || file[3] !== '?s=' || file[6] !== '') return '';
@@ -39,7 +39,7 @@ export function nuploadEndpointFromHtml(html) {
   return base + '?s=' + token;
 }
 
-/** Obtiene solamente Location, sin descargar el vídeo al inspeccionar la puerta. */
+
 export async function nuploadMediaRedirect(endpoint, referer, timeoutMs = 9000) {
   if (!/^https:\/\/sv\d+\.ibra\.lat\/\?s=[a-zA-Z0-9%+/_=-]{20,300}$/i.test(endpoint)) return '';
   let timer;
@@ -49,8 +49,8 @@ export async function nuploadMediaRedirect(endpoint, referer, timeoutMs = 9000) 
         headers: requestHeaders(referer, { Accept: '*/*', Range: 'bytes=0-4095' }) }),
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Tiempo agotado')), timeoutMs); }),
     ]);
-    // Si el bridge no honra redirect:manual, aceptar únicamente un URL final
-    // de vídeo explícito. El body se cancela sin leer playlists ni ficheros.
+
+
     const location = [301, 302, 303, 307, 308].includes(response.status)
       ? response.headers?.get('location') || ''
       : response.status >= 200 && response.status < 300 ? response.url || '' : '';

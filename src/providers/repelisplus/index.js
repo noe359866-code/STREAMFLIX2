@@ -19,7 +19,7 @@ async function search(query, mediaType) {
         path: mediaType === 'movie' ? /\/peliculas?\//i : /\/series?\//i,
       });
       if (found.length) return found;
-    } catch (_) { /* probar la forma alternativa de búsqueda pública */ }
+    } catch (_) {                                                       }
   }
   return [];
 }

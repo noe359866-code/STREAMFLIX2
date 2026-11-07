@@ -40,3 +40,22 @@ SHA-256/AES. crypto-js se declara como dependencia para reproducir las
 pruebas en Node.js; se mantiene externo en los bundles destinados a Nuvio.
 
 El texto completo de la licencia Apache 2.0 se encuentra en LICENSE.
+
+Videoapp, Lamovie y MixDrop se adaptan de las implementaciones Apache-2.0:
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/VideoappExtractor.kt
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/LamovieExtractor.kt
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/MixDropExtractor.kt
+La adaptación analiza datos públicos y no ejecuta JavaScript remoto.
+
+JKPlayer y los subtítulos/alias de Voe se contrastaron con los extractores Apache-2.0:
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/JKPlayerExtractor.kt
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/VoeExtractor.kt
+
+Uqload, LuluVdo y Dropload se contrastaron con los extractores Apache-2.0:
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/UqloadExtractor.kt
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/LuluVdoExtractor.kt
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/DroploadExtractor.kt
+
+Goodstream y VidMoly se contrastaron con los extractores Apache-2.0:
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/GoodstreamExtractor.kt
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors/VidMoLyExtractor.kt

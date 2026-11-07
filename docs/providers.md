@@ -31,6 +31,7 @@ Estado al **6 de noviembre de 2026**. “Fixture” valida el recorrido offline,
 | `seriesflix` | SeriesFlix — `seriesflixhd.lol` | TV | Activo | ✅ | Solo series; carga temporadas, desenvuelve `data-url`/`url=` y conserva el idioma. |
 | `seriesturcas` | Series Turcas — `tbg.seriesturcastv.to` | TV | Activo | ✅ | Solo series; Vidmoly/Voe/Esprinahy y otros hosters conocidos. |
 | `sololatino` | SoloLatino — `sololatino.net` + Embed69 | Película/TV | Activo | ✅ | `player-url`, XSRF, `dataLink`, AES/PoW y fallback IMDb Embed69. |
+| `superembed` | SuperEmbed — `multiembed.mov` | Película/TV | Activo (experimental) | ✅ | Usa el embed público y extractores compartidos; no entrega páginas HTML como vídeo. Audio desconocido y reproducción real sin validar. |
 | `tioanime` | TioAnime — `tioanime.com` | Película/TV | Activo | ✅ | Verifica `var episodes`; usa únicamente Voe/YourUpload como el origen. |
 | `tioplus` | TioPlus/Pelisplusto — `tioplus.app` | Película/TV | Activo | ✅ | Valida `seasonsJson`; URLs `season/{s}/episode/{e}` y `.bg-tabs` Base64. |
 | `tudorama` | TuDorama — `tudorama.com` | **TV** | Activo | ✅ | Ficha/episodio exacto y servidores `corvus_get_servers` por AJAX; dos HLS con segmento MPEG-TS 206 en **3/3** para *El precio de una confesión* T1E1. Películas sin medio resuelto en la muestra y no anunciadas. Etiqueta `esp` ≠ pista de audio verificada; `sub`/`lang=en` no se inventa como subtítulo español. |
@@ -42,7 +43,7 @@ Estado al **6 de noviembre de 2026**. “Fixture” valida el recorrido offline,
 
 ## Resultado de validación
 
-- Compilación esbuild/CommonJS y export `getStreams`: **35/35**. [Build y lint Beamup en Actions 42330339238/42330343647](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42330343647) correctos.
+- Compilación esbuild/CommonJS y export `getStreams`: **36/36** localmente (SuperEmbed no se ha probado en Actions). [Build y lint Beamup en Actions 42330339238/42330343647](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42330343647) correctos.
 - Recorrido offline con fixtures, denegación HTML, filtro AES-128 y regresiones publicitarias: **119/119** localmente. Un fixture no equivale a disponibilidad real.
 - **33 activos** (incluye TuDorama TV y VixSrc con idiomas declarados), **2 inactivos** (WarezCDN y AnimeBum). CineHax y TukiPlay ya no están en manifiesto ni bundles.
 - [Contraste detallado de los seis sitios y retirada solicitada](revision-seis-sitios-2026.md).

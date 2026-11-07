@@ -50,12 +50,12 @@ async function streams(match, media) {
           referer: page.url, extraHeaders: { 'X-Requested-With': 'XMLHttpRequest' },
         });
         if (response.data.url) candidates.push({ url: response.data.url, language: 'es', referer: page.url });
-      } catch (_) { /* continuar con otros servidores */ }
+      } catch (_) {                                      }
     } else if (attrs['data-player-token']) {
       try {
         const response = await playerToken(attrs['data-player-token'], page.url);
         if (response.data.url) candidates.push(...await openProtected(response.data.url, page.url));
-      } catch (_) { /* Laravel/XSRF puede requerir WebView; probar Embed69 */ }
+      } catch (_) {                                                           }
     }
   }
   if (!candidates.length && tmdb.imdbId) {

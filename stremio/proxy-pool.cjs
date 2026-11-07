@@ -1,21 +1,21 @@
 'use strict';
 
-/**
- * Pool de proxies HTTP(S) para el raspado del lado del servidor.
- *
- * Problema que resuelve: los proveedores activos se ejecutan en el contenedor de
- * Beamup (IP de datacenter), y muchos de los sitios los rechazan con 403/Cloudflare.
- * Nuvio no lo sufre porque ejecuta los proveedores en el dispositivo del usuario.
- *
- * Este módulo descarga una lista pública de proxies (por defecto ProxyScrape v4),
- * verifica cada uno con un túnel `CONNECT` real y expone:
- *   - `proxyFetch(url, init, proxy)`  petición HTTP/1.1 tunelizada (sin dependencias)
- *   - `runWithProxy(proxy, fn)`       ejecuta código con ese proxy activo
- *   - `installProxyFetchHook()`       hace que `globalThis.fetch` use el proxy
- *                                     activo del contexto asíncrono actual
- *
- * Sin paquetes externos: se usa `http`/`tls` de Node y la `Response` nativa.
- */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 const http = require('node:http');
 const tls = require('node:tls');
@@ -26,11 +26,11 @@ const DEFAULT_LIST_URL = 'https://api.proxyscrape.com/v4/free-proxy-list/get'
   + '?request=display_proxies&protocol=http&ssl=yes&anonymity=elite'
   + '&timeout=5000&format=json&limit=150';
 
-/**
- * Fuentes de listados, en orden. La primera puede devolver 429 desde la IP de
- * Beamup (límite por IP compartida), así que se prueban las siguientes hasta
- * reunir candidatos suficientes.
- */
+
+
+
+
+
 const DEFAULT_LIST_URLS = [
   DEFAULT_LIST_URL,
   'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',
@@ -43,8 +43,8 @@ const LIST_USER_AGENT = 'STREAMFLIX2/1.1 (+https://github.com/noe359866-code/STR
 const DEFAULT_CANARY_HOST = 'v3-cinemeta.strem.io';
 const DEFAULT_CANARY_PORT = 443;
 
-// `fetch` sin proxy. Se resuelve en tiempo de llamada (no al cargar el módulo)
-// para no romper a quien reemplace `globalThis.fetch` después (pruebas, mocks).
+
+
 let previousFetch = typeof globalThis.fetch === 'function'
   ? globalThis.fetch.bind(globalThis)
   : null;
@@ -140,10 +140,10 @@ function normalizeEntry(raw) {
   };
 }
 
-/**
- * Acepta el JSON de ProxyScrape v4 (`{ proxies: [...] }`), un array de objetos
- * o el formato de texto clásico (`ip:puerto` por línea).
- */
+
+
+
+
 function parseProxyList(payload) {
   const entries = [];
 
@@ -168,15 +168,15 @@ function parseProxyList(payload) {
     parsed.push(entry);
   }
 
-  // Prioriza los que declaran más tiempo activo y menor latencia media.
+
   parsed.sort((a, b) => (b.uptime - a.uptime) || (a.avgTimeoutMs - b.avgTimeoutMs));
   return parsed;
 }
 
-/**
- * Comprueba un proxy abriendo un túnel CONNECT y completando el handshake TLS
- * contra el canario. Devuelve el tiempo total en ms o `null` si no sirve.
- */
+
+
+
+
 function probeProxy(proxy, options = {}) {
   const canaryHost = options.canaryHost || DEFAULT_CANARY_HOST;
   const canaryPort = options.canaryPort || DEFAULT_CANARY_PORT;
@@ -210,7 +210,7 @@ function probeProxy(proxy, options = {}) {
         return;
       }
       if (!useTls) {
-        // Canario sin TLS (solo pruebas locales): basta con el túnel abierto.
+
         const elapsed = Date.now() - startedAt;
         socket.destroy();
         finish(elapsed);
@@ -281,7 +281,7 @@ async function fetchProxySource(url, timeoutMs = 12000) {
   }
 }
 
-/** Mezcla determinista por refresco: los listados de texto no traen métricas. */
+
 function shuffle(list) {
   const copy = [...list];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -336,7 +336,7 @@ async function refreshPool(env = process.env) {
     state.cursor = 0;
     state.lastError = '';
   } else if (state.healthy.length) {
-    // Un refresco fallido no debe tirar un pool que ya funcionaba.
+
     state.lastError = 'refresco sin proxies válidos; se conserva el pool anterior';
   } else {
     state.lastError = 'ningún candidato superó la prueba CONNECT+TLS';
@@ -345,10 +345,10 @@ async function refreshPool(env = process.env) {
   return state;
 }
 
-/**
- * Garantiza que el pool esté construido y fresco. Devuelve la lista de proxies
- * sanos (puede ser vacía). Nunca lanza.
- */
+
+
+
+
 async function ensurePool(env = process.env, options = {}) {
   state.enabled = true;
   const { refreshMs } = resolveOptions(env);
@@ -397,9 +397,9 @@ function resetProxyPool() {
   state.refreshing = null;
 }
 
-/* ------------------------------------------------------------------------- */
-/* Cliente HTTP/1.1 tunelizado (sin dependencias)                            */
-/* ------------------------------------------------------------------------- */
+
+
+
 
 function headerObjectToEntries(headers) {
   if (!headers) return [];
@@ -420,7 +420,7 @@ function decodeBody(buffer, encoding) {
     if (kind === 'gzip' || kind === 'x-gzip') return zlib.gunzipSync(buffer);
     if (kind === 'deflate') return zlib.inflateSync(buffer);
     if (kind === 'br') return zlib.brotliDecompressSync(buffer);
-  } catch (_) { /* devolver tal cual si no se puede descomprimir */ }
+  } catch (_) {                                                     }
   return buffer;
 }
 
@@ -498,7 +498,7 @@ function readResponseFromSocket(socket, options = {}) {
           if (buffer.length < length) return false;
           body = buffer.subarray(0, length);
         } else {
-          // Sin longitud: el cuerpo termina al cerrar la conexión.
+
           return false;
         }
       }
@@ -514,7 +514,7 @@ function readResponseFromSocket(socket, options = {}) {
 
     socket.on('close', () => {
       if (settled) return;
-      // Conexión cerrada: sirve como fin de cuerpo si no había longitud.
+
       if (headerEnd >= 0) {
         const transferEncoding = String(headers['Transfer-Encoding'] || headers['transfer-encoding'] || '').toLowerCase();
         let body = null;
@@ -615,10 +615,10 @@ function openTunnel(proxy, target, timeoutMs) {
   });
 }
 
-/**
- * Equivalente mínimo de `fetch` enviando la petición por el proxy indicado.
- * Sigue redirecciones y devuelve una `Response` nativa de Node.
- */
+
+
+
+
 async function proxyFetch(input, init = {}, proxy, options = {}) {
   if (!proxy || !proxy.host) throw new Error('Proxy no válido');
 
@@ -685,15 +685,15 @@ async function proxyFetch(input, init = {}, proxy, options = {}) {
   }
 }
 
-/** Ejecuta `fn` con `proxy` como proxy activo para `globalThis.fetch`. */
+
 function runWithProxy(proxy, fn) {
   if (!proxy) return fn();
   return proxyContext.run(proxy, fn);
 }
 
-// El proxy de scraping lee respuestas completas: no hacer sondas de MP4/HLS
-// a través de él si un hoster ignora Range. AsyncLocalStorage evita mezclar
-// el estado de dos peticiones concurrentes al addon.
+
+
+
 const mediaProbeAllowed = () => !proxyContext.getStore();
 
 function installProxyFetchHook() {
@@ -712,7 +712,7 @@ function installProxyFetchHook() {
   globalThis.fetch = proxyAwareFetch;
 }
 
-/** Restaura el `fetch` previo (usado por las pruebas). */
+
 function uninstallProxyFetchHook() {
   if (!hookInstalled) return;
   if (proxyAwareFetch && globalThis.fetch === proxyAwareFetch && typeof previousFetch === 'function') {

@@ -41,8 +41,8 @@ function resolveBaseUrl(req, env = process.env) {
     .trim()
     .replace(/[^A-Za-z0-9.:[\]-]/g, '');
   if (!rawHost) return '';
-  // Un host sin dominio real (p. ej. `7e2a912be9c9-streamflix2`) produce enlaces
-  // y un logo inservibles en el manifiesto; en ese caso no publicamos base.
+
+
   if (!rawHost.includes('.') && !rawHost.startsWith('localhost')) return '';
   return `${proto}://${rawHost}`;
 }
@@ -130,12 +130,21 @@ function createAddonServer(options = {}) {
         return;
       }
 
+      if (pathname === '/hero.jpg') {
+        const imagePath = path.join(__dirname, 'hero.jpg');
+        const stat = fs.statSync(imagePath);
+        res.writeHead(200, { ...CORS_HEADERS, 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400', 'Content-Length': stat.size });
+        if (req.method === 'HEAD') res.end();
+        else fs.createReadStream(imagePath).pipe(res);
+        return;
+      }
+
       if (pathname.startsWith('/nuvio/')) {
         serveNuvioAsset(req, res, pathname.slice('/nuvio/'.length));
         return;
       }
 
-      // Página de inicio y configuración (/ , /configure , /:config/configure)
+
       if (pathname === '/' || pathname === '/configure' || pathname === '/configure/') {
         const html = renderConfigurePage({ env, userConfig: {}, baseUrl });
         sendText(req, res, 200, html, 'text/html; charset=utf-8', 'no-cache');
@@ -150,7 +159,7 @@ function createAddonServer(options = {}) {
         return;
       }
 
-      // Manifiesto Stremio (/manifest.json y /:config/manifest.json)
+
       if (pathname === '/manifest.json') {
         const config = decodeConfig('', env);
         const manifest = buildManifest(config, { env, baseUrl });
@@ -166,8 +175,8 @@ function createAddonServer(options = {}) {
         return;
       }
 
-      // Diagnóstico por proveedor: /diagnostico/stream/:type/:id.json
-      // (también /diagnostico?type=movie&id=tt1375666 y /diagnostics/...)
+
+
       const diagMatch = pathname.match(/^(?:\/([^/]+))?\/(?:diagnostico|diagnostics)\/stream\/([^/]+)\/([^/]+)\.json$/);
       if (diagMatch) {
         const [, configSeg, diagType, diagId] = diagMatch;
@@ -208,7 +217,7 @@ function createAddonServer(options = {}) {
         return;
       }
 
-      // Recurso de streams (/stream/:type/:id.json y /:config/stream/:type/:id.json)
+
       const streamMatch = pathname.match(/^(?:\/([^/]+))?\/stream\/([^/]+)\/([^/]+)\.json$/);
       if (streamMatch) {
         const [, configSeg, rawType, rawId] = streamMatch;
@@ -221,10 +230,10 @@ function createAddonServer(options = {}) {
           providerLoader,
           useMetadataCache,
         });
-        // Una lista vacía se sirve con `no-store`: si un fallo momentáneo de
-        // los proveedores se cacheara (CDN de Beamup o el propio Stremio), el
-        // usuario vería "sin streams" durante minutos aunque ya hubiera
-        // resultados disponibles.
+
+
+
+
         const isEmpty = !result.streams || result.streams.length === 0;
         let cacheControl = 'no-store, max-age=0';
         if (!isEmpty && !result.noStore) {
@@ -248,7 +257,7 @@ function createAddonServer(options = {}) {
       });
     } catch (error) {
       const message = error && error.message ? error.message : 'Error interno';
-      try { console.error('[stremio-server]', message); } catch (_) { /* noop */ }
+      try { console.error('[stremio-server]', message); } catch (_) {            }
       if (!res.headersSent) {
         sendJson(req, res, 500, { error: 'Error interno del addon', streams: [] }, 'no-store');
       } else {
@@ -261,7 +270,7 @@ function createAddonServer(options = {}) {
 if (require.main === module) {
   const port = Number(process.env.PORT || 7000);
   const host = process.env.HOST || '0.0.0.0';
-  // Calienta el pool de proxies en segundo plano (no bloquea el arranque).
+
   ensurePool().catch(() => {});
   const server = createAddonServer();
   server.listen(port, host, () => {

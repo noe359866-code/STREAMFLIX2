@@ -1,6 +1,6 @@
 export const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-// El bridge de Nuvio no es un navegador: conservamos solo cookies de sesión por dominio.
+
 const cookieJar = new Map();
 function urlParts(url) {
   const match = String(url || '').match(/^https?:\/\/([^/]+)([^?#]*)/i);
@@ -90,7 +90,7 @@ export async function request(url, options = {}) {
         method: options.method || 'GET',
         headers,
         body: options.body,
-        redirect: 'follow',
+        redirect: options.redirect || 'follow',
       }),
       timeout,
     ]);

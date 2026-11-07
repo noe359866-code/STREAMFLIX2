@@ -35,7 +35,7 @@ test('Stremio manifest pasa stremio-addon-linter (validación check-deploy de Be
   assert.deepEqual(defaultManifest.types, ['movie', 'series']);
   assert.equal(defaultManifest.behaviorHints.configurable, true);
   assert.equal(defaultManifest.behaviorHints.configurationRequired, false);
-  assert.match(defaultManifest.description, /33 proveedores activos/);
+  assert.match(defaultManifest.description, /34 proveedores activos/);
   assert.ok(ACTIVE_IDS.includes('gnulaone'));
   assert.ok(ACTIVE_IDS.includes('repelis24'));
   assert.ok(!ACTIVE_IDS.includes('tukiplay'));
@@ -53,7 +53,7 @@ test('Stremio manifest pasa stremio-addon-linter (validación check-deploy de Be
   assert.equal(lintCustom.valid, true);
   assert.match(customManifest.description, /2 proveedores activos/);
   assert.match(customManifest.description, /Filtro LAT/);
-  // Nunca filtrar claves privadas en la descripción pública del manifiesto
+
   assert.doesNotMatch(customManifest.description, /secret-tmdb-key/);
 });
 
@@ -155,12 +155,12 @@ test('fallback Cinemeta sin TMDB_API_KEY alimenta tanto VideoAPI (moviedb_id) co
       useMetadataCache: false,
     });
 
-    // Cinemeta se consultó exactamente 1 vez y ninguna llamada fue a api.themoviedb.org
+
     assert.equal(calls.filter((u) => u.includes('v3-cinemeta.strem.io')).length, 1);
     assert.equal(calls.filter((u) => u.includes('api.themoviedb.org')).length, 0);
 
-    // Ambos proveedores reciben el TMDB ID y conservan proxyHeaders, sin
-    // depender de la disponibilidad actual de los sitios reales.
+
+
     assert.equal(result.streams.length, 2);
     const direct = result.streams.find((stream) => stream.url.includes('/fightclub/master.m3u8'));
     const searched = result.streams.find((stream) => stream.url.includes('/video/playlist.m3u8'));
@@ -299,12 +299,12 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
   const base = `http://127.0.0.1:${port}`;
 
   try {
-    // 1. OPTIONS preflight CORS
+
     const optRes = await originalFetch(`${base}/manifest.json`, { method: 'OPTIONS' });
     assert.equal(optRes.status, 204);
     assert.equal(optRes.headers.get('access-control-allow-origin'), '*');
 
-    // 2. /manifest.json con cabeceras X-Forwarded-* (como detrás del proxy de Beamup)
+
     const manRes = await originalFetch(`${base}/manifest.json`, {
       headers: {
         'X-Forwarded-Proto': 'https',
@@ -316,18 +316,18 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
     assert.equal(lintManifest(manJson).valid, true);
     assert.equal(manJson.logo, 'https://7e2a912be9c9-streamflix2.baby-beamup.club/logo.svg');
 
-    // 3. /configure nunca expone secretos del servidor en el HTML
+
     const cfgHtmlRes = await originalFetch(`${base}/configure`);
     assert.equal(cfgHtmlRes.status, 200);
     const cfgHtml = await cfgHtmlRes.text();
     assert.match(cfgHtml, /STREAMFLIX2/);
     assert.doesNotMatch(cfgHtml, /SERVER_TMDB_SECRET_999/);
 
-    // 4. /:config/stream/series/tt0903747%3A2%3A3.json con behaviorHints.proxyHeaders
+
     const seg = encodeConfig({ providers: ['cuevana'] });
     const streamRes = await originalFetch(`${base}/${seg}/stream/series/tt0903747%3A2%3A3.json`);
     assert.equal(streamRes.status, 200);
-    assert.match(streamRes.headers.get('cache-control') || '', /max-age=600/);
+    assert.match(streamRes.headers.get('cache-control') || '', /max-age=60/);
     const streamJson = await streamRes.json();
     assert.equal(streamJson.streams.length, 1);
     assert.equal(streamJson.streams[0].url, 'https://cdn.example/s2e3/master.m3u8');
@@ -337,7 +337,7 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
       { id: 'cuevana-sub-1', url: 'https://cdn.example/subs/es.vtt', lang: 'spa' },
     ]);
 
-    // 5. Coexistencia con Nuvio bajo /nuvio/manifest.json y /nuvio/providers/videoapi.js
+
     const nuvioRes = await originalFetch(`${base}/nuvio/manifest.json`);
     assert.equal(nuvioRes.status, 200);
     const nuvioJson = await nuvioRes.json();
@@ -348,7 +348,7 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
     assert.equal(bundleRes.status, 200);
     assert.match(await bundleRes.text(), /getStreams/);
 
-    // Bloqueo de path traversal
+
     const blockedRes = await originalFetch(`${base}/nuvio/package.json`);
     assert.equal(blockedRes.status, 404);
   } finally {
@@ -414,7 +414,7 @@ test('plazo duro: responde con resultados parciales y luego entrega el completo 
     assert.equal(partial.streams.length, 1);
     assert.equal(partial.partial, true);
 
-    // El trabajo continúa en segundo plano y deja el resultado completo en caché.
+
     await new Promise((resolve) => setTimeout(resolve, 300));
     const cached = await getStremioStreams(params);
     assert.equal(cached.cached, true);
@@ -474,4 +474,142 @@ test('streams vacíos se sirven con no-store y /diagnostico informa tiempo y res
     clearResultCache();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('PelisJuanita y PelisGo inician antes de la cola del addon sin cambiar el plugin', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt3333333.json')) {
+      return response({ meta: { id: 'tt3333333', moviedb_id: 999, name: 'Prueba', releaseInfo: '2020' } }, url);
+    }
+    return originalFetch(input);
+  };
+  const started = [];
+  try {
+    const result = await getStremioStreams({
+      type: 'movie', id: 'tt3333333',
+      config: { providers: ['cuevana', 'videoapi', 'pelisjuanita', 'pelisgo'] },
+      env: { ADDON_CONCURRENCY: '2', PROXY_SCRAPING: 'off' },
+      providerLoader: (id) => ({ async getStreams() {
+        started.push(id);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return [{ name: id, provider: id, url: `https://cdn.example/${id}.m3u8`, quality: '720p', language: 'es-LAT' }];
+      } }),
+      useMetadataCache: false,
+      deadlineMs: 50,
+    });
+    assert.deepEqual(new Set(started.slice(0, 2)), new Set(['pelisjuanita', 'pelisgo']));
+    assert.equal(result.streams.length, 2);
+  } finally {
+    global.fetch = originalFetch;
+    clearResultCache();
+  }
+});
+
+test('el plazo incluye los metadatos y no cachea una respuesta agotada', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return response({ meta: { id: 'tt4444444', name: 'Prueba' } }, String(input));
+  };
+  try {
+    const start = Date.now();
+    const result = await getStremioStreams({ type: 'movie', id: 'tt4444444', env: {}, useMetadataCache: false, deadlineMs: 50 });
+    assert.ok(Date.now() - start < 140);
+    assert.deepEqual(result.streams, []);
+    assert.equal(result.noStore, true);
+    assert.equal(result.partial, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('el plazo del addon por defecto y su máximo son 60 segundos', () => {
+  const { resolveDeadlineMs } = require('../stremio/addon.cjs');
+  assert.equal(resolveDeadlineMs({}), 60000);
+  assert.equal(resolveDeadlineMs({ ADDON_DEADLINE_MS: '90000' }), 60000);
+  assert.equal(resolveDeadlineMs({ ADDON_DEADLINE_MS: '15000' }), 15000);
+});
+
+test('el addon consulta Videoapp a través del proveedor compartido VideoAPI', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (input) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt5555555.json')) {
+      return response({ meta: { id: 'tt5555555', moviedb_id: 12345, name: 'Prueba', releaseInfo: '2020' } }, url);
+    }
+    if (url === 'https://videoapp.zip/e/movie/12345') return new Response('<iframe id="frame" src="https://lamovie.link/embed/test"></iframe>');
+    if (url === 'https://lamovie.link/embed/test') return new Response('<script>const data={"stream_urls":["https://cdn.example/test.m3u8"],"default_subs":[{"url":"https://cdn.example/es.vtt","lang":"es"}]};</script>');
+    return new Response('', { status: 503 });
+  };
+  try {
+    const result = await getStremioStreams({
+      type: 'movie', id: 'tt5555555', config: { providers: ['videoapi'] },
+      env: { PROXY_SCRAPING: 'off' }, useMetadataCache: false,
+    });
+    assert.ok(calls.includes('https://videoapp.zip/e/movie/12345'));
+    const stream = result.streams.find((item) => item.url === 'https://cdn.example/test.m3u8');
+    assert.ok(stream);
+    assert.equal(stream.subtitles[0].lang, 'spa');
+  } finally { global.fetch = originalFetch; clearResultCache(); }
+});
+
+test('el addon conserva los subtítulos extraídos del proveedor', () => {
+  const { toStremioStream } = require('../stremio/addon.cjs');
+  const stream = toStremioStream({
+    name: 'Voe', provider: 'cuevana', url: 'https://cdn.example/master.m3u8', type: 'hls', language: 'es-SUB',
+    subtitles: [{ url: 'https://cdn.example/es.vtt', language: 'Español' }, { url: 'https://cdn.example/en.srt', language: 'English' }],
+  }, { metadata: { title: 'Prueba' }, parsed: { mediaType: 'movie' }, config: { lang: 'all' } });
+  assert.deepEqual(stream.subtitles.map(({ url, lang }) => ({ url, lang })), [
+    { url: 'https://cdn.example/es.vtt', lang: 'spa' },
+    { url: 'https://cdn.example/en.srt', lang: 'eng' },
+  ]);
+});
+
+test('el addon transmite al reproductor las cabeceras específicas de VidMoly', () => {
+  const { toStremioStream } = require('../stremio/addon.cjs');
+  const headers = { 'User-Agent': 'Chrome/91.0.4472.124', Referer: 'https://vidmoly.to/' };
+  const stream = toStremioStream({ name: 'VidMoly', provider: 'seriesturcas', url: 'https://cdn.example/master.m3u8', type: 'hls', headers }, {
+    metadata: { title: 'Prueba' }, parsed: { mediaType: 'movie' }, config: { lang: 'all' },
+  });
+  assert.deepEqual(stream.behaviorHints.proxyHeaders.request, headers);
+});
+
+test('la caché de respuestas no sobrepasa la caducidad de URLs firmadas', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt6666666.json')) return response({ meta: { id: 'tt6666666', moviedb_id: 666, name: 'Prueba' } }, url);
+    return originalFetch(input);
+  };
+  const expiry = Math.floor(Date.now() / 1000) + 45;
+  const loader = () => ({ async getStreams() { return [{ name: 'Prueba', provider: 'videoapi', url: `https://cdn.example/master.m3u8?expires=${expiry}`, type: 'hls', language: 'es' }]; } });
+  const params = { type: 'movie', id: 'tt6666666', config: { providers: ['videoapi'] }, env: { PROXY_SCRAPING: 'off' }, providerLoader: loader, useMetadataCache: false };
+  try {
+    const result = await getStremioStreams(params);
+    assert.equal(result.streams.length, 1);
+    assert.ok(result.cacheMaxAge > 0 && result.cacheMaxAge <= 15);
+    assert.equal(result.staleError, undefined);
+    const cached = await getStremioStreams(params);
+    assert.equal(cached.cached, true);
+    assert.ok(cached.cacheMaxAge <= result.cacheMaxAge);
+  } finally { global.fetch = originalFetch; clearResultCache(); }
+});
+
+test('descarta enlaces con caducidad conocida ya vencida', async () => {
+  clearResultCache();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => response({ meta: { id: 'tt7777777', moviedb_id: 777, name: 'Prueba' } }, String(input));
+  try {
+    const result = await getStremioStreams({ type: 'movie', id: 'tt7777777', config: { providers: ['videoapi'] }, env: { PROXY_SCRAPING: 'off' }, useMetadataCache: false,
+      providerLoader: () => ({ async getStreams() { return [{ name: 'Prueba', provider: 'videoapi', url: `https://cdn.example/master.m3u8?expires=${Math.floor(Date.now() / 1000) - 1}`, type: 'hls' }]; } }) });
+    assert.deepEqual(result.streams, []);
+    assert.equal(result.noStore, true);
+  } finally { global.fetch = originalFetch; clearResultCache(); }
 });

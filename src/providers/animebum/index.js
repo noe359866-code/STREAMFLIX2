@@ -4,7 +4,7 @@ import { cardsFromAnchors } from '../../core/html.js';
 import { resolveCandidates } from '../../core/extractors.js';
 import { absoluteUrl, anchors, decodeHtml } from '../../core/text.js';
 
-// Presente en Streamflix pero desactivado allí; se conserva como porte inactivo.
+
 const BASE = 'https://www.animebum.net';
 async function search(query) {
   const page = await fetchText(withQuery(`${BASE}/search`, { s: query, page: 1 }), { referer: `${BASE}/` });

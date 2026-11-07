@@ -49,7 +49,7 @@ function unwrapServerUrl(value) {
 }
 
 function serverCandidates(html, base) {
-  // Cada .drpdn agrupa los servidores de un idioma; aceptar también estructuras simples.
+
   const groups = String(html || '').split(/<div\b(?=[^>]*class\s*=\s*["'][^"']*drpdn)[^>]*>/i).slice(1);
   const candidates = [];
   for (const group of groups.length ? groups : [String(html || '')]) {

@@ -85,12 +85,12 @@ function needsHeaderProxy(stream) {
   return keys.some((key) => key === 'referer' || key === 'origin' || key === 'cookie' || key === 'authorization');
 }
 
-/**
- * Normaliza y valida una URL base pública. Si el valor recibido no tiene un
- * dominio real (por ejemplo `https://7e2a912be9c9-streamflix2`, sin
- * `.baby-beamup.club`) se descarta en lugar de publicar un `logo` roto en el
- * manifiesto que Stremio no puede cargar.
- */
+
+
+
+
+
+
 function normalizeBaseUrl(value) {
   const raw = String(value || '').trim().replace(/\/+$/, '');
   if (!raw) return '';
@@ -176,7 +176,7 @@ function inferFilename(stream, metadata, parsed) {
     if (/\.(?:mp4|mkv|webm|m3u8)$/i.test(base) && base.length <= 120) {
       return decodeURIComponent(base);
     }
-  } catch (_) { /* usar fallback sintético */ }
+  } catch (_) {                               }
   const ext = stream.type === 'hls' ? 'm3u8' : (stream.type || 'mp4');
   const titleSlug = String(metadata?.title || 'streamflix2')
     .toLowerCase()
@@ -252,24 +252,24 @@ function toStremioStream(stream, context) {
   };
 }
 
-const DEFAULT_DEADLINE_MS = 7000;
+const DEFAULT_DEADLINE_MS = 60000;
 const MIN_DEADLINE_MS = 2500;
-const MAX_DEADLINE_MS = 25000;
+const MAX_DEADLINE_MS = 60000;
 const RESULT_CACHE_MAX_ENTRIES = 400;
-const RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
+const RESULT_CACHE_TTL_MS = 60 * 1000;
 const EMPTY_RESULT_TTL_MS = 60 * 1000;
 const MAX_STREAMS = 60;
 
-/**
- * Caché de resultados (por proceso) y trabajos en vuelo.
- *
- * Clave del problema real en Stremio: el cliente abandona las peticiones que
- * tardan demasiado y, al no recibir respuesta a tiempo, muestra la lista vacía.
- * Nuvio ejecuta los proveedores dentro de la app, así que nunca lo sufre. Aquí
- * devolvemos lo que haya antes de un plazo duro y seguimos raspando en segundo
- * plano para que la siguiente petición (Stremio recarga la lista al abrir el
- * título otra vez) llegue ya resuelta desde caché.
- */
+
+
+
+
+
+
+
+
+
+
 const resultCache = new Map();
 const inflightJobs = new Map();
 const providerLatency = new Map();
@@ -300,11 +300,11 @@ function delay(ms) {
   });
 }
 
-/**
- * Plazo máximo de respuesta. Stremio corta la petición si el addon tarda
- * demasiado, por lo que el valor por defecto es deliberadamente bajo:
- * `ADDON_DEADLINE_MS` (2500–25000 ms, por defecto 7000).
- */
+
+
+
+
+
 function resolveDeadlineMs(env = process.env) {
   const raw = Number(env.ADDON_DEADLINE_MS ?? env.ADDON_RESPONSE_DEADLINE_MS);
   if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_DEADLINE_MS;
@@ -326,7 +326,7 @@ function readResultCache(key) {
     resultCache.delete(key);
     return null;
   }
-  // Refresca el orden LRU
+
   resultCache.delete(key);
   resultCache.set(key, entry);
   return { streams: entry.streams, age, ttl: entry.ttl };
@@ -360,11 +360,34 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
-/**
- * Filtra, deduplica, ordena y transforma los streams acumulados al formato
- * de Stremio. Se puede invocar varias veces sobre el mismo acumulador
- * (parcial durante la petición, completo cuando termina el trabajo).
- */
+
+
+
+
+
+function streamExpirationMs(stream) {
+  try {
+    const url = new URL(stream.url);
+    for (const key of ['expires', 'exp']) {
+      const value = url.searchParams.get(key);
+      if (!/^\d{10}(?:\d{3})?$/.test(value || '')) continue;
+      const timestamp = Number(value) * (value.length === 10 ? 1000 : 1);
+      if (timestamp >= 1000000000000 && timestamp < 4102444800000) return timestamp;
+    }
+  } catch (_) { }
+  return null;
+}
+
+function streamCacheTtl(streams) {
+  let ttl = RESULT_CACHE_TTL_MS;
+  const now = Date.now();
+  for (const stream of streams) {
+    const expires = streamExpirationMs(stream);
+    if (expires !== null) ttl = Math.min(ttl, Math.max(0, expires - now - 30000));
+  }
+  return Math.max(0, ttl);
+}
+
 function selectStreams(accumulator, context) {
   const langMode = context.config.lang;
   const seen = new Set();
@@ -372,6 +395,8 @@ function selectStreams(accumulator, context) {
 
   for (const item of accumulator.streams) {
     if (!item || !item.url) continue;
+    const expires = streamExpirationMs(item);
+    if (expires !== null && expires <= Date.now()) continue;
     if (!matchesLanguageFilter(item.language, langMode)) continue;
     const dedupeKey = `${item.url}|${item.language || 'es'}`;
     if (seen.has(dedupeKey)) continue;
@@ -390,12 +415,12 @@ function selectStreams(accumulator, context) {
   return flat.slice(0, MAX_STREAMS).map((item) => toStremioStream(item, context));
 }
 
-/**
- * Modo de uso de proxies para el raspado:
- *  - `off`  nunca
- *  - `auto` (por defecto) segunda pasada solo con los proveedores que fallaron
- *  - `only` todos los proveedores salen por proxy desde el principio
- */
+
+
+
+
+
+
 function proxyMode(env = process.env) {
   const raw = String(env.PROXY_SCRAPING || 'auto').trim().toLowerCase();
   if (['0', 'off', 'false', 'no', 'disabled', 'none'].includes(raw)) return 'off';
@@ -417,12 +442,12 @@ function pushFoundStreams(accumulator, found) {
   }
 }
 
-/**
- * Lanza todos los proveedores con concurrencia limitada y ordenados por
- * latencia histórica (los rápidos primero, para que el plazo duro alcance a
- * recoger el máximo de resultados). Cada proveedor terminado empuja sus
- * streams al acumulador, así una respuesta parcial siempre es útil.
- */
+
+
+
+
+
+
 function runProviders(options) {
   const {
     eligible,
@@ -436,7 +461,10 @@ function runProviders(options) {
     phase,
   } = options;
 
-  const ordered = [...eligible].sort((a, b) => averageLatency(a.id) - averageLatency(b.id));
+  const priorityIds = new Set(['pelisjuanita', 'pelisgo']);
+  const ordered = [...eligible].sort((a, b) =>
+    Number(priorityIds.has(b.id)) - Number(priorityIds.has(a.id))
+    || averageLatency(a.id) - averageLatency(b.id));
   let cursor = 0;
 
   const worker = async () => {
@@ -486,11 +514,11 @@ function runProviders(options) {
   return Promise.all(workers);
 }
 
-/**
- * Segunda pasada: reintenta por proxy solo los proveedores que no devolvieron
- * nada en la pasada directa. Se ejecuta en segundo plano (después de haber
- * respondido a Stremio) para que el resultado cacheado ya incluya lo rescatado.
- */
+
+
+
+
+
 async function retryFailedWithProxy(params) {
   const { accumulator, eligible, providerInputId, parsed, getProvider, env, config } = params;
   const maxRetries = clampInt(env.PROXY_MAX_RETRIES, 8, 0, 31);
@@ -623,11 +651,11 @@ function startJob(options) {
       }
     },
   ).then(() => {
-    // El trabajo terminó (puede ser después de haber respondido ya): guardamos
-    // el resultado completo para que la siguiente petición sea instantánea.
+
+
     const streams = selectStreams(accumulator, context);
-    const ttl = streams.length > 0 ? RESULT_CACHE_TTL_MS : EMPTY_RESULT_TTL_MS;
-    writeResultCache(key, streams, ttl);
+    const ttl = streams.length > 0 ? streamCacheTtl(streams) : EMPTY_RESULT_TTL_MS;
+    if (streams.length > 0 && ttl > 0) writeResultCache(key, streams, ttl);
     return streams;
   }).catch(() => []);
 
@@ -639,9 +667,9 @@ function resolveEligibleScrapers(config, parsed, metadata, numericTmdbId) {
   return ACTIVE_SCRAPERS.filter((scraper) => {
     if (!selectedSet.has(scraper.id)) return false;
     if (!scraper.supportedTypes.includes(parsed.mediaType)) return false;
-    // Los proveedores por ID TMDB pueden trabajar incluso sin título de
-    // Cinemeta/TMDB; los de búsqueda necesitan metadatos para cotejar la ficha.
-    if (!metadata && !(numericTmdbId && ['videoapi', 'vixsrc', 'warezcdn'].includes(scraper.id))) return false;
+
+
+    if (!metadata && !(numericTmdbId && ['videoapi', 'vixsrc', 'warezcdn', 'superembed'].includes(scraper.id))) return false;
     return true;
   });
 }
@@ -676,7 +704,17 @@ async function resolveRequestContext(params) {
 }
 
 async function getStremioStreams(params = {}) {
-  const request = await resolveRequestContext(params);
+  const startedAt = Date.now();
+  const requestedDeadline = Number(params.deadlineMs);
+  const deadlineMs = Number.isFinite(requestedDeadline) && requestedDeadline > 0
+    ? Math.max(50, Math.min(MAX_DEADLINE_MS, Math.round(requestedDeadline)))
+    : resolveDeadlineMs(params.env || process.env);
+  const expired = Symbol('deadline');
+  const request = await Promise.race([
+    resolveRequestContext(params),
+    delay(deadlineMs).then(() => expired),
+  ]);
+  if (request === expired) return { streams: [], cacheMaxAge: 0, noStore: true, partial: true, elapsedMs: Date.now() - startedAt };
   if (!request) return { streams: [], cacheMaxAge: 60 };
 
   const { env, config, parsed, metadata, eligible, providerInputId, context } = request;
@@ -686,9 +724,8 @@ async function getStremioStreams(params = {}) {
   if (cached) {
     return {
       streams: cached.streams,
-      cacheMaxAge: cached.streams.length > 0 ? 600 : 60,
-      staleRevalidate: 300,
-      staleError: 1800,
+      cacheMaxAge: cached.streams.length > 0 ? Math.max(0, Math.floor((cached.ttl - cached.age) / 1000)) : 0,
+      noStore: cached.streams.length === 0 || cached.ttl - cached.age < 1000,
       cached: true,
     };
   }
@@ -716,14 +753,11 @@ async function getStremioStreams(params = {}) {
     job.done.then(clear, clear);
   }
 
-  // `deadlineMs` permite fijar el plazo por petición (pruebas y depuración).
-  const requestedDeadline = Number(params.deadlineMs);
-  const deadlineMs = Number.isFinite(requestedDeadline) && requestedDeadline > 0
-    ? Math.max(50, Math.min(MAX_DEADLINE_MS, Math.round(requestedDeadline)))
-    : resolveDeadlineMs(env);
+
+  const remainingMs = Math.max(0, deadlineMs - (Date.now() - startedAt));
   const finished = await Promise.race([
     job.done.then(() => true, () => true),
-    delay(deadlineMs).then(() => false),
+    delay(remainingMs).then(() => false),
   ]);
 
   const streams = selectStreams(job.accumulator, context);
@@ -731,9 +765,8 @@ async function getStremioStreams(params = {}) {
   if (streams.length > 0) {
     return {
       streams,
-      cacheMaxAge: finished ? 600 : 90,
-      staleRevalidate: 300,
-      staleError: 1800,
+      cacheMaxAge: Math.floor(streamCacheTtl(streams) / 1000),
+      noStore: streamCacheTtl(streams) < 1000,
       partial: !finished,
       elapsedMs: Date.now() - job.startedAt,
     };
@@ -748,11 +781,11 @@ async function getStremioStreams(params = {}) {
   };
 }
 
-/**
- * Diagnóstico sin plazo: ejecuta todos los proveedores y devuelve el tiempo y
- * el número de resultados de cada uno. Sirve para saber, desde el navegador,
- * qué proveedor está lento o bloqueado en el servidor (Beamup).
- */
+
+
+
+
+
 async function diagnoseStremioStreams(params = {}) {
   const startedAt = Date.now();
   const request = await resolveRequestContext({

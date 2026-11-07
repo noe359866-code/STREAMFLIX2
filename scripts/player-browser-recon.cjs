@@ -1,6 +1,6 @@
-#!/usr/bin/env node
+
 'use strict';
-// Temporary diagnostics only. Never click advertisements or solve interactive challenges.
+
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
@@ -56,7 +56,7 @@ async function details(page) {
             fs.writeFileSync(path.join(root, filename), body);
             entry.file = `recon-player-browser/${filename}`;
             entry.bytes = body.length;
-          } catch (_) { /* response may already be gone */ }
+          } catch (_) {                                    }
         })();
         pending.add(task);
         task.finally(() => pending.delete(task));

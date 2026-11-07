@@ -107,10 +107,10 @@ function normalizeConfig(input = {}, env = process.env) {
   };
 }
 
-/**
- * Codifica únicamente las diferencias respecto a la configuración base vacía
- * para generar un segmento `cfg_<base64url>` corto, sin `/` ni `=`, apto para `stremio://`.
- */
+
+
+
+
 function encodeConfig(input = {}) {
   const clean = normalizeConfig(input, {});
   const payload = {};
@@ -171,7 +171,7 @@ function decodeConfig(segment, env = process.env) {
     if (json.startsWith('{')) {
       return normalizeConfig(expandShortPayload(JSON.parse(json)), env);
     }
-  } catch (_) { /* segmento inválido: usar valores predeterminados */ }
+  } catch (_) {                                                       }
 
   return defaultConfig(env);
 }

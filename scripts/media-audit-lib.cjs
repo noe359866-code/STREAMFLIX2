@@ -1,7 +1,7 @@
 'use strict';
 
-// Sonda de medios acotada: nunca descarga una película. No interpreta un 403
-// del catálogo como un 403 del vídeo; únicamente comprueba HLS y MP4 reales.
+
+
 const MAX_PLAYLIST_BYTES = 128 * 1024;
 const MAX_MEDIA_BYTES = 4096;
 const MAX_VARIANTS = 4;
@@ -12,8 +12,8 @@ function hostOf(url) {
   try { return new URL(url).hostname; } catch (_) { return 'desconocido'; }
 }
 
-// Clasificación sin rutas, títulos, parámetros ni URLs firmadas: permite
-// distinguir una búsqueda bloqueada de una petición al vídeo en el informe.
+
+
 function discoveryStage(url) {
   try {
     const { pathname, searchParams, hostname } = new URL(url);
@@ -96,8 +96,8 @@ async function sampleUrl(url, options = {}) {
   }
 }
 
-// Algunos hosters deniegan Range pero sí permiten GET normal. En ese caso no
-// se considera el 403 suficiente para retirar el proveedor.
+
+
 async function sampleMedia(url, options) {
   const ranged = await sampleUrl(url, { ...options, range: true });
   if (ranged.status !== 403) return ranged;
@@ -135,7 +135,7 @@ function playlistUris(text) {
     if (/^#EXT-X-STREAM-INF(?::|$)/i.test(line)) {
       waitingForVariant = true;
     } else if (!line || line.startsWith('#')) {
-      // Las etiquetas entre STREAM-INF y la URL no convierten la URL en segmento.
+
       continue;
     } else if (waitingForVariant) {
       variants.push(line);
@@ -194,8 +194,8 @@ async function checkHls(url, options = {}, depth = 0) {
       || !playlist.bytes.toString('utf8').replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) {
     return publicResult('otro', depth ? 'variante' : 'playlist', playlist, 'hls');
   }
-  // Una playlist VOD puede superar 128 KiB: inspeccionar solo líneas completas
-  // del prefijo y probar sus primeros segmentos, sin descargar la película.
+
+
   const text = playlist.bytes.toString('utf8');
   const prefix = playlist.truncated ? text.slice(0, text.lastIndexOf('\n') + 1) : text;
   const { variants, segments, encryption, init } = playlistUris(prefix);
@@ -208,13 +208,13 @@ async function checkHls(url, options = {}, depth = 0) {
       results.push(await checkHls(variant, options, depth + 1));
       if (results.at(-1).outcome === 'ok') return results.at(-1);
     }
-    // Nunca retirar por 403 de una selección parcial de variantes.
+
     if (playlist.truncated || variants.length > MAX_VARIANTS) return publicResult('otro', 'variantes-sin-verificar', playlist, 'hls');
     if (results.every((item) => item.outcome === 'http403')) return results[0];
     return results.find((item) => item.outcome !== 'http403');
   }
-  // Una firma TS/MP4 válida en el primer segmento puede ser solo un anuncio.
-  // Únicamente ENDLIST con TODOS los segmentos dentro del corte lo demuestra.
+
+
   if (adOnlyPlaylist(prefix)) return publicResult('otro', 'playlist-solo-anuncios', playlist, 'hls');
   if (encryption) {
     if (!/\bMETHOD=AES-128(?:,|$)/i.test(encryption)) return publicResult('otro', 'cifrado-no-verificado', playlist, 'hls');
@@ -266,8 +266,8 @@ async function checkMedia(stream, options = {}) {
 
 function classifyProvider(attempts, expected = 3) {
   if (attempts.some((attempt) => attempt.media?.some((item) => item.outcome === 'ok'))) return 'medio-accesible';
-  // Solo se propone quitarlo cuando *todos* los enlaces HLS/MP4 hallados en
-  // *cada* uno de los tres intentos devuelven 403 en una parte indispensable.
+
+
   if (attempts.length === expected && attempts.every((attempt) =>
     attempt.mediaCount > 0
     && attempt.otherFormats === 0
@@ -277,4 +277,16 @@ function classifyProvider(attempts, expected = 3) {
   return 'no-concluyente';
 }
 
-module.exports = { checkMedia, checkHls, checkMp4, classifyProvider, playlistUris, hostOf, discoveryStage };
+function selectProviders(scrapers, input = '') {
+  const active = (Array.isArray(scrapers) ? scrapers : []).filter((item) => item && item.enabled);
+  const raw = String(input || '').trim();
+  if (!raw) return active;
+  const ids = raw.split(',').map((id) => id.trim());
+  if (ids.some((id) => !/^[a-z0-9_-]+$/.test(id))) throw new Error('Lista de proveedores inválida');
+  const wanted = new Set(ids);
+  const selected = active.filter((item) => wanted.has(item.id));
+  if (selected.length !== wanted.size) throw new Error('La lista incluye proveedores desconocidos o inactivos');
+  return selected;
+}
+
+module.exports = { checkMedia, checkHls, checkMp4, classifyProvider, playlistUris, hostOf, discoveryStage, selectProviders };

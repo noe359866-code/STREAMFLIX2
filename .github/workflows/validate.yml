@@ -12,6 +12,11 @@ on:
         required: true
         default: videoapi
         type: string
+      audit_providers:
+        description: "Opcional para audit-media: IDs activos separados por comas; vacío audita todos"
+        required: false
+        default: ""
+        type: string
       tmdb:
         description: "ID TMDB o IMDb para la prueba real"
         required: true
@@ -511,7 +516,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Resolver medios y comprobar playlist, variante, segmento o MP4 (sin descargar vídeos completos)
-        run: node scripts/media-audit.cjs --all --output media-audit.json
+        env:
+          AUDIT_PROVIDERS: ${{ inputs.audit_providers }}
+        run: |
+          args=(--all --output media-audit.json)
+          if [[ -n "$AUDIT_PROVIDERS" ]]; then args+=(--providers "$AUDIT_PROVIDERS"); fi
+          node scripts/media-audit.cjs "${args[@]}"
       - name: Publicar informe (sin enlaces firmados ni secretos)
         if: always()
         uses: actions/upload-artifact@v4

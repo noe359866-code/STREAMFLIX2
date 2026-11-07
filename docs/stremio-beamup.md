@@ -84,11 +84,11 @@ enlaces.
 
 Por eso la ruta de streams ahora:
 
-1. **Contesta antes de un plazo duro** (`ADDON_DEADLINE_MS`, por defecto **7000 ms**,
-   ajustable de 2500 a 25000) con lo que ya esté disponible.
+1. **Contesta antes de un plazo duro** (`ADDON_DEADLINE_MS`, por defecto **60000 ms**,
+   ajustable de 2500 a 60000) con lo que ya esté disponible.
 2. **Sigue raspando en segundo plano** y guarda el resultado completo en una caché por
-   proceso (10 minutos); al volver a abrir el título, Stremio recibe la lista completa al
-   instante.
+   proceso (hasta 60 segundos, menos si se reconoce una caducidad próxima en la URL);
+   al volver a abrir el título durante ese plazo se recibe la lista completa al instante.
 3. **Ordena los proveedores por latencia histórica** para que, dentro del plazo, entren
    primero los que suelen responder rápido.
 4. **Nunca cachea respuestas vacías** (`Cache-Control: no-store`), ni en el CDN de Beamup
@@ -113,7 +113,7 @@ Devuelve, para cada proveedor, `ms` (tiempo real en el servidor Beamup) y `count
 ### Variables de entorno útiles en Beamup
 
 ```bash
-beamup secrets ADDON_DEADLINE_MS 7000      # plazo duro de respuesta (2500–25000)
+beamup secrets ADDON_DEADLINE_MS 60000     # plazo duro de respuesta (2500–60000)
 beamup secrets ADDON_CONCURRENCY 12        # proveedores en paralelo (1–24)
 beamup secrets PROVIDER_TIMEOUT_MS 8000    # timeout por proveedor (4–25 s)
 beamup secrets PUBLIC_BASE_URL https://7e2a912be9c9-streamflix2.baby-beamup.club
@@ -197,3 +197,13 @@ orden hasta reunir candidatos:
 Si una fuente responde **429** (límite por IP, frecuente desde Beamup) o no entrega ningún
 proxy utilizable, se pasa a la siguiente. Y si un refresco falla por completo **no se pierde
 el pool que ya funcionaba**: se conserva y `lastError` lo indica.
+
+## Nuvio y WuPlay
+
+El addon usa el protocolo compatible con Stremio, también admitido por Nuvio y WuPlay; el plugin Nuvio es independiente. PelisJuanita y PelisGo se inician primero en la cola del addon cuando están activados. El plazo de respuesta predeterminado es de 60 segundos en total, incluida la resolución de metadatos, y cada proveedor dispone de 10 segundos por defecto. El addon devuelve resultados parciales al vencer el plazo. Estos límites son configurables y no garantizan que un sitio bloqueado responda.
+
+En el código consultado de [Nuvio Mobile](https://github.com/tapframe/NuvioStreaming/blob/0f85c959ceea09f52127f2413bd282329e2b4dc6/composeApp/src/androidMain/kotlin/com/nuvio/app/features/addons/AddonPlatform.android.kt), Android configura 60 segundos para conexión y lectura del cliente de addons; [iOS](https://github.com/tapframe/NuvioStreaming/blob/0f85c959ceea09f52127f2413bd282329e2b4dc6/composeApp/src/iosMain/kotlin/com/nuvio/app/features/addons/AddonPlatform.ios.kt) configura 60 segundos por solicitud, conexión y socket. Esto no establece el comportamiento de todas las versiones o plataformas. En [WuPlay](https://github.com/wuplayapp/wuplay-releases/blob/main/CHANGELOG.md) existe una opción configurable de «stream timeout», pero no se ha confirmado su valor predeterminado ni si limita las solicitudes de addons; no se debe asumir que sea el mismo límite.
+
+### Videoapp en el addon y el plugin
+
+Al activar VideoAPI en el addon o el plugin, también se consulta Videoapp en paralelo cuando hay un ID TMDB. Se sigue únicamente el iframe `frame` de Lamovie o Vimeos y se procesan los arreglos JSON `stream_urls` y `default_subs`, sin ejecutar JavaScript remoto. Los medios pasan por el filtro existente; un fallo o comprobación inconclusa no garantiza reproducción. También se aprovecha el desempaquetador estático existente para variantes compatibles, sin ejecutar código remoto. El idioma del audio se marca como no verificado.

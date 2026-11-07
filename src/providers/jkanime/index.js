@@ -29,7 +29,7 @@ async function search(query, mediaType) {
       return (json.data || []).map((item) => ({
         url: `${BASE}/${item.slug}/`, title: item.title, type: /movie|pelicula/i.test(item.type || item.tipo || '') ? 'movie' : 'tv',
       })).filter((item) => mediaType === 'movie' ? item.type === 'movie' : item.type !== 'movie');
-    } catch (_) { /* HTML de compatibilidad */ }
+    } catch (_) {                              }
   }
   return cardsFromAnchors(page.text, page.url, { mediaType, path: /jkanime\.net\/[^/]+\/?$/i });
 }
@@ -60,7 +60,7 @@ async function streams(match, media) {
         const decoded = decodeBase64Url(item.remote);
         if (decoded && SUPPORTED.test(`${item.server} ${decoded}`)) candidates.push({ url: decoded, server: item.server, language: 'es-SUB', referer: page.url });
       }
-    } catch (_) { /* también hay iframes video[] */ }
+    } catch (_) {                                   }
   }
   for (const matchIframe of page.text.matchAll(/video\[(\d+)\]\s*=\s*['"]<iframe[^>]+src=["']([^"']+)["']/gi)) {
     if (SUPPORTED.test(matchIframe[2])) candidates.push({ url: absoluteUrl(matchIframe[2], page.url), server: `JKPlayer ${matchIframe[1]}`, language: 'es-SUB', referer: page.url });

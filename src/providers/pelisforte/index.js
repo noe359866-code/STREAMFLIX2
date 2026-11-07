@@ -12,7 +12,7 @@ function language(label) {
   return 'es';
 }
 
-// ToroFilm usa un enlace de portada vacío; el título está en el article, no en el anchor.
+
 function cards(html, base, mediaType) {
   const output = [];
   for (const match of String(html || '').matchAll(/<article\b[^>]*>[\s\S]*?<\/article>/gi)) {

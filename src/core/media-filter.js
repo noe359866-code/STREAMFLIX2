@@ -1,11 +1,11 @@
 import { absoluteUrl } from './text.js';
 
-// Comprobación de medios *durante* getStreams. No sustituye la auditoría
-// de tres intentos desde Actions ni decide retirar proveedores enteros.
+
+
 const PLAYLIST_BYTES = 64 * 1024;
 const MEDIA_BYTES = 2048;
-// QuickJS carga la respuesta completa antes de exponer arrayBuffer(): incluso
-// un GET con Range podría bajar el vídeo entero si el servidor ignora Range.
+
+
 const NATIVE_BODY_LIMIT = 128 * 1024;
 const PROBE_BUDGET_MS = 2400;
 const CONFIRM_DELAY_MS = 120;
@@ -56,7 +56,7 @@ async function sample(url, options, maximum, ranged = true) {
         const currentHost = current.match(/^https?:\/\/([^/?#]+)/i)?.[1]?.toLowerCase();
         const nextHost = next.match(/^https?:\/\/([^/?#]+)/i)?.[1]?.toLowerCase();
         if (currentHost !== nextHost) {
-          // Las cabeceras de autenticación no deben seguir un redirect a otro CDN.
+
           for (const key of Object.keys(forwardedHeaders)) {
             if (/^(?:cookie|authorization|proxy-authorization)$/i.test(key)) delete forwardedHeaders[key];
           }
@@ -90,8 +90,8 @@ async function sample(url, options, maximum, ranged = true) {
         for (const chunk of chunks) { result.bytes.set(chunk, offset); offset += chunk.length; }
         result.truncated = !finished;
       } else {
-        // Nuvio/QuickJS no expone un lector incremental: no leer un MP4
-        // completo si el servidor ignora Range. Solo cuerpo 206 o pequeño.
+
+
         const length = Number(header(response, 'content-length'));
         if (status === 206 || (length > 0 && length <= maximum)) {
           if (typeof response.arrayBuffer === 'function') result.bytes = new Uint8Array(await response.arrayBuffer()).subarray(0, maximum);
@@ -108,9 +108,9 @@ async function sample(url, options, maximum, ranged = true) {
 async function checkedSample(url, options, maximum) {
   if (options.nativeBridge && !await nativeHeadAllowsSample(url, options)) return { status: 0 };
   const ranged = await sample(url, options, maximum);
-  // Algunos servidores devuelven 403 *solo* por Range. Repetir GET sin Range
-  // únicamente cuando se pueda cancelar el cuerpo (Node); en QuickJS esto
-  // podría descargar la película completa y se conserva como inconcluso.
+
+
+
   if ([401, 403, 404, 410, 416].includes(ranged.status)) {
     if (options.nativeBridge) return { status: 0 };
     return sample(url, options, maximum, false);
@@ -176,8 +176,8 @@ function playlistRefs(text) {
   }
   return {
     variants, segments,
-    // Solo un VOD terminado y ENTERAMENTE entre CUE-OUT/CUE-IN prueba
-    // que la playlist es un corte publicitario, no una película con anuncios.
+
+
     adOnly: lines.some((line) => /^#EXT-X-ENDLIST(?:\s|$)/i.test(line)) && adSegments > 0 && otherSegments === 0,
     key: lines.find((line) => /^#EXT-X-KEY:/i.test(line) && !/\bMETHOD=NONE(?:,|$)/i.test(line)) || '',
     init: lines.find((line) => /^#EXT-X-MAP:/i.test(line)) || '',
@@ -192,16 +192,16 @@ async function checkHls(url, options, depth = 0) {
   const playlist = await checkedSample(url, options, PLAYLIST_BYTES);
   if (playlist.status < 200 || playlist.status >= 300) return mediaStatus(playlist);
   if (!playlist.bytes) return mediaStatus(playlist);
-  // Si un puente entrega bytes todavía comprimidos, la falta de #EXTM3U
-  // no prueba que el reproductor vaya a fallar tras descomprimirlos.
+
+
   if (playlist.bytes[0] === 0x1f && playlist.bytes[1] === 0x8b) return 'unknown';
   const text = textOf(playlist.bytes).replace(/^\uFEFF/, '').trimStart();
-  // La firma HLS tiene prioridad sobre un Content-Type mal configurado.
+
   if (!/^#EXTM3U(?:\r?\n|$)/.test(text)) return 'bad';
   const full = playlist.truncated ? text.slice(0, text.lastIndexOf('\n') + 1) : text;
   const { variants, segments, adOnly, key, init } = playlistRefs(full);
-  // ENDLIST presente (línea completa) permite decidir incluso si un bridge
-  // marca cualquier 206 como «truncado»; sin él, la muestra es inconclusa.
+
+
   if (adOnly) return 'bad';
   if (variants.length) {
     if (depth >= 2) return 'unknown';
@@ -235,10 +235,10 @@ async function checkHls(url, options, depth = 0) {
     if (!publicUrl(segment)) { verdicts.push('unknown'); continue; }
     const sampled = await checkedSample(segment, options, MEDIA_BYTES);
     let verdict = binaryStatus(sampled);
-    // Algunos CDN entregan AES-128 válido como text/html (VixSrc, Actions:
-    // clave HTTP 200 y MPEG-TS tras descifrar). Sin crypto en QuickJS no se
-    // llama «vídeo válido», pero tampoco se descarta solo por ese MIME si los
-    // bytes parecen cifrados. HTML legible, 403 e imagen siguen siendo malos.
+
+
+
+
     if (encryptedWithKey && verdict === 'bad' && sampled.status >= 200 && sampled.status < 300
       && /^text\/html\b/i.test(sampled.mime) && sampled.bytes?.length >= 188) {
       const bytes = sampled.bytes.subarray(0, Math.min(256, sampled.bytes.length));
@@ -258,8 +258,8 @@ async function nativeHeadAllowsSample(url, options) {
     const response = await options.fetchImpl(url, { method: 'HEAD', headers: options.headers, signal: options.signal, redirect: 'manual' });
     if (Number(response.status) !== 200) return false;
     const length = Number(header(response, 'content-length'));
-    // Accept-Ranges no es garantía de que el siguiente GET respete el rango.
-    // Sin longitud conocida o con un segmento/película grande: no sondear.
+
+
     return length > 0 && length <= NATIVE_BODY_LIMIT;
   } catch (_) { return false; }
 }
@@ -270,8 +270,8 @@ export async function probeStream(stream, options = {}) {
     fetchImpl: options.fetchImpl || globalThis.fetch,
     headers: stream.headers || {},
     signal: options.signal,
-    // El fetch de QuickJS ya descarga el cuerpo completo antes de entregarlo:
-    // cada GET (también de segmentos/inicialización) requiere HEAD pequeño o Range.
+
+
     nativeBridge: options.nativeBridge !== undefined ? options.nativeBridge : typeof globalThis.__native_fetch === 'function',
   };
   if (stream.type === 'hls') return checkHls(stream.url, context);
@@ -293,13 +293,13 @@ export async function filterUnplayableStreams(streams, options = {}) {
       try {
         const context = { ...options, signal: controller?.signal };
         if (await probeStream(stream, context) !== 'bad' || controller?.signal.aborted) continue;
-        // Un CDN puede alternar HTML/403 con vídeo válido (observado en
-        // AnimeAV1 desde Actions). Confirmar el fallo en otra petición antes
-        // de ocultar la URL; con 1 fallo y timeout/éxito se conserva.
+
+
+
         await new Promise((resolve) => setTimeout(resolve, CONFIRM_DELAY_MS));
         if (!controller?.signal.aborted && await probeStream(stream, context) === 'bad'
           && !controller?.signal.aborted) removed.add(index);
-      } catch (_) { /* un fallo de red no prueba que el vídeo esté roto */ }
+      } catch (_) {                                                        }
     }
   };
   const workers = Promise.all(Array.from({ length: Math.min(2, eligible.length) }, worker));

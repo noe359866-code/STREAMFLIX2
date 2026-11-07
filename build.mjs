@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { parse } from 'acorn';
 import { readdir, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -28,16 +29,23 @@ for (const id of entries) {
     target: 'es2020',
     minify,
     sourcemap: false,
-    legalComments: 'inline',
-    // Nuvio QuickJS ofrece require('crypto-js'); no se debe convertir en una dependencia de Node.
+    legalComments: 'none',
+
     external: ['crypto-js'],
-    banner: { js: `/* ${id} · STREAMFLIX2 · Apache-2.0 · Generado con npm run build */` },
     logLevel: 'warning',
   });
+  const output = await readFile(outfile, 'utf8');
+  const comments = [];
+  parse(output, { ecmaVersion: 'latest', sourceType: 'script', onComment: comments });
+  let clean = output;
+  for (const { start, end } of comments.reverse()) {
+    clean = clean.slice(0, start) + output.slice(start, end).replace(/[^\r\n]/g, ' ') + clean.slice(end);
+  }
+  await writeFile(outfile, clean.replace(/^[ \t]+$/gm, ''));
   console.log(`✓ ${id}`);
 }
 
-// El manifiesto se genera desde una única fuente para evitar IDs/rutas obsoletos.
+
 const manifestSource = JSON.parse(await readFile(path.join(root, 'src', 'manifest.json'), 'utf8'));
 const available = new Set((await readdir(sourceRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory()).map((entry) => entry.name));

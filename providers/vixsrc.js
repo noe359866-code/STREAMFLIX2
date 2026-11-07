@@ -1,8 +1,6 @@
-/* vixsrc · STREAMFLIX2 · Apache-2.0 · Generado con npm run build */
 
-// src/core/http.js
 var USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-var cookieJar = /* @__PURE__ */ new Map();
+var cookieJar =                 new Map();
 function urlParts(url) {
   const match = String(url || "").match(/^https?:\/\/([^/]+)([^?#]*)/i);
   return match ? { host: match[1].toLowerCase(), path: match[2] || "/" } : { host: "", path: "/" };
@@ -39,7 +37,7 @@ function storeCookies(url, headers) {
     }));
     const domain = (attrs.domain || host).replace(/^\./, "").toLowerCase();
     if (host !== domain && !host.endsWith(`.${domain}`)) continue;
-    if (!cookieJar.has(domain)) cookieJar.set(domain, /* @__PURE__ */ new Map());
+    if (!cookieJar.has(domain)) cookieJar.set(domain,                 new Map());
     const maxAge = Number(attrs["max-age"]);
     const expires = Number.isFinite(maxAge) && attrs["max-age"] !== void 0 ? Date.now() + maxAge * 1e3 : attrs.expires ? Date.parse(attrs.expires) : 0;
     if (maxAge <= 0 && attrs["max-age"] !== void 0) cookieJar.get(domain).delete(name);
@@ -77,7 +75,7 @@ async function request(url, options = {}) {
         method: options.method || "GET",
         headers,
         body: options.body,
-        redirect: "follow"
+        redirect: options.redirect || "follow"
       }),
       timeout
     ]);
@@ -121,7 +119,7 @@ async function fetchJson(url, options = {}) {
   }
 }
 
-// src/core/text.js
+
 var ENTITIES = {
   amp: "&",
   lt: "<",
@@ -185,7 +183,7 @@ function hostName(url) {
   return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "Servidor";
 }
 
-// src/core/media-filter.js
+
 var PLAYLIST_BYTES = 64 * 1024;
 var MEDIA_BYTES = 2048;
 var NATIVE_BODY_LIMIT = 128 * 1024;
@@ -351,8 +349,6 @@ function playlistRefs(text) {
   return {
     variants,
     segments,
-    // Solo un VOD terminado y ENTERAMENTE entre CUE-OUT/CUE-IN prueba
-    // que la playlist es un corte publicitario, no una película con anuncios.
     adOnly: lines.some((line) => /^#EXT-X-ENDLIST(?:\s|$)/i.test(line)) && adSegments > 0 && otherSegments === 0,
     key: lines.find((line) => /^#EXT-X-KEY:/i.test(line) && !/\bMETHOD=NONE(?:,|$)/i.test(line)) || "",
     init: lines.find((line) => /^#EXT-X-MAP:/i.test(line)) || ""
@@ -434,8 +430,6 @@ async function probeStream(stream, options = {}) {
     fetchImpl: options.fetchImpl || globalThis.fetch,
     headers: stream.headers || {},
     signal: options.signal,
-    // El fetch de QuickJS ya descarga el cuerpo completo antes de entregarlo:
-    // cada GET (también de segmentos/inicialización) requiere HEAD pequeño o Range.
     nativeBridge: options.nativeBridge !== void 0 ? options.nativeBridge : typeof globalThis.__native_fetch === "function"
   };
   if (stream.type === "hls") return checkHls(stream.url, context);
@@ -450,7 +444,7 @@ async function filterUnplayableStreams(streams2, options = {}) {
   });
   const eligible = result.map((stream, index) => ({ stream, index })).filter(({ stream }) => ["hls", "mp4"].includes(String(stream.type).toLowerCase())).slice(0, MAX_PROBES);
   let cursor = 0;
-  const removed = /* @__PURE__ */ new Set();
+  const removed =                 new Set();
   const worker = async () => {
     while (cursor < eligible.length && !controller?.signal.aborted) {
       const { stream, index } = eligible[cursor++];
@@ -473,7 +467,7 @@ async function filterUnplayableStreams(streams2, options = {}) {
   return result.filter((_, index) => !removed.has(index));
 }
 
-// src/core/streams.js
+
 function mediaKind(url, explicit) {
   if (explicit) return explicit;
   if (/\.m3u8(?:$|[?#])|\/m3u8\//i.test(url)) return "hls";
@@ -531,7 +525,7 @@ function makeStream(provider, url, options = {}) {
   };
 }
 function finalizeStreams(streams2) {
-  const seen = /* @__PURE__ */ new Set();
+  const seen =                 new Set();
   const output = [];
   for (const stream of streams2.flat ? streams2.flat(2) : streams2) {
     if (!stream || !isPlayableUrl(stream.url)) continue;
@@ -563,12 +557,12 @@ function providerGuard(provider, getStreams) {
   };
 }
 
-// src/core/site.js
+
 function createDirectProvider(config) {
   return providerGuard(config.name, async (contentId, mediaType, season, episode) => config.streams(String(contentId).replace(/^tmdb[:/]/i, ""), { mediaType, season: season || 1, episode: episode || 1 }));
 }
 
-// src/providers/vixsrc/index.js
+
 var BASE = "https://vixsrc.to";
 var PLAYLIST = /^https:\/\/(?:[a-z0-9-]+\.)*(?:vixsrc\.to|vixcloud\.(?:co|cc))\/playlist\/[-\w]+(?:\.m3u8)?(?:\?[^#]*)?$/i;
 var EMBED = /^https:\/\/vixsrc\.to\/embed\/\d+(?:[/?#]|$)/i;
@@ -614,11 +608,24 @@ function subtitlesFrom(master, playlistUrl) {
 async function streams(id, media) {
   if (!/^\d{1,12}$/.test(id)) return [];
   const path = media.mediaType === "movie" ? `/api/movie/${id}` : `/api/tv/${id}/${media.season}/${media.episode}`;
-  const api = await fetchJson(withQuery(`${BASE}${path}`, { lang: "es" }), { referer: `${BASE}/` });
-  const src = api.data?.src;
-  const embedUrl = absoluteUrl(typeof src === "string" ? src : "", BASE);
-  if (!EMBED.test(embedUrl)) return [];
-  const page = await fetchText(embedUrl, { referer: `${BASE}/`, timeoutMs: 9500 });
+  const apiUrl = withQuery(`${BASE}${path}`, { lang: "es" });
+  const readEmbedUrl = async () => {
+    const api = await fetchJson(apiUrl, { referer: `${BASE}/` });
+    const src = api.data?.src;
+    const url2 = absoluteUrl(typeof src === "string" ? src : "", BASE);
+    return EMBED.test(url2) ? url2 : "";
+  };
+  let embedUrl = await readEmbedUrl();
+  if (!embedUrl) return [];
+  let page;
+  try {
+    page = await fetchText(embedUrl, { referer: `${BASE}/`, timeoutMs: 9500 });
+  } catch (error) {
+    if (error?.response?.status !== 410) throw error;
+    embedUrl = await readEmbedUrl();
+    if (!embedUrl) return [];
+    page = await fetchText(embedUrl, { referer: `${BASE}/`, timeoutMs: 9500 });
+  }
   const declared = mediaDeclarations(page.text);
   const expiry = Number(declared.expires) * (declared.expires.length > 10 ? 1 : 1e3);
   if (!declared.playlist || !declared.token || !Number.isFinite(expiry) || expiry < Date.now() + 1e4) return [];
@@ -626,6 +633,7 @@ async function streams(id, media) {
   const url = withQuery(pathUrl, {
     token: declared.token,
     expires: declared.expires,
+    .../[?&]b=1(?:&|$)/i.test(declared.playlist) ? { b: 1 } : {},
     ...declared.fhd ? { h: 1 } : {},
     lang: "es"
   });

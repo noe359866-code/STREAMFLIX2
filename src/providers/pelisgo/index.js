@@ -12,7 +12,7 @@ async function search(query, mediaType) {
   return cardsFromAnchors(page.text, page.url, { path: /\/(?:movies|series)\//i, mediaType });
 }
 
-// Los objetos pueden estar en HTML o escapados dentro de self.__next_f.push.
+
 function normalizeServerData(html) {
   return String(html || '')
     .replace(/\\"/g, '"')
@@ -33,7 +33,7 @@ function isDownload(raw, url) {
 }
 
 function serverCandidates(html, base) {
-  // La sección de descargas tiene objetos parecidos, pero no son opciones de reproducción.
+
   const source = normalizeServerData(html).split(/<[^>]+id\s*=\s*["']downloads["'][^>]*>/i)[0];
   const output = [];
   for (const match of source.matchAll(/\{(?=[^{}]{0,1800}\bserver\b)[^{}]{1,1800}\}/gi)) {
@@ -61,7 +61,7 @@ function validEpisodePage(html, season, episode) {
 }
 
 async function streams(match, media) {
-  // El slug procede de la búsqueda; nunca se deriva del título ni se reintenta otro episodio.
+
   const url = media.mediaType === 'movie' ? match.url
     : `${match.url.replace(/\/+$/, '')}/temporada/${Number(media.season)}/episodio/${Number(media.episode)}`;
   let page;

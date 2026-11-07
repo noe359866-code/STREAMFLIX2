@@ -145,7 +145,7 @@ test('HLS: detecta 403 en las dos muestras del segmento o la clave AES-128', asy
   const result = await checkMedia(hls(base), blocked);
   assert.equal(result.outcome, 'http403');
   assert.equal(result.stage, 'segmento');
-  assert.equal(blocked.calls.length, 5); // playlist y 2 * (Range + GET)
+  assert.equal(blocked.calls.length, 5);
 
   const key = mockFetch({
     [base]: { body: '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXTINF:4,\nfirst.ts\n' },
@@ -196,4 +196,27 @@ test('solo propone retirada con 3 intentos y TODOS los HLS/MP4 encontrados a 403
   assert.equal(classifyProvider([fail, fail, { ...fail, mediaCount: 3 }]), 'no-concluyente');
   assert.equal(classifyProvider([fail, fail, { ...fail, otherFormats: 1 }]), 'no-concluyente');
   assert.equal(classifyProvider([fail, fail, { ...fail, media: [{ outcome: 'otro' }, { outcome: 'http403' }] }]), 'no-concluyente');
+});
+
+test('auditoría selectiva solo acepta proveedores activos y elimina duplicados', () => {
+  const { selectProviders } = require('../scripts/media-audit-lib.cjs');
+  const scrapers = [{ id: 'videoapi', enabled: true }, { id: 'jkanime', enabled: true }, { id: 'inactivo', enabled: false }];
+  assert.deepEqual(selectProviders(scrapers).map((item) => item.id), ['videoapi', 'jkanime']);
+  assert.deepEqual(selectProviders(scrapers, ' jkanime,videoapi,jkanime ').map((item) => item.id), ['videoapi', 'jkanime']);
+  assert.throws(() => selectProviders(scrapers, 'videoapi,inactivo'), /inactivos/);
+  assert.throws(() => selectProviders(scrapers, 'videoapi,desconocido'), /desconocidos/);
+  assert.throws(() => selectProviders(scrapers, 'videoapi;echo error'), /inválida/);
+  assert.throws(() => selectProviders(scrapers, 'videoapi,'), /inválida/);
+});
+
+test('el CLI rechaza una selección vacía o desconocida antes de iniciar la auditoría', () => {
+  const { spawnSync } = require('node:child_process');
+  const path = require('node:path');
+  const script = path.join(__dirname, '../scripts/media-audit.cjs');
+  for (const args of [['--all', '--providers'], ['--all', '--providers', 'no-existe']]) {
+    const result = spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', timeout: 5000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Auditoría no completada/);
+    assert.equal(result.stdout, '');
+  }
 });
