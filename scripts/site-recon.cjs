@@ -6,10 +6,24 @@
 const fs = require('node:fs');
 const zlib = require('node:zlib');
 
-const TARGETS = [
+const ORIGINAL_TARGETS = [
   { id: 'repelis24', base: 'https://repelis24.de' },
   { id: 'gnulaone', base: 'https://ver.gnula.one' },
 ];
+// Los nuevos sitios se examinan en trabajos independientes de Actions: cada
+// dominio recibe tres intentos, incluidos errores de TLS/DNS y páginas 403.
+const REQUESTED_TARGETS = [
+  { id: 'tudorama', base: 'https://tudorama.com', paths: ['/', '/?s=Crash+Landing+on+You', '/search?q=Crash%20Landing%20on%20You'], title: /crash|landing|aterrizaje/i },
+  { id: 'vixsrc', base: 'https://vixsrc.to', paths: ['/', '/movie/550?lang=es', '/tv/1396/1/1?lang=es'], title: /fight|club|breaking|bad/i },
+  { id: 'cinejoy', base: 'https://cinejoy.pk', paths: ['/', '/?s=One+Piece', '/search?keyword=One%20Piece'], title: /one\s*piece/i },
+  { id: 'atlantic', base: 'https://atlantic.bz', paths: ['/', '/movie/550', '/?s=Fight+Club'], title: /fight|club/i },
+  { id: 'cinemaarmy', base: 'https://cinema.army', paths: ['/', '/?s=Fight+Club', '/search?q=Fight%20Club'], title: /fight|club/i },
+];
+const targetIndex = process.argv.indexOf('--target');
+const targetId = targetIndex >= 0 ? process.argv[targetIndex + 1] : '';
+const TARGETS = targetId ? REQUESTED_TARGETS.filter((item) => item.id === targetId) : ORIGINAL_TARGETS;
+const ATTEMPTS = targetId ? 3 : 1;
+if (targetId && !TARGETS.length) throw new Error(`Sitio no registrado: ${targetId}`);
 const PATHS = ['/', '/?s=Fight+Club', '/?s=Van+Helsing', '/buscar?q=Fight+Club', '/search?q=Fight+Club', '/search/Fight%20Club'];
 const MAX_BYTES = 260000;
 const HEADERS = {
@@ -110,36 +124,48 @@ async function inspect(url, target, referer, redirects = 0) {
       }
       return result;
     }
+    // Una ruta de player puede devolver un vídeo: no descargarlo en un
+    // reconocimiento de HTML (la auditoría HLS/MP4 es un trabajo aparte).
+    if (result.contentType && !/html|json|text|xml/i.test(result.contentType)) {
+      if (response.body) await response.body.cancel().catch(() => {});
+      return result;
+    }
     const html = await boundedBody(response);
     result.bytesSampled = Buffer.byteLength(html);
     if (/html/i.test(result.contentType) || /<!doctype|<html/i.test(html.slice(0, 1000))) {
       result.page = htmlInfo(html, request.href);
     }
-  } catch (error) { result.error = error?.name === 'TimeoutError' ? 'timeout' : error?.name || 'network-error'; }
+  } catch (error) { result.error = error?.name === 'TimeoutError' ? 'timeout' : error?.cause?.code || error?.name || 'network-error'; }
   return result;
 }
 
 async function main() {
   const report = [];
   for (const target of TARGETS) {
-    const pages = [];
-    for (const subpath of PATHS) {
-      pages.push(await inspect(new URL(subpath, target.base).href, target, target.base + '/'));
+    const attempts = [];
+    for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+      const pages = [];
+      for (const subpath of target.paths || PATHS) {
+        pages.push(await inspect(new URL(subpath, target.base).href, target, target.base + '/'));
+      }
+      // Solo se sigue un enlace del mismo dominio si el texto/slug coincide con
+      // el título consultado. No se descargan vídeos ni se abren hosters.
+      const allowedHost = new URL(target.base).hostname;
+      const candidates = pages.flatMap((page) => page.page?.anchors || []).filter((item) =>
+        (item.host === allowedHost || item.host.endsWith(`.${allowedHost}`))
+        && (target.title || /fight|club|helsing/i).test(`${item.title} ${item.path}`)
+        && !/\b(?:search|buscar)\b/i.test(item.path),
+      );
+      const detail = [];
+      for (const candidate of candidates.slice(0, targetId ? 1 : 2)) {
+        detail.push(await inspect(`https://${candidate.host}${candidate.path}`, target, target.base + '/'));
+      }
+      attempts.push({ pages, detail });
+      console.log(`${target.id} intento ${attempt + 1}: ${pages.map((p) => p.status || p.error).join('/')} / ficha ${detail.map((p) => p.status || p.error).join('/')}`);
     }
-    // Solo se sigue un enlace del mismo dominio si el texto/slug coincide con
-    // el título consultado. No se descargan vídeos ni se abren hosters.
-    const allowedHost = new URL(target.base).hostname;
-    const candidates = pages.flatMap((page) => page.page?.anchors || []).filter((item) =>
-      (item.host === allowedHost || item.host.endsWith(`.${allowedHost}`))
-      && /fight|club|helsing/i.test(`${item.title} ${item.path}`)
-      && !/\b(?:search|buscar)\b/i.test(item.path),
-    );
-    const detail = [];
-    for (const candidate of candidates.slice(0, 2)) {
-      detail.push(await inspect(`https://${candidate.host}${candidate.path}`, target, target.base + '/'));
-    }
-    report.push({ id: target.id, base: target.base, pages, detail });
-    console.log(`${target.id}: ${pages.map((p) => p.status || p.error).join('/')} / detail ${detail.map((p) => p.status || p.error).join('/')}`);
+    // Mantener el esquema anterior para el trabajo Repelis24/Gnula existente.
+    report.push(targetId ? { id: target.id, base: target.base, attempts }
+      : { id: target.id, base: target.base, ...attempts[0] });
   }
   const output = process.argv.includes('--output') ? process.argv[process.argv.indexOf('--output') + 1] : '.tmp/site-recon.json';
   fs.mkdirSync(require('node:path').dirname(output), { recursive: true });
