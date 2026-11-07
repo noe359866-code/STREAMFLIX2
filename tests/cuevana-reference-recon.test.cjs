@@ -23,7 +23,10 @@ test('diagnóstico: HTML 403 o protección web no se interpreta como medio falli
     options: { L: 0, E: 0, S: 0 }, lazyIframes: 0,
   });
   assert.deepEqual(inspectBody('not json', 'application/json'), { kind: 'json-invalid' });
-  assert.deepEqual(inspectBody(JSON.stringify({ data: { posts: [1, 2] } }), 'application/json'), {
-    kind: 'json', posts: 2,
+  assert.deepEqual(inspectBody(JSON.stringify({ data: { posts: [
+    { _id: 'example', title: 'Joker', type: 'movie' },
+    { _id: 'example-2', title: 'Joker', type: 'tvshows' },
+  ] } }), 'application/json'), {
+    kind: 'json', posts: 2, types: ['movie', 'tvshows'], jokerMoviesWithId: 1,
   });
 });

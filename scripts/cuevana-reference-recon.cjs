@@ -39,7 +39,14 @@ function inspectBody(text, contentType) {
     try {
       const payload = JSON.parse(text);
       const posts = payload?.data?.posts ?? payload?.data?.data?.posts;
-      return { kind: 'json', posts: Array.isArray(posts) ? posts.length : null };
+      if (!Array.isArray(posts)) return { kind: 'json', posts: null };
+      return {
+        kind: 'json', posts: posts.length,
+        types: [...new Set(posts.map((item) => String(item?.type || '').slice(0, 30)))].slice(0, 6),
+        jokerMoviesWithId: posts.filter((item) => item?._id
+          && /joker/i.test(String(item?.title || item?.original_title || ''))
+          && /movie|pelicula/i.test(String(item?.type || ''))).length,
+      };
     } catch (_) { return { kind: 'json-invalid' }; }
   }
   if (!/html|text/i.test(contentType)) return { kind: 'non-text' };
