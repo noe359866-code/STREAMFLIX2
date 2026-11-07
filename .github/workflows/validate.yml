@@ -63,6 +63,7 @@ jobs:
           node --check scripts/media-audit-lib.cjs
           node --check scripts/site-recon.cjs
           node --check scripts/site-player-recon.cjs
+          node --check scripts/cuevana-reference-recon.cjs
           bash -n scripts/deploy-beamup.sh
       - name: Comprobar servidor local Nuvio
         run: |
@@ -171,6 +172,27 @@ jobs:
         with:
           name: site-recon
           path: site-recon.json
+          if-no-files-found: warn
+
+  cuevana-reference:
+    name: Contrastar dominios y estructura de cuevana3 (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-cuevana3]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Consultar catálogo y fichas legacy y API vigente (sin abrir medios)
+        run: node scripts/cuevana-reference-recon.cjs --output cuevana-reference-recon.json
+      - name: Publicar los tres intentos de cada web sin HTML ni URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuevana-reference-recon
+          path: cuevana-reference-recon.json
           if-no-files-found: warn
 
   site-player:
