@@ -20,6 +20,11 @@ const TARGETS = [
     id: 'current-gs', base: 'https://cuevana.gs',
     paths: ['/', '/wp-api/v1/search?q=Joker&page=1&postType=any&postsPerPage=24'],
   },
+  {
+    // Destino HTTPS del 301 observado en .gs (Actions 42317819695).
+    id: 'redirect-pro', base: 'https://cuevanas3.pro',
+    paths: ['/', '/wp-api/v1/search?q=Joker&page=1&postType=any&postsPerPage=24'],
+  },
 ];
 const HOSTS = new Set(TARGETS.map((item) => new URL(item.base).hostname));
 const HEADERS = {
