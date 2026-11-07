@@ -335,6 +335,17 @@
       "supportedFormats": ["hls", "mp4", "mkv", "webm"]
     },
     {
+      "id": "tudorama",
+      "name": "TuDorama (en evaluación)",
+      "description": "Fichas/episodios y servidores AJAX contrastados; pendiente confirmar HLS/MP4 de los hosters para activarlo.",
+      "version": "1.0.0",
+      "filename": "providers/tudorama.js",
+      "supportedTypes": ["movie", "tv"],
+      "enabled": false,
+      "contentLanguage": ["es", "en"],
+      "supportedFormats": ["hls", "mp4"]
+    },
+    {
       "id": "tukiplay",
       "name": "TukiPlay",
       "description": "Inactivo: su HLS devolvió 403 en tres intentos de GitHub Actions (run 42168396452).",

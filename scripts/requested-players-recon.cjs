@@ -124,15 +124,22 @@ async function vixsrc() {
         expires: Boolean(media.expires), playlistHost: host(media.playlist),
         playlistShape: /^https:\/\//i.test(media.playlist) ? 'absolute' : media.playlist.startsWith('//')
           ? 'protocol-relative' : media.playlist.startsWith('/') ? 'relative' : media.playlist ? 'other' : 'absent',
-        playlistExtension: /\.m3u8(?:[?#]|$)/i.test(media.playlist) };
+        playlistExtension: /\.m3u8(?:[?#]|$)/i.test(media.playlist),
+        canPlayFHD: /["']canPlayFHD["']\s*:\s*true|canPlayFHD\s*=\s*true/i.test(page.text || '') };
       if (media.playlist && media.token && media.expires && Number(media.expires) * 1000 > Date.now()
         && /^[-\w]+$/.test(media.token) && /^(?:https:\/\/|\/)/i.test(media.playlist)) {
         // Solo una URL de playlist declarada por la página, no una derivada de
         // un iframe; nunca se publica el token ni se descarga un segmento aquí.
         const playlistUrl = new URL(media.playlist, BASE);
         if (playlistUrl.protocol !== 'https:') { output.push(entry); continue; }
+        // El contrato del reproductor documentado en Stream4me/vixsrc.py
+        // añade .m3u8 a /playlist/<id> y h=1 cuando canPlayFHD es true.
+        // No se infiere una ruta a partir del ID de TMDB: solo se completa
+        // la URL /playlist/ declarada expresamente por el embed.
+        if (/^\/playlist\/[-\w]+$/i.test(playlistUrl.pathname)) playlistUrl.pathname += '.m3u8';
         playlistUrl.searchParams.set('token', media.token);
         playlistUrl.searchParams.set('expires', media.expires);
+        if (entry.embed.canPlayFHD) playlistUrl.searchParams.set('h', '1');
         if (target.searchParams.get('lang')) playlistUrl.searchParams.set('lang', target.searchParams.get('lang'));
         // La playlist puede residir en un CDN: solo hosts conocidos y hasta
         // 128 KiB. Los demás quedan sin sondear, no se presumen bloqueados.
@@ -142,8 +149,10 @@ async function vixsrc() {
           continue;
         }
         try {
-          const res = await fetch(playlistUrl.href, { headers: { 'User-Agent': UA, Referer: `${BASE}/` },
-            redirect: 'manual', signal: AbortSignal.timeout(9000) });
+          const res = await fetch(playlistUrl.href, { headers: {
+            'User-Agent': UA, Referer: target.href, Origin: BASE,
+            'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+          }, redirect: 'manual', signal: AbortSignal.timeout(9000) });
           const reader = res.body?.getReader();
           let content = '';
           if (reader) {

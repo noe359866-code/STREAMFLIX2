@@ -9,15 +9,15 @@ const { ACTIVE_IDS } = require('../stremio/config.cjs');
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
 const ids = manifest.scrapers.map((item) => item.id);
 
-test('el manifiesto tiene 34 IDs únicos y rutas de bundle válidas', () => {
-  assert.equal(manifest.scrapers.length, 34);
-  assert.equal(new Set(ids).size, 34);
+test('el manifiesto tiene 35 IDs únicos y rutas de bundle válidas', () => {
+  assert.equal(manifest.scrapers.length, 35);
+  assert.equal(new Set(ids).size, 35);
   assert.ok(manifest.name && manifest.version);
   for (const scraper of manifest.scrapers) {
     assert.ok(scraper.id && scraper.name && scraper.version && scraper.filename);
     assert.equal(scraper.filename, `providers/${scraper.id}.js`);
     assert.ok(fs.existsSync(path.join(ROOT, scraper.filename)), scraper.filename);
-    assert.deepEqual(scraper.contentLanguage, ['es']);
+    assert.deepEqual(scraper.contentLanguage, scraper.id === 'tudorama' ? ['es', 'en'] : ['es']);
     assert.ok(scraper.supportedTypes.every((type) => ['movie', 'tv'].includes(type)));
   }
 });
@@ -32,7 +32,7 @@ test('los proveedores solo de series y los inactivos están marcados correctamen
   for (const id of ['pelisforte', 'pelisgo']) {
     assert.deepEqual(manifest.scrapers.find((item) => item.id === id).supportedTypes, ['movie', 'tv']);
   }
-  for (const id of ['animebum', 'tukiplay']) {
+  for (const id of ['animebum', 'tukiplay', 'tudorama']) {
     assert.equal(manifest.scrapers.find((item) => item.id === id).enabled, false);
     assert.ok(!ACTIVE_IDS.includes(id), `${id} no debe aparecer en la configuración de Stremio`);
   }

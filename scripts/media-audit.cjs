@@ -82,9 +82,18 @@ const TURKISH = {
   id: 'kara-sevda', mediaType: 'tv', title: 'Kara Sevda', originalTitle: 'Amor eterno',
   titles: ['Kara Sevda', 'Amor eterno'], imdbId: '', year: '2015',
 };
+const TUDORAMA_MOVIE = {
+  id: 'minamahal', mediaType: 'movie', title: 'Minamahal', originalTitle: 'Minamahal',
+  titles: ['Minamahal'], imdbId: '', year: '',
+};
+const TUDORAMA_TV = {
+  id: 'el-precio-de-una-confesion', mediaType: 'tv', title: 'El precio de una confesión',
+  originalTitle: 'El precio de una confesión', titles: ['El precio de una confesión'], imdbId: '', year: '',
+};
 
 function sampleFor(scraper) {
   const id = scraper.id;
+  if (id === 'tudorama') return arg('sample') === 'tv' ? TUDORAMA_TV : TUDORAMA_MOVIE;
   // Cuevana.gs redirige a cuevanas3.pro; su búsqueda de Joker devolvió
   // `animes` (3/3). Fight Club daba 0 fuentes en la muestra de película.
   if (['animeav1', 'animeonlineninja', 'jkanime', 'latanime', 'tioanime', 'cuevana'].includes(id)) return ANIME;
@@ -323,8 +332,9 @@ async function auditAll(output) {
     return;
   }
   const id = arg('provider');
-  const scraper = manifest.scrapers.find((entry) => entry.enabled && entry.id === id);
-  if (!scraper) throw new Error('Usa --all o --provider con un ID activo del manifiesto');
+  const scraper = manifest.scrapers.find((entry) => entry.id === id
+    && (entry.enabled || process.argv.includes('--probe-disabled')));
+  if (!scraper) throw new Error('Usa --all o --provider con un ID activo (o --probe-disabled para diagnóstico)');
   const result = await auditOne(scraper);
   writeJson(output, result);
   console.log(`${id}: ${result.decision} (medios por intento: ${result.attempts.map((item) => item.mediaCount).join('/')})`);

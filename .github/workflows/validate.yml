@@ -225,6 +225,52 @@ jobs:
           path: players-${{ matrix.site }}.json
           if-no-files-found: warn
 
+  tudorama-media:
+    name: Auditar TuDorama ${{ matrix.sample }} (3 intentos; conector desactivado)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-tudorama]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [movie, tv]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver una ficha y auditar medios, sin activar el conector
+        run: >-
+          node scripts/media-audit.cjs --provider tudorama
+          --sample "${{ matrix.sample }}" --probe-disabled
+          --output "audit-tudorama-${{ matrix.sample }}.json"
+      - name: Informar resultados sanitizados en las anotaciones
+        env:
+          SAMPLE: ${{ matrix.sample }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const sample = process.env.SAMPLE;
+          const report = JSON.parse(fs.readFileSync(`audit-tudorama-${sample}.json`, 'utf8'));
+          const attempts = report.attempts.map(({ discovered, mediaCount, discoveryEvents, timedOut, media }) => ({
+            discovered, mediaCount, discoveryEvents, timedOut,
+            media: media.map(({ format, stage, status, host, outcome, signature }) =>
+              ({ format, stage, status, host, outcome, signature })),
+          }));
+          console.log(`::notice file=scripts/media-audit.cjs,title=tudorama-${sample}::${JSON.stringify({ decision: report.decision, attempts })}`);
+          NODE
+      - name: Publicar los tres intentos sin URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tudorama-${{ matrix.sample }}-media
+          path: audit-tudorama-${{ matrix.sample }}.json
+          if-no-files-found: warn
+
   cuevana-reference:
     name: Contrastar dominios y estructura de cuevana3 (3 intentos)
     if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-cuevana3]')

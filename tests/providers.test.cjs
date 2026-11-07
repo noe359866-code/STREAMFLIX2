@@ -213,6 +213,44 @@ test('Cuevana: wp-api search, lista de episodios y player', async () => {
   assert.ok(result.calls.some((call) => call.url.includes('postId=episode-3')));
 });
 
+test('TuDorama: busca película real, obtiene servidores AJAX y desenvuelve el iframe del CDN', async () => {
+  const result = await run('tudorama', {
+    mediaType: 'movie',
+    routes: [
+      ['tudorama.com/?s=', card('/pelicula/contenido-demo/')],
+      ['tudorama.com/pelicula/contenido-demo/', '<div class="servers movie-player" data-id="2248" data-nonce="nonce-demo"></div>'],
+      [(url, init) => url.includes('tudorama.com/wp-admin/admin-ajax.php') && init.body.includes('corvus_get_servers'),
+        { data: [{ name: 'sub filemoon', lang: 'en', url: 'https://cdn.tudorama.com/stream/server-2.php?id1=demo' }] }],
+      ['cdn.tudorama.com/stream/server-2.php', '<script>iframe.src="https://sw.example/e/demo";</script>'],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'en'); // «sub», sin evidencia del idioma de subtítulos
+  assert.ok(result.calls.some((call) => call.init.body?.includes('post_id=2248')));
+  assert.ok(result.calls.some((call) => call.url.includes('/stream/server-2.php')
+    && call.init.headers.Referer.includes('/pelicula/contenido-demo/')));
+});
+
+test('TuDorama: episodio exacto por paginación AJAX, no inventa otro capítulo', async () => {
+  const routes = [
+    ['tudorama.com/?s=', card('/serie/contenido-demo/')],
+    ['tudorama.com/serie/contenido-demo/', '<div class="eps" data-tmdb-id="42" data-nonce="nonce-demo" data-season-number="2" data-results="10"></div>'],
+    [(url, init) => url.includes('tudorama.com/wp-admin/admin-ajax.php') && init.body.includes('corvus_get_episodes'),
+      { data: { results: [{ season_number: 2, episode_number: 3, permalink: 'https://tudorama.com/ver/contenido-demo-s2x3/' }], hasMore: false } }],
+    ['tudorama.com/ver/contenido-demo-s2x3/', '<div class="ep__dropdown" data-id="53" data-nonce="nonce-ep"></div>'],
+    [(url, init) => url.includes('tudorama.com/wp-admin/admin-ajax.php') && init.body.includes('corvus_get_servers'),
+      { data: [{ name: 'esp earnvids', lang: 'es', url: 'https://cdn.tudorama.com/stream/server-3.php?id1=demo' }] }],
+    ['cdn.tudorama.com/stream/server-3.php', '<iframe src="https://sw.example/e/demo"></iframe>'],
+  ];
+  const result = await run('tudorama', { routes });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es');
+  assert.ok(result.calls.some((call) => call.init.body?.includes('season=2') && call.init.body.includes('offset=0')));
+  const missing = await run('tudorama', { routes, episode: 4 });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/ver/contenido-demo-s2x4/')));
+});
+
 test('Doramasflix: GraphQL detail/listEpisodes/links_online', async () => {
   function gql(data) {
     return (url, init) => ({ data });
