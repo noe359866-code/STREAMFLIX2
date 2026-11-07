@@ -13,11 +13,11 @@ const ORIGINAL_TARGETS = [
 // Los nuevos sitios se examinan en trabajos independientes de Actions: cada
 // dominio recibe tres intentos, incluidos errores de TLS/DNS y páginas 403.
 const REQUESTED_TARGETS = [
-  { id: 'tudorama', base: 'https://tudorama.com', paths: ['/', '/?s=Crash+Landing+on+You', '/search?q=Crash%20Landing%20on%20You'], title: /crash|landing|aterrizaje/i },
-  { id: 'vixsrc', base: 'https://vixsrc.to', paths: ['/', '/movie/550?lang=es', '/tv/1396/1/1?lang=es'], title: /fight|club|breaking|bad/i },
-  { id: 'cinejoy', base: 'https://cinejoy.pk', paths: ['/', '/?s=One+Piece', '/search?keyword=One%20Piece'], title: /one\s*piece/i },
-  { id: 'atlantic', base: 'https://atlantic.bz', paths: ['/', '/movie/550', '/?s=Fight+Club'], title: /fight|club/i },
-  { id: 'cinemaarmy', base: 'https://cinema.army', paths: ['/', '/?s=Fight+Club', '/search?q=Fight%20Club'], title: /fight|club/i },
+  { id: 'tudorama', base: 'https://tudorama.com', paths: ['/?s=Minamahal', '/pelicula/minamahal/', '/serie/el-precio-de-una-confesion/'], title: /minamahal|precio|confesi[oó]n/i },
+  { id: 'vixsrc', base: 'https://vixsrc.to', paths: ['/api/movie/550', '/api/tv/1396/1/1', '/movie/550?lang=es'], title: /fight|club|breaking|bad/i },
+  { id: 'cinejoy', base: 'https://cinejoy.pk', paths: ['/watch/movie/550', '/watch/tv/1396/1/1', '/api/movie/550'], title: /one\s*piece/i },
+  { id: 'atlantic', base: 'https://atlantic.bz', paths: ['/watch/movie/550', '/movie/550', '/api/movie/550'], title: /fight|club/i },
+  { id: 'cinemaarmy', base: 'https://cinema.army', paths: ['/watch?id=550&type=movie', '/api/tcloud/movie/550', '/api/cookiebakers/movie/550'], title: /fight|club/i },
 ];
 const targetIndex = process.argv.indexOf('--target');
 const targetId = targetIndex >= 0 ? process.argv[targetIndex + 1] : '';
@@ -83,6 +83,9 @@ function htmlInfo(html, url) {
     title, forms, anchors, anchorCount: allAnchors.length, scripts, iframes, playerTags,
     nextData: /id=["']__NEXT_DATA__["']/.test(html),
     wordpress: /wp-content|wp-json|wp-admin/i.test(html),
+    episodePanels: (html.match(/\bclass\s*=\s*["'][^"']*\beps\b[^"']*["']/gi) || []).length,
+    hasPlayerId: /\bdata-id\s*=\s*["']\d+["']/i.test(html),
+    hasPlayerNonce: /\bdata-nonce\s*=\s*["'][^"']+["']/i.test(html),
     jsonLdTypes: [...html.matchAll(/"@type"\s*:\s*"([A-Za-z]+)"/g)].map((m) => m[1]).slice(0, 10),
     challenge: /just a moment|cf-browser-verification|captcha|challenge-running/i.test(title + html.slice(0, 1000)),
   };
@@ -134,6 +137,19 @@ async function inspect(url, target, referer, redirects = 0) {
     result.bytesSampled = Buffer.byteLength(html);
     if (/html/i.test(result.contentType) || /<!doctype|<html/i.test(html.slice(0, 1000))) {
       result.page = htmlInfo(html, request.href);
+    } else if (/json/i.test(result.contentType)) {
+      try {
+        const value = JSON.parse(html);
+        result.json = {
+          kind: Array.isArray(value) ? 'array' : typeof value,
+          keys: Object.keys(value || {}).slice(0, 12),
+          // Solo la ruta de un embed del MISMO dominio; jamás el valor de una
+          // URL firmada ni su query. No se publica el cuerpo de la respuesta.
+          src: typeof value?.src === 'string' && /^\/(?!\/)/.test(value.src)
+            ? safeUrl(value.src, request.href) : null,
+          hasData: Boolean(value?.data),
+        };
+      } catch (_) { result.json = { kind: 'invalid' }; }
     }
   } catch (error) { result.error = error?.name === 'TimeoutError' ? 'timeout' : error?.cause?.code || error?.name || 'network-error'; }
   return result;
