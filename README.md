@@ -5,9 +5,13 @@ Porte a JavaScript de los proveedores VOD en español de **Streamflix Reborn 2**
 1. **Pack de plugins para el runtime QuickJS/CommonJS de Nuvio** (`manifest.json` + `providers/*.js` en la raíz).
 2. **Addon de Stremio (`org.streamflix2.es`) listo para Beamup** (`stremio/`, `Procfile`, `scripts/deploy-beamup.sh`), con resolución automática de IDs IMDb (`tt…`) mediante Cinemeta, clave TMDB opcional, selector interactivo en `/configure` y entrega de cabeceras mediante `behaviorHints.proxyHeaders`.
 
-Incluye **31 conectores activos** y **AnimeBum deshabilitado**, porque también está inactivo en el proyecto de origen.
+Incluye **33 conectores activos**, entre ellos **TuDorama solo para series** y **VixSrc con audio italiano/inglés en las muestras**; **AnimeBum y WarezCDN están deshabilitados**. CineHax y TukiPlay se eliminaron por petición expresa, no solo se ocultaron del selector. [Estado de los seis dominios y evidencia](docs/revision-seis-sitios-2026.md).
 
-> **Estado:** paquete instalable para pruebas en una compilación sideloaded de Nuvio y como addon HTTP v3 de Stremio validado con `stremio-addon-linter`. La compilación de **32 bundles** y **59 pruebas offline** pasa localmente. El [run 42144667365](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42144667365) pasó la validación offline actual (32 bundles, 59 pruebas y lint del addon Beamup); la sonda live de Pelispedia no validó un medio reproducible en el título consultado. El [run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530) confirmó descubrimiento real en CineHax y una firma de medio válida. Para VerPeliculasOnline, el [run 42081217613](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42081217613) decodificó el Voe de Van Helsing y validó la firma de su playlist HLS. Estas sondas no comprueban segmentos, audio ni reproducción dentro de Nuvio. Los demás dominios y la reproducción en la app **siguen sin verificar**; un proveedor puede cambiar su HTML o exigir Cloudflare sin previo aviso.
+> **Estado:** paquete instalable para pruebas en Nuvio (sideload) y addon HTTP v3 de Stremio validado con `stremio-addon-linter`; [PR #10](https://github.com/noe359866-code/STREAMFLIX2/pull/10) abierta, **sin desplegar**. Compilan **35 bundles** y pasan **114 pruebas offline**. [GitHub Actions 42329031195](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42329031195) comprobó en TuDorama TV segmentos MPEG-TS HTTP 206 en 3/3; [Actions 42329798420](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42329798420) verificó en VixSrc master y clave AES-128 200, más firma MPEG-TS **tras descifrar** un segmento 206 en 3/3 para película y episodio. Ese master anuncia italiano/inglés, **no** español en esas muestras. WarezCDN respondió 403 de Cloudflare antes del medio, por lo que permanece inactivo; Cinejoy, Atlantic y Cinema Army siguen sin medio contrastado. **Nada de esto sustituye la reproducción completa en Nuvio.** [Alcance y seis sitios](docs/revision-seis-sitios-2026.md) · [matriz actual](docs/providers.md).
+>
+> También se [revisó CNCVerse Cloud Stream Extension](docs/revision-cncverse-cloudstream.md): publica extensiones `.cs3` para CloudStream, ninguna declarada en español y sin licencia de reutilización de sus binarios actuales. **No se importaron plugins ni se modificaron proveedores** en esa revisión; la aplicación independiente CNCVerse Bridge se describe solo como alternativa externa.
+>
+> [Revisión de `carlosfdezb/cuevana3`](docs/revision-cuevana3-carlosfdezb.md): su scraper MIT de 2022 apunta a dominios cuyo TLS no se pudo validar desde Actions. El proveedor Cuevana actual sigue el redireccionamiento `.gs` → `.pro` y resolvió un HLS con segmento MPEG-TS 206 para *One Piece* T1E1 en **3/3** pruebas desde Actions. No se importó el scraper antiguo ni se cambió el proveedor; se añadió diagnóstico repetible. No implica reproducción completa ni disponibilidad de todas las películas.
 
 ## Addon de Stremio (Beamup)
 
@@ -33,12 +37,12 @@ No hace falta instalar Node.js para usar los bundles ya generados en Nuvio.
 2. Añade este manifiesto como repositorio de plugins:
 
    ```text
-   https://raw.githubusercontent.com/noe359866-code/STREAMFLIX2/arena/e6074aa1-streamflix2/manifest.json
+   https://raw.githubusercontent.com/noe359866-code/STREAMFLIX2/main/manifest.json
    ```
 
-   Si el repositorio se publica en otra rama, cambia el segmento de rama en la URL. Nuvio descarga cada `filename` de forma relativa al manifiesto. **Actualmente el repositorio es privado**: para que esta URL funcione directamente en Nuvio hay que hacerlo público o alojar `manifest.json` y `providers/` en un servidor accesible (también se sirven bajo `/nuvio/manifest.json` en el servidor Stremio). No uses URLs con tokens temporales; como alternativa, utiliza el servidor local descrito abajo.
-3. **No necesitas añadir otra clave TMDB dentro de Nuvio en condiciones normales.** El runtime inyecta automáticamente `TMDB_API_KEY` con la clave efectiva de Nuvio: la personal si la configuraste o la predeterminada de la app si dejaste el campo vacío. Este repositorio no incrusta ninguna clave. CineHax usa directamente el ID recibido; el resto hace consultas propias a TMDB para obtener título, año, títulos alternativos e IMDb. La clave secreta solo es necesaria al ejecutar pruebas externas en Node/GitHub Actions, donde no existe el runtime de Nuvio.
-4. Activa individualmente los proveedores que quieras probar. AnimeBum aparece intencionadamente deshabilitado.
+   La [PR #10](https://github.com/noe359866-code/STREAMFLIX2/pull/10) sigue abierta: hasta fusionarla, `main` **no** incluye estos cambios; para revisar el paquete de la PR cambia `main` por `arena/4ed49b30-streamflix2`. Nuvio descarga cada `filename` de forma relativa al manifiesto. **Actualmente el repositorio es privado**: para que la URL raw funcione directamente en Nuvio hay que hacerlo público o alojar `manifest.json` y `providers/` en un servidor accesible (también se sirven bajo `/nuvio/manifest.json` en el servidor Stremio). No uses URLs con tokens temporales; como alternativa, utiliza el servidor local descrito abajo.
+3. **No necesitas añadir otra clave TMDB dentro de Nuvio en condiciones normales.** El runtime inyecta automáticamente `TMDB_API_KEY` con la clave efectiva de Nuvio: la personal si la configuraste o la predeterminada de la app si dejaste el campo vacío. Este repositorio no incrusta ninguna clave. VideoAPI y VixSrc usan directamente el ID TMDB; WarezCDN (inactivo) usa los IDs IMDb/TMDB documentados. Los proveedores que buscan por título consultan TMDB para obtener título, año y alternativas. La clave secreta solo es necesaria para probar externamente los conectores que la requieren, donde no existe el runtime de Nuvio.
+4. Activa individualmente los proveedores que quieras probar. AnimeBum y WarezCDN aparecen intencionadamente deshabilitados.
 
 ### Servidor local opcional para Nuvio
 
@@ -55,17 +59,19 @@ El servidor de Nuvio escucha en `0.0.0.0:3000` y publica `/manifest.json` y `/pr
 
 | Grupo | Conectores |
 |---|---|
-| Películas y series | CineCalidad, Cine24H, CineHax/MovieMaster, Cuevana 3, Embed69, Fanpelis, FlixLatam, PlayLatinSRC, RepelisPlus, TukiPlay, VideoAPI, PelisForte, PelisGo, PelisflixHD, PoseidonHD2, SoloLatino y TioPlus/Pelisplusto |
-| Películas solamente | HDFull y VerPeliculasOnline |
-| Doramas | Doramasflix |
+| Películas y series | CineCalidad, Cine24H, Cuevana 3, Embed69, Fanpelis, FlixLatam, PlayLatinSRC, RepelisPlus, VideoAPI, VixSrc (muestras IT/EN), PelisForte, PelisGo, PelisflixHD, PoseidonHD2, SoloLatino y TioPlus/Pelisplusto |
+| Películas solamente | HDFull, VerPeliculasOnline, Repelis24 y Gnula One (estos dos últimos experimentales) |
+| Doramas | Doramasflix y TuDorama (solo TV) |
 | Series solamente | Danimados (animadas), SeriesFlix, Series Turcas y LaCartoons |
 | Anime | AnimeAV1 (solo TV), Anime Online Ninja, JKAnime, Latanime y TioAnime |
-| Conservado inactivo | AnimeBum |
+| Incorporados inactivos | AnimeBum y WarezCDN (Cloudflare 403 antes del medio) |
 
 La fuente, el tipo admitido, el dominio y las limitaciones de cada uno están en [`docs/providers.md`](docs/providers.md).
 
 ### Estado de los conectores añadidos
 
+- **Repelis24:** solo películas. Busca en `/?s=`, selecciona una ficha real `/pelicula/` (descarta `/pelicula/<id>/`), lee `wp-json/dooplayer/v2/<post>/movie/<nume>` y pasa Nupload/Waaw al resolvedor. Nupload solo entrega una URL `.m3u8` tras reconstruir la puerta de la expresión pública y comprobar su redirección, sin ejecutar JavaScript ni presentar el embed como vídeo. En Actions la playlist respondió 200, pero **los segmentos eran HTML**; Waaw agotó tiempo. No se ha confirmado reproducción.
+- **Gnula One:** solo películas. Usa `/search/<título>` porque `/?s=` respondió 403 durante el reconocimiento. Examina `?trembed=N` y rechaza expresamente la portada a la que redirigieron las opciones observadas. En los tres intentos de Actions no resolvió HLS/MP4; no se afirma que reproduzca ni se declara TV sin episodio verificable.
 - **VerPeliculasOnline:** solo películas. Busca en DooPlay, consulta las opciones mediante `admin-ajax.php`, conserva ESP/LAT/SUB y omite el tráiler. El extractor estático Voe F7 recupera `source` HLS, no ejecuta JavaScript del hoster y rechaza el MP4 de Big Buck Bunny y `direct_access_url` (`/download/`). La respuesta real y la firma HLS se comprobaron por separado; las URLs firmadas caducan y la reproducción en Nuvio no está verificada.
 - **PelisForte:** películas y TV con selección exacta de temporada/episodio, carga AJAX de temporadas y expansión de `r.php`. Las páginas reales observadas llevan a Byse/n1mwq, cuya attestation de dispositivo, huella de navegador, PoW y configuración cifrada **no están soportadas** por el runtime actual. El fixture valida el recorrido con un player sintético, no un stream real de Byse; no se ha validado descubrimiento de medio real ni reproducción para este proveedor.
 - **Danimados:** solo series animadas. Busca la ficha, exige el episodio exacto y ejecuta `doo_player_ajax` con `post/type/nume` y el Referer del episodio. Las cuatro opciones reales observadas (VidHide, Filemoon, Voe y StreamWish) pasan al resolvedor común; su disponibilidad depende del hoster. No declara películas porque la colección REST `movies` está vacía.
@@ -84,7 +90,7 @@ Cada archivo de `providers/` exporta:
 async function getStreams(tmdbId, mediaType, season, episode)
 ```
 
-y devuelve únicamente candidatos con URL de medio validada (`.m3u8`, `.mp4`, `.mkv` o `.webm`), título, calidad, idioma, tipo y cabeceras cuando son necesarias. No se devuelven páginas `iframe` como si fueran streams. Se descartan DASH/MPD sin gestión DRM, enlaces de descarga y resultados cuya temporada/episodio no coincida.
+y devuelve únicamente URLs con formato de medio reconocido (`.m3u8`, `.mp4`, `.mkv` o `.webm`), título, calidad, idioma, tipo y cabeceras cuando son necesarias. El formato de la URL **no** acredita que los bytes sean reproducibles: los HLS/MP4 se sondean de forma acotada al entregarlos y se auditan aparte con tres intentos desde Actions. No se devuelven páginas `iframe` como si fueran streams. Se descartan DASH/MPD sin gestión DRM, enlaces de descarga y resultados cuya temporada/episodio no coincida.
 
 Ejemplo de resultado:
 
@@ -101,13 +107,19 @@ Ejemplo de resultado:
 }
 ```
 
+## Filtro de HLS/MP4 al entregar resultados
+
+Tanto los plugins Nuvio como el addon Stremio usan los mismos bundles: antes de publicar un enlace HLS/MP4 se intenta comprobar, con un presupuesto de **2,4 s por proveedor** y un máximo de **seis enlaces**, su URL real. Un fallo se **repite antes de ocultar** el enlace para reducir falsos positivos; se retira **solo el enlace** si devuelve HTML/JSON/imagen en lugar de medio, una playlist HLS no válida, segmentos fallidos o un 401/403/404/410 confirmado en el recurso de vídeo, clave o inicialización. Si otra variante o medio sí sirve, se conserva. Timeouts, 429, 5xx o sondeos no concluyentes **no** se interpretan como un vídeo roto. No se elimina el proveedor por una única sonda: ese criterio sigue exigiendo **tres intentos por web en Actions** sobre HLS/MP4, no sobre páginas de búsqueda.
+
+QuickJS no dispone de un lector incremental: el plugin solo solicita bytes si `HEAD` anuncia un cuerpo de como máximo 128 KiB; por eso **algunos MP4 grandes o HLS sin longitud conocida quedan sin verificar**. En el addon Node los cuerpos se leen de forma acotada y se cancelan; si el rescate pasa por el proxy de scraping, no se sondea allí porque ese proxy actualmente almacena la respuesta completa. El filtro **no garantiza reproducción completa**, no elude DRM, ni corrige un 403 del propio servidor. Detalles, fixtures y límites en [filtrado de medios](docs/filtro-medios-runtime.md).
+
 ## Desarrollo y validación
 
 Requisito: **Node.js 20 o superior**.
 
 ```bash
 npm ci
-npm run check       # compila 32 bundles + ejecuta las pruebas offline
+npm run check       # compila 35 bundles + ejecuta las pruebas offline
 npm run build       # solo compila src/providers/*/index.js y manifest.json
 npm test            # no hace peticiones externas
 ```
@@ -119,7 +131,7 @@ npm test            # no hace peticiones externas
 - `manifest.json`: manifiesto generado para instalar.
 - `tests/fixtures/`: respuestas sintéticas y una captura Voe minimizada para regresión; ninguna prueba offline accede a la red.
 
-Las pruebas validan el recorrido TMDB → búsqueda → episodio → reproductor → medio para los 32 conectores, el formato del manifiesto, la ausencia de builtins de Node y utilidades como Base64URL, Voe F7 y su defensa contra vídeos de muestra, `__NEXT_DATA__`, datos Svelte, `dataLink`, AES-CBC/PoW y JavaScript empaquetado sin `eval`.
+Las pruebas validan el recorrido TMDB → búsqueda → episodio (cuando existe) → reproductor → URL con formato de medio para los 34 conectores, el formato del manifiesto, la ausencia de builtins de Node y utilidades como Base64URL, Voe F7 y su defensa contra vídeos de muestra, `__NEXT_DATA__`, datos Svelte, `dataLink`, AES-CBC/PoW y JavaScript empaquetado sin `eval`.
 
 ### Descubrimiento y reproducción reales
 
@@ -145,8 +157,13 @@ TMDB_API_KEY=... npm run test:playback -- \
 
 El workflow **Validate Nuvio plugins** ejecuta `npm ci`, `npm run check`, valida el servidor y publica un artifact con el paquete instalable. Puede lanzarse manualmente con proveedor, ID TMDB, tipo, temporada, episodio y opción de playback; para proveedores que resuelven metadatos necesita el secreto `TMDB_API_KEY` del repositorio.
 
-También se puede activar la prueba predeterminada de CineHax con un commit cuyo mensaje contenga `[live]`. Para sondear en paralelo los siete adaptadores añadidos, usa `[live-providers]`; la Actions ejecuta descubrimiento y validación de hasta 4 KiB por URL y publica un informe por proveedor. En la opción manual de workflow se puede elegir un proveedor y pasar TMDb o IMDb (Cinemeta). Resultados:
+El marcador `[live]` ejecuta por defecto VideoAPI, y `[live-providers]` sondea los seis adaptadores vigentes de su matriz. Para las webs nuevas: `[recon-five-sites]` revisa estructura de los cinco dominios originales, `[player-five-sites]` prueba TuDorama/VixSrc sin publicar tokens, `[assets-five-sites]` revisa sus SPA, `[audit-tudorama]` y `[audit-vixsrc]` auditan sus adaptadores (película/TV); `[recon-warezcdn]` contrasta la API documentada. `[audit-new-sites]` conserva los tres intentos de Repelis24/Gnula. En el workflow manual se puede elegir un proveedor e ID TMDb/IMDb (Cinemeta). Resultados **históricos** anteriores a las retiradas y añadidos recientes:
 
+- [Run 42318391754](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42318391754): [revisión del scraper Cuevana 2022](docs/revision-cuevana3-carlosfdezb.md), tres intentos por dominio antiguo/actual y tres verificaciones del HLS de *One Piece* T1E1. Los segmentos MPEG-TS dieron **206 y firma válida en 3/3**; los dominios antiguos no completaron TLS confiable desde Actions. No se portó código legado ni se cambió el adaptador.
+- [Run 42305392461](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42305392461): **34 bundles, 106/106 pruebas y 32 webs × 3 intentos**. El filtro del runtime descartó en 3/3 Zilla (inicialización HLS 403) y los HLS con segmentos HTML de PelisflixHD/Repelis24; dejó intactas las alternativas accesibles de AnimeAV1. La auditoría cruda encontró cuatro proveedores con alguna muestra válida, 28 no concluyentes y **cero retiradas**. En CineHax hubo anuncios PNG no filtrados dentro del plazo; ver [alcance del filtro](docs/filtro-medios-runtime.md).
+- [Run 42298326175](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42298326175): tras [comparar StreamFlix Reborn 2](docs/porte-streamflix-reborn2.md), 34 bundles, 90/90 pruebas offline en ese commit y **32 webs × 3 intentos**. AnimeAV1, CineHax, Embed69 y VideoAPI tuvieron al menos un medio con firma válida; ningún proveedor cumplió el criterio de retirada. El HLS Zilla de AnimeAV1 llegó a la inicialización pero dio **403/403/403** allí; sus alternativas HLS/MP4 fueron accesibles. Se añadió después una regresión de ese caso (suite de ese momento: **91 pruebas**; suite tras esa revisión: **109**; suite actual: **114**). Maxstream solo está probado con fixtures, no en vivo.
+- [Run 42295795690](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42295795690): 34 bundles, 86/86 pruebas offline y **32 webs × 3 intentos**. Se comprobaron muestras de medios en AnimeAV1, CineHax, Embed69 y VideoAPI; **ninguna retirada por 403 persistente del HLS/MP4**. El informe por proveedor está en [`docs/revision-scrapers.md`](docs/revision-scrapers.md).
+- [Run 42290547535](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42290547535): 34 bundles y 80 pruebas offline correctos; Repelis24 descubrió URLs, pero sus segmentos HLS dieron HTML y Waaw agotó tiempo; Gnula One no obtuvo medios. Tres intentos por sitio, **ninguna reproducción confirmada ni 403 de medio persistente**.
 - [Run 41983314335](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983314335): validación offline inicial correcta.
 - [Run 41983509530](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/41983509530): validación offline y prueba real de CineHax correctas; al menos un stream descubierto y un medio con firma válida.
 - [Run 42093101146](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42093101146): 25 bundles y 43 pruebas offline correctos con Danimados, PelisGo y HDFull registrados.
@@ -156,18 +173,21 @@ También se puede activar la prueba predeterminada de CineHax con un commit cuyo
 
 ## Limitaciones conocidas
 
-- Los adaptadores nuevos de TukiPlay, VideoAPI y PlayLatinSRC parten de sus embeds públicos y solo entregan medios directos que estén expuestos en HTML estático; no ejecutan reproductores JavaScript, no suplantan orígenes permitidos ni usan claves API privadas. Su disponibilidad en Beamup no está validada en vivo. VideoAPI puede aplicar restricciones de origen; TukiPlay documenta `resolve` con una clave configurada en su panel.
+- Repelis24 y Gnula One se incluyen como **experimentales** para películas: la auditoría de Actions no encontró medios reproducibles para las muestras. En Gnula `?trembed` lleva a la portada; en Repelis24 el HLS de Nupload sirvió una playlist pero no un segmento de vídeo. No se implementó TV sin demostrar la selección de episodio.
+- CineHax y TukiPlay fueron **retirados del código y de los manifiestos** por petición expresa. CineHax tuvo medios válidos en auditorías históricas: su retirada **no** es un diagnóstico de 403. TukiPlay ya estaba desactivado por 403 de playlist en tres intentos desde Actions; esto no prueba un bloqueo en todos los dispositivos. WarezCDN queda **inactivo** por 403 de Cloudflare en catálogo/player, **no** por un 403 de vídeo.
+- VideoAPI y PlayLatinSRC parten de sus embeds públicos y solo entregan medios directos expuestos en HTML estático; no ejecutan reproductores JavaScript, no suplantan orígenes permitidos ni usan claves API privadas. Su reproducción en Beamup no está validada. VideoAPI puede aplicar restricciones de origen.
 - RepelisPlus y las rutas directas IMDb de Embed69 están cubiertos por fixtures offline, no por pruebas end-to-end en sus webs. Embed69 ya se empleaba como hoster de fallback dentro de SoloLatino.
-- Cloudflare/WebView, CAPTCHA y retos que exijan un navegador completo no se pueden resolver de forma fiable en QuickJS. Anime Online Ninja es especialmente dependiente de Cloudflare. PelisGo mostró verificación interactiva durante esta validación y HDFull respondió 403 a búsqueda/medio desde Actions; no se intentó eludir ninguno de los dos controles.
+- Cloudflare/WebView, CAPTCHA y retos que exijan un navegador completo no se pueden resolver de forma fiable en QuickJS. Anime Online Ninja es especialmente dependiente de Cloudflare. PelisGo mostró verificación interactiva; en la auditoría actual HDFull devolvió 403 **al buscar**, sin llegar al vídeo. Una sonda histórica del `contentUrl` dio 403, pero no tres verificaciones de medio persistentes. No se intentó eludir ninguno de los controles.
 - Danimados solo declara TV; PelisGo admite película/TV; HDFull solo declara películas. Ninguno de los tres cambia de temporada ni sustituye un episodio ausente por otro. Sus recorridos offline están cubiertos, pero el `live-check` end-to-end externo no se ejecutó porque falta el secreto `TMDB_API_KEY` del repositorio; Nuvio usa la clave efectiva de la app, no ese secreto de CI.
 - Las variantes modernas de Filemoon con attestation, hosters con JavaScript cambiante y enlaces DRM pueden no producir streams. En particular, Byse/n1mwq requiere attestation, fingerprint, challenge/PoW y configuración cifrada que este runtime no resuelve.
 - El extractor Voe cubre el payload F7 observado el 5 de noviembre de 2026 y variantes HLS directas/Base64 anteriores. No ejecuta su loader, no garantiza variantes futuras y sus URLs firmadas pueden caducar o quedar vinculadas a la red que las obtuvo.
+- Las cabeceras del extractor Zilla coinciden con el origen, pero en [Actions 42298326175](https://github.com/noe359866-code/STREAMFLIX2/actions/runs/42298326175) el HLS necesitó un recurso de inicialización que devolvió **403 en los tres intentos**. AnimeAV1 mantiene otros HLS/MP4 accesibles; no se elimina el proveedor por una alternativa bloqueada. El fallback `/castv/{id}` de Maxstream está cubierto por fixtures, **sin reproducción real confirmada**.
 - Los demás desempaquetadores y selectores cubren las estructuras portadas de Streamflix, no cualquier variante futura de StreamWish, VidHide, MixDrop o Doodstream.
 - Las cookies implementadas son una sesión HTTP mínima por dominio, no un navegador; algunos flujos Laravel/CSRF pueden seguir exigiendo WebView.
 - Los sitios cambian de dominio con frecuencia. Actualiza la constante `BASE`/`API` del proveedor correspondiente y vuelve a ejecutar `npm run check`.
 
 ## Atribución y licencia
 
-La lógica se adaptó de [Streamflix Reborn 2](https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/providers) y de su snapshot Apache-2.0 accesible `theonlyhausofai-design/streamflix-reborn` (`ff970d39374acc6cbd5b482a50f5ff2867e60bf4`). La variante Voe F7 se contrastó con el extractor Apache-2.0 de [Kohi-den/extensions-source](https://github.com/Kohi-den/extensions-source/tree/main/lib/voe-extractor). La compatibilidad se contrastó con el runtime actual de Nuvio, no con plantillas Hermes antiguas.
+La lógica se adaptó de [Streamflix Reborn 2](https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/providers); la [comparación actual y los cambios portados](docs/porte-streamflix-reborn2.md) documentan también sus extractores. Se contrastó además con su snapshot Apache-2.0 accesible `theonlyhausofai-design/streamflix-reborn` (`ff970d39374acc6cbd5b482a50f5ff2867e60bf4`). La variante Voe F7 se contrastó con el extractor Apache-2.0 de [Kohi-den/extensions-source](https://github.com/Kohi-den/extensions-source/tree/main/lib/voe-extractor). La compatibilidad se contrastó con el runtime actual de Nuvio, no con plantillas Hermes antiguas.
 
 Código bajo [Apache-2.0](LICENSE). Consulta [NOTICE](NOTICE). Los nombres y sitios de terceros pertenecen a sus respectivos titulares; este repositorio no aloja vídeos ni evita controles de acceso de pago o DRM.

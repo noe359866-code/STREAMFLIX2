@@ -19,18 +19,7 @@ function assertStream(result, count = 1) {
   }
 }
 
-test('CineHax: PM_UI, servidores y vídeo MovieMaster', async () => {
-  const result = await run('cinehax', {
-    contentId: '550', mediaType: 'movie',
-    routes: [
-      ['api.moviemaster.lat/e/movie/550', '<script>window.PM_UI = "ui-demo";</script>'],
-      ['api.moviemaster.lat/servers?', { servers: [{ id: 'lat-1', lang: 'LAT' }] }],
-      ['api.moviemaster.lat/video?', { url: HLS }],
-    ],
-  });
-  assertStream(result);
-  assert.equal(result.streams[0].language, 'es-LAT');
-});
+
 
 test('AnimeAV1: índices Svelte SUB/DUB y episodio solicitado', async () => {
   const result = await run('animeav1', {
@@ -207,6 +196,110 @@ test('Cuevana: wp-api search, lista de episodios y player', async () => {
   assert.ok(result.calls.some((call) => call.url.includes('postId=episode-3')));
 });
 
+test('TuDorama: busca película real, obtiene servidores AJAX y desenvuelve el iframe del CDN', async () => {
+  const result = await run('tudorama', {
+    mediaType: 'movie',
+    routes: [
+      ['tudorama.com/?s=', card('/pelicula/contenido-demo/')],
+      ['tudorama.com/pelicula/contenido-demo/', '<div class="servers movie-player" data-id="2248" data-nonce="nonce-demo"></div>'],
+      [(url, init) => url.includes('tudorama.com/wp-admin/admin-ajax.php') && init.body.includes('corvus_get_servers'),
+        { data: [{ name: 'sub filemoon', lang: 'en', url: 'https://cdn.tudorama.com/stream/server-2.php?id1=demo' }] }],
+      ['cdn.tudorama.com/stream/server-2.php', '<script>iframe.src="https://sw.example/e/demo";</script>'],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'en'); // «sub», sin evidencia del idioma de subtítulos
+  assert.ok(result.calls.some((call) => call.init.body?.includes('post_id=2248')));
+  assert.ok(result.calls.some((call) => call.url.includes('/stream/server-2.php')
+    && call.init.headers.Referer.includes('/pelicula/contenido-demo/')));
+});
+
+test('TuDorama: episodio exacto por paginación AJAX, no inventa otro capítulo', async () => {
+  const routes = [
+    ['tudorama.com/?s=', card('/serie/contenido-demo/')],
+    ['tudorama.com/serie/contenido-demo/', '<div class="eps" data-tmdb-id="42" data-nonce="nonce-demo" data-season-number="2" data-results="10"></div>'],
+    [(url, init) => url.includes('tudorama.com/wp-admin/admin-ajax.php') && init.body.includes('corvus_get_episodes'),
+      { data: { results: [{ season_number: 2, episode_number: 3, permalink: 'https://tudorama.com/ver/contenido-demo-s2x3/' }], hasMore: false } }],
+    ['tudorama.com/ver/contenido-demo-s2x3/', '<div class="ep__dropdown" data-id="53" data-nonce="nonce-ep"></div>'],
+    [(url, init) => url.includes('tudorama.com/wp-admin/admin-ajax.php') && init.body.includes('corvus_get_servers'),
+      { data: [{ name: 'esp earnvids', lang: 'es', url: 'https://cdn.tudorama.com/stream/server-3.php?id1=demo' }] }],
+    ['cdn.tudorama.com/stream/server-3.php', '<iframe src="https://sw.example/e/demo"></iframe>'],
+  ];
+  const result = await run('tudorama', { routes });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es');
+  assert.ok(result.calls.some((call) => call.init.body?.includes('season=2') && call.init.body.includes('offset=0')));
+  const missing = await run('tudorama', { routes, episode: 4 });
+  assert.deepEqual(missing.streams, []);
+  assert.ok(!missing.calls.some((call) => call.url.includes('/ver/contenido-demo-s2x4/')));
+});
+
+test('VixSrc: usa API TMDB y URL /playlist declarada, devuelve HLS con idioma de audio del master', async () => {
+  const master = '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Italiano",DEFAULT=YES,LANGUAGE="ita",URI="ita.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="English",DEFAULT=NO,LANGUAGE="eng",URI="en.m3u8"\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Español",LANGUAGE="spa",URI="/sub/es.vtt"\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvideo.m3u8\n';
+  const result = await run('vixsrc', {
+    mediaType: 'tv', contentId: '1396', season: 2, episode: 3,
+    routes: [
+      ['vixsrc.to/api/tv/1396/2/3?lang=es', { src: '/embed/1396/2/3?lang=es' }],
+      ['vixsrc.to/embed/1396/2/3?lang=es', `<script>const media={"url":"https:\\/\\/vixsrc.to\\/playlist\\/1396","token":"ValidToken_1234","expires":"9999999999","canPlayFHD":true};</script>`],
+      ['vixsrc.to/playlist/1396.m3u8?', master],
+    ],
+  });
+  assertStream(result);
+  const stream = result.streams[0];
+  assert.equal(stream.language, 'it', 'lang=es solicitado no convierte una pista italiana en española');
+  assert.ok(stream.url.includes('h=1') && stream.url.includes('token=ValidToken_1234'));
+  assert.equal(stream.headers.Referer, 'https://vixsrc.to/embed/1396/2/3?lang=es');
+  assert.equal(stream.subtitles[0].language, 'es');
+  assert.equal(stream.subtitles[0].url, 'https://vixsrc.to/sub/es.vtt');
+});
+
+test('VixSrc: descarta embed ajeno, token caducado y playlist HTML (no se entrega como HLS)', async () => {
+  const api = 'vixsrc.to/api/movie/123?lang=es';
+  const hostile = await run('vixsrc', { mediaType: 'movie', routes: [[api, { src: 'https://bad.vixsrc.to/embed/123' }]] });
+  assert.deepEqual(hostile.streams, []);
+  assert.ok(!hostile.calls.some((call) => call.url.includes('bad.vixsrc.to')));
+  const expired = await run('vixsrc', { mediaType: 'movie', routes: [
+    [api, { src: '/embed/123' }],
+    ['vixsrc.to/embed/123', '<script>const p={"url":"/playlist/123","token":"ValidToken_1234","expires":"1000000000"};</script>'],
+  ] });
+  assert.deepEqual(expired.streams, []);
+  assert.ok(!expired.calls.some((call) => call.url.includes('/playlist/123')));
+  const html = await run('vixsrc', { mediaType: 'movie', routes: [
+    [api, { src: '/embed/123' }],
+    ['vixsrc.to/embed/123', '<script>const p={"url":"/playlist/123","token":"ValidToken_1234","expires":"9999999999"};</script>'],
+    ['vixsrc.to/playlist/123.m3u8?', '<html>Sesión no autorizada</html>'],
+  ] });
+  assert.deepEqual(html.streams, []);
+});
+
+test('WarezCDN: rutas de película/episodio de la documentación, solo medio resuelto y audio desconocido', async () => {
+  const routes = [
+    ['warezcdn.sbs/filme/123', '<div id="PlayerContainer"><iframe src="https://earnvids.com/e/demo"></iframe></div>'],
+    ['warezcdn.sbs/serie/123/2/3', '<div id="PlayerContainer"><iframe src="https://earnvids.com/e/demo"></iframe></div>'],
+    ['earnvids.com/e/demo', fixture('player-hls.html')],
+  ];
+  for (const mediaType of ['movie', 'tv']) {
+    const result = await run('warezcdn', { mediaType, routes });
+    assertStream(result);
+    assert.equal(result.streams[0].language, 'und');
+    assert.equal(result.streams[0].url, HLS);
+    assert.ok(result.calls.some((call) => call.url.includes(mediaType === 'tv'
+      ? '/serie/123/2/3' : '/filme/123')));
+    assert.ok(result.streams.every((stream) => !stream.url.includes('warezcdn.sbs/serie')));
+  }
+});
+
+test('WarezCDN: rechaza IDs inyectados y un 403 HTML de Cloudflare sin fabricar un stream', async () => {
+  const injected = await run('warezcdn', { mediaType: 'movie', contentId: 'bad/../player' });
+  assert.deepEqual(injected.streams, []);
+  assert.equal(injected.calls.length, 0);
+  const blocked = await run('warezcdn', { mediaType: 'movie', routes: [
+    ['warezcdn.sbs/filme/123', { __response: true, status: 403, body: '<html>Just a moment...</html>' }],
+  ] });
+  assert.deepEqual(blocked.streams, []);
+  assert.ok(!blocked.calls.some((call) => call.url.includes('earnvids')));
+});
+
 test('Doramasflix: GraphQL detail/listEpisodes/links_online', async () => {
   function gql(data) {
     return (url, init) => ({ data });
@@ -333,6 +426,13 @@ test('HDFull: search-route y contentUrl de la ficha, nunca el clip genérico del
     routes: [routes[0], ['hdfull.company/peliculas/weapons', fixture('hdfull-movie.html').replaceAll('/weapons.mp4?', '/otro-titulo.mp4?')]],
   });
   assert.deepEqual(mismatched.streams, []);
+
+  const hostile = await run('hdfull', {
+    mediaType: 'movie', metadata,
+    routes: [routes[0], ['hdfull.company/peliculas/weapons', fixture('hdfull-movie.html')
+      .replaceAll('https://hdfull.company/vod-movie/', 'https://hdfull.company.evil.example/vod-movie/')]],
+  });
+  assert.deepEqual(hostile.streams, [], 'nunca aceptar un host que solo empieza por hdfull.company');
 });
 
 test('HDFull TV: no inventa una fuente de episodio ni devuelve el player publicitario', async () => {
@@ -464,17 +564,7 @@ test('Embed69: IMDb de TMDB, dataLink y resolución a un medio directo', async (
   assert.equal(result.streams[0].language, 'es-LAT');
 });
 
-test('TukiPlay: usa el endpoint público de embed y solo entrega el hoster resuelto', async () => {
-  const result = await run('tukiplay', {
-    mediaType: 'movie',
-    routes: [
-      ['tukiplay.com/embed/movie/123', '<iframe data-src="https://sw.example/e/demo"></iframe>'],
-    ],
-  });
-  assertStream(result);
-  assert.ok(result.calls.some((call) => call.url === 'https://tukiplay.com/embed/movie/123'));
-  assert.ok(!result.streams.some((stream) => /tukiplay\.com\/embed/.test(stream.url)));
-});
+
 
 test('VideoAPI: consulta exists, valida la ruta interna y extrae solo el stream', async () => {
   const result = await run('videoapi', {
@@ -507,6 +597,86 @@ test('PlayLatinSRC: usa IMDb y la ruta de reproductor personalizado sin devolver
   assertStream(result);
   assert.ok(result.calls.some((call) => call.url === 'https://playlatinsrc.co/custom/movie/tt1234567'));
   assert.ok(!result.streams.some((stream) => /playlatinsrc\.co\/custom/.test(stream.url)));
+});
+
+test('Repelis24: busca la película real, usa wp_json y desenvuelve el Waaw explícito', async () => {
+  const detail = '<script>var dtAjax = {"play_method":"wp_json"};</script>'
+    + '<li class="dooplay_player_option" data-type="movie" data-post="186263" data-nume="1"><span class="title">Nupload</span></li>'
+    + '<li class="dooplay_player_option" data-type="movie" data-post="186263" data-nume="2"><span class="title">Waaw</span></li>';
+  const result = await run('repelis24', {
+    mediaType: 'movie', routes: [
+      ['repelis24.de/?s=Contenido%20Demo', '<a href="/pelicula/%3Cid%3E/">Contenido Demo</a><a href="/pelicula/contenido-demo/">Película</a><a href="/pelicula/contenido-demo/" title="Contenido Demo">Contenido Demo</a>'],
+      ['repelis24.de/pelicula/contenido-demo/', detail],
+      ['repelis24.de/wp-json/dooplayer/v2/186263/movie/1', { embed_url: '<iframe src="https://nupload.me/watch/abc"></iframe>' }],
+      ['repelis24.de/wp-json/dooplayer/v2/186263/movie/2', { embed_url: '<iframe src="https://nupload.me/iframe/?url=https%3A%2F%2Fwaaw.tv%2Fwatch_video.php%3Fv%3Dabc"></iframe>' }],
+      ['https://nupload.me/watch/abc', '<script>file:"https://cdn.example/video/nupload.mp4"</script>'],
+      ['https://waaw.tv/watch_video.php?v=abc', '<iframe src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result, 2);
+  assert.ok(result.calls.some((call) => call.url.endsWith('/wp-json/dooplayer/v2/186263/movie/2')));
+  assert.ok(!result.calls.some((call) => call.url.includes('/pelicula/%3Cid%3E/') || call.url.includes('/iframe/?url=')));
+  assert.ok(result.streams.every((stream) => stream.provider === 'repelis24'));
+  assert.ok(result.streams.every((stream) => !/nupload\.me|waaw\.tv/.test(stream.url)));
+});
+
+test('Repelis24: Nupload solo entrega HLS tras descifrar la puerta y observar su redirección', async () => {
+  const base = 'https://sv4.ibra.lat/';
+  const offset = 4828350;
+  const values = [...base].map((char) => Buffer.from(String(offset + char.charCodeAt(0))).toString('base64'));
+  const token = 'ejemplo_firmado_temporal_0123456789abcdefghijkl';
+  const html = `<script>var datos=${JSON.stringify(values)}; var decoded=""; datos.forEach(function Oym(value) { decoded += String.fromCharCode(parseInt(atob(value).replace(/\\D/g,"")) - ${offset}); } ); var sesz="${token}"; player.setup({file:decoded+"?s="+sesz+""});</script>`;
+  const result = await run('repelis24', {
+    mediaType: 'movie', routes: [
+      ['repelis24.de/?s=Contenido%20Demo', card('/pelicula/contenido-demo/')],
+      ['repelis24.de/pelicula/contenido-demo/', '<script>var dtAjax={"play_method":"wp_json"}</script><li class="dooplay_player_option" data-type="movie" data-post="186263" data-nume="1"><span class="title">Nupload</span></li>'],
+      ['repelis24.de/wp-json/dooplayer/v2/186263/movie/1', { embed_url: 'https://nupload.me/watch/test' }],
+      ['nupload.me/watch/test', { __response: true, body: html, url: 'https://nupload.my/watch/test' }],
+      [`${base}?s=${token}`, { __response: true, body: '', status: 301, headers: { Location: `${base}79/9/demo.m3u8` } }],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].url, `${base}79/9/demo.m3u8`);
+  assert.equal(result.streams[0].headers.Referer, 'https://nupload.my/watch/test');
+  assert.ok(result.calls.some((call) => call.url.startsWith(`${base}?s=`) && call.init.redirect === 'manual'));
+});
+
+test('Repelis24: TV no fabrica episodios de una ficha /serie/ sin enlaces comprobados', async () => {
+  const result = await run('repelis24', {
+    routes: [['repelis24.de/?s=', card('/serie/contenido-demo/')]],
+  });
+  assert.deepEqual(result.streams, []);
+  assert.ok(!result.calls.some((call) => call.url.includes('repelis24.de/')));
+});
+
+test('Gnula One: /search/<título> y ?trembed resuelven solo un iframe de la película', async () => {
+  const result = await run('gnulaone', {
+    mediaType: 'movie', routes: [
+      ['ver.gnula.one/search/Contenido%20Demo', card('/movies/contenido-demo/')],
+      ['ver.gnula.one/movies/contenido-demo/', '<a href="/?trembed=1">Subtitulado · Voe</a><a href="/download/file.mp4">Descargar</a>'],
+      ['ver.gnula.one/?trembed=1', '<title>Reproductor</title><iframe src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assertStream(result);
+  assert.equal(result.streams[0].language, 'es-SUB');
+  assert.equal(result.streams[0].provider, 'gnulaone');
+  assert.ok(result.calls.some((call) => call.url === 'https://ver.gnula.one/search/Contenido%20Demo'));
+  assert.ok(!result.calls.some((call) => call.url.includes('ver.gnula.one/?s=')));
+});
+
+test('Gnula One: ignora la portada devuelta por ?trembed y no mezcla vídeos ajenos', async () => {
+  const result = await run('gnulaone', {
+    mediaType: 'movie', routes: [
+      ['ver.gnula.one/search/Contenido%20Demo', card('/movies/contenido-demo/')],
+      ['ver.gnula.one/movies/contenido-demo/', '<a href="/?trembed=1">Subtitulado · Voe</a>'],
+      ['ver.gnula.one/?trembed=1', '<title>G Nula - G Nula es un blog para ver películas online</title><iframe src="https://sw.example/e/demo"></iframe>'],
+    ],
+  });
+  assert.deepEqual(result.streams, []);
+  assert.ok(!result.calls.some((call) => call.url.includes('sw.example')));
+  const tv = await run('gnulaone');
+  assert.deepEqual(tv.streams, []);
+  assert.ok(!tv.calls.some((call) => call.url.includes('ver.gnula.one/')));
 });
 
 test('RepelisPlus: búsqueda y selección del episodio solicitado antes de resolver el player', async () => {

@@ -88,25 +88,6 @@
       ]
     },
     {
-      "id": "cinehax",
-      "name": "CineHax / MovieMaster",
-      "description": "Acceso directo por TMDB a la API MovieMaster; conserva cabeceras HLS.",
-      "version": "1.0.0",
-      "filename": "providers/cinehax.js",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "enabled": true,
-      "contentLanguage": [
-        "es"
-      ],
-      "supportedFormats": [
-        "hls",
-        "mp4"
-      ]
-    },
-    {
       "id": "cuevana",
       "name": "Cuevana 3",
       "description": "Películas y episodios mediante wp-api/v1 en cuevana.gs.",
@@ -219,6 +200,26 @@
       "supportedTypes": [
         "movie",
         "tv"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "es"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4",
+        "mkv",
+        "webm"
+      ]
+    },
+    {
+      "id": "gnulaone",
+      "name": "Gnula One",
+      "description": "Películas en ver.gnula.one; búsqueda /search y opciones ?trembed. Actualmente sus opciones pueden redirigir a la portada, sin medio comprobado.",
+      "version": "1.0.0",
+      "filename": "providers/gnulaone.js",
+      "supportedTypes": [
+        "movie"
       ],
       "enabled": true,
       "contentLanguage": [
@@ -458,6 +459,26 @@
       ]
     },
     {
+      "id": "repelis24",
+      "name": "Repelis24",
+      "description": "Películas de repelis24.de: búsqueda pública y DooPlayer REST wp_json. Nupload/Waaw dependen del hoster; HLS/MP4 aún sin validar en vivo.",
+      "version": "1.0.0",
+      "filename": "providers/repelis24.js",
+      "supportedTypes": [
+        "movie"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "es"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4",
+        "mkv",
+        "webm"
+      ]
+    },
+    {
       "id": "repelisplus",
       "name": "RepelisPlus",
       "description": "Búsqueda de películas/series, selección del episodio exacto y resolución de fuentes públicas.",
@@ -582,24 +603,22 @@
       ]
     },
     {
-      "id": "tukiplay",
-      "name": "TukiPlay",
-      "description": "Embed público por TMDb/IMDb; solo devuelve medios directos si el player los expone sin depender de una API privada.",
+      "id": "tudorama",
+      "name": "TuDorama",
+      "description": "Series: ficha, episodio exacto y servidores AJAX. Segmentos HLS válidos en 3/3 pruebas; películas aún no verificadas.",
       "version": "1.0.0",
-      "filename": "providers/tukiplay.js",
+      "filename": "providers/tudorama.js",
       "supportedTypes": [
-        "movie",
         "tv"
       ],
       "enabled": true,
       "contentLanguage": [
-        "es"
+        "es",
+        "en"
       ],
       "supportedFormats": [
         "hls",
-        "mp4",
-        "mkv",
-        "webm"
+        "mp4"
       ]
     },
     {
@@ -641,6 +660,44 @@
         "mp4",
         "mkv",
         "webm"
+      ]
+    },
+    {
+      "id": "warezcdn",
+      "name": "WarezCDN (en evaluación)",
+      "description": "Rutas /filme/{id} y /serie/{id}/{s}/{e} documentadas; Cloudflare bloqueó catálogo y player desde Actions (3/3).",
+      "version": "1.0.0",
+      "filename": "providers/warezcdn.js",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": false,
+      "contentLanguage": [
+        "und"
+      ],
+      "supportedFormats": [
+        "hls",
+        "mp4"
+      ]
+    },
+    {
+      "id": "vixsrc",
+      "name": "VixSrc (audio italiano/inglés)",
+      "description": "API por ID TMDB y HLS AES-128; MPEG-TS verificado tras descifrar 3/3. El audio español no consta en las muestras.",
+      "version": "1.0.0",
+      "filename": "providers/vixsrc.js",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "enabled": true,
+      "contentLanguage": [
+        "it",
+        "en"
+      ],
+      "supportedFormats": [
+        "hls"
       ]
     },
     {

@@ -177,6 +177,9 @@ test('proxyFetch tuneliza por CONNECT: JSON, chunked, gzip, redirección y POST'
     const redirected = await proxyFetch(`${base}/redirect`, {}, proxy);
     assert.equal(redirected.status, 200);
     assert.deepEqual(await redirected.json(), { ok: true, reached: true });
+    const manual = await proxyFetch(`${base}/redirect`, { redirect: 'manual' }, proxy);
+    assert.equal(manual.status, 302);
+    assert.equal(manual.headers.get('location'), '/json');
 
     const posted = await proxyFetch(`${base}/post`, {
       method: 'POST',

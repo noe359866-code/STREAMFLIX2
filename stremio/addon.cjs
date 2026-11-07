@@ -30,6 +30,9 @@ const LANGUAGE_LABELS = {
   'es-SUB': '💬 Subtitulado ES',
   es: '🌐 Español',
   en: '🇺🇸 Inglés',
+  it: '🇮🇹 Italiano',
+  'pt-BR': '🇧🇷 Portugués',
+  und: 'Audio no verificado',
 };
 
 const LANGUAGE_SHORT = {
@@ -38,6 +41,9 @@ const LANGUAGE_SHORT = {
   'es-SUB': 'SUB',
   es: 'ES',
   en: 'EN',
+  it: 'IT',
+  'pt-BR': 'PT',
+  und: '?',
 };
 
 const QUALITY_SCORE = {
@@ -208,7 +214,7 @@ function toStremioStream(stream, context) {
   const requireProxyHeaders = needsHeaderProxy(stream);
   const isHttpsMp4 = /^https:\/\//i.test(stream.url) && stream.type === 'mp4' && !requireProxyHeaders;
   const langCode = stream.language || 'es';
-  const langBadge = LANGUAGE_SHORT[langCode] || 'ES';
+  const langBadge = LANGUAGE_SHORT[langCode] || '?';
   const langLabel = LANGUAGE_LABELS[langCode] || langCode;
   const quality = stream.quality || 'Auto';
   const formatUpper = String(stream.type || 'hls').toUpperCase();
@@ -633,8 +639,9 @@ function resolveEligibleScrapers(config, parsed, metadata, numericTmdbId) {
   return ACTIVE_SCRAPERS.filter((scraper) => {
     if (!selectedSet.has(scraper.id)) return false;
     if (!scraper.supportedTypes.includes(parsed.mediaType)) return false;
-    if (scraper.id === 'cinehax' && !numericTmdbId) return false;
-    if (!metadata && scraper.id !== 'cinehax') return false;
+    // Los proveedores por ID TMDB pueden trabajar incluso sin título de
+    // Cinemeta/TMDB; los de búsqueda necesitan metadatos para cotejar la ficha.
+    if (!metadata && !(numericTmdbId && ['videoapi', 'vixsrc', 'warezcdn'].includes(scraper.id))) return false;
     return true;
   });
 }

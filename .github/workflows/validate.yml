@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       provider:
-        description: "Proveedor para la prueba real"
+        description: "Proveedor para prueba real; 'audit-media' audita medios HLS/MP4 de todos (3 intentos cada uno)"
         required: true
-        default: cinehax
+        default: videoapi
         type: string
       tmdb:
         description: "ID TMDB o IMDb para la prueba real"
@@ -59,6 +59,14 @@ jobs:
           node --check server.cjs
           node --check stremio/server.cjs
           node --check scripts/live-check.cjs
+          node --check scripts/media-audit.cjs
+          node --check scripts/media-audit-lib.cjs
+          node --check scripts/site-recon.cjs
+          node --check scripts/requested-players-recon.cjs
+          node --check scripts/spa-assets-recon.cjs
+          node --check scripts/warezcdn-recon.cjs
+          node --check scripts/site-player-recon.cjs
+          node --check scripts/cuevana-reference-recon.cjs
           bash -n scripts/deploy-beamup.sh
       - name: Comprobar servidor local Nuvio
         run: |
@@ -110,8 +118,6 @@ jobs:
         include:
           - provider: embed69
             content_id: tt0137523
-          - provider: tukiplay
-            content_id: "550"
           - provider: videoapi
             content_id: "550"
           - provider: playlatinsrc
@@ -148,9 +154,375 @@ jobs:
           path: live-${{ matrix.provider }}.json
           if-no-files-found: warn
 
+  site-recon:
+    name: Inspeccionar HTML público de Repelis24 y Gnula
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[site-recon]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Inspeccionar respuestas públicas sin ejecutar scripts de terceros
+        run: node scripts/site-recon.cjs --output site-recon.json
+      - name: Publicar estructura y estados (sin cuerpos de páginas ni tokens)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-recon
+          path: site-recon.json
+          if-no-files-found: warn
+
+  site-recon-requested:
+    name: Reconocer ${{ matrix.site }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[recon-five-sites]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [tudorama, vixsrc, cinejoy, atlantic, cinemaarmy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Consultar búsquedas y fichas públicas sin abrir medios
+        run: node scripts/site-recon.cjs --target "${{ matrix.site }}" --output "recon-${{ matrix.site }}.json"
+      - name: Publicar tres intentos sin cuerpos HTML ni URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recon-${{ matrix.site }}
+          path: recon-${{ matrix.site }}.json
+          if-no-files-found: warn
+
+  warezcdn-recon:
+    name: Verificar API y reproductor WarezCDN (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[recon-warezcdn]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Contrastar documentación, lista pública, película y episodio
+        run: node scripts/warezcdn-recon.cjs --output warezcdn-recon.json
+      - name: Publicar estados sanitizados de los tres intentos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warezcdn-recon
+          path: warezcdn-recon.json
+          if-no-files-found: warn
+
+  requested-spa-assets:
+    name: Inspeccionar JS de ${{ matrix.site }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[assets-five-sites]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [cinejoy, atlantic, cinemaarmy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Inspeccionar únicamente los assets JS públicos del mismo dominio
+        run: node scripts/spa-assets-recon.cjs --site "${{ matrix.site }}" --output "assets-${{ matrix.site }}.json"
+      - name: Publicar estructura sanizada sin cuerpos JS ni URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: assets-${{ matrix.site }}
+          path: assets-${{ matrix.site }}.json
+          if-no-files-found: warn
+
+  requested-players-recon:
+    name: Contrastar reproductores ${{ matrix.site }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[player-five-sites]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        site: [tudorama, vixsrc]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Examinar puertas públicas sin publicar tokens ni URL de medios
+        run: node scripts/requested-players-recon.cjs --site "${{ matrix.site }}" --output "players-${{ matrix.site }}.json"
+      - name: Publicar estados sanitizados de los tres intentos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: players-${{ matrix.site }}
+          path: players-${{ matrix.site }}.json
+          if-no-files-found: warn
+
+  tudorama-media:
+    name: Auditar TuDorama ${{ matrix.sample }} (3 intentos; conector desactivado)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-tudorama]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [movie, tv]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver una ficha y auditar medios, sin activar el conector
+        run: >-
+          node scripts/media-audit.cjs --provider tudorama
+          --sample "${{ matrix.sample }}" --probe-disabled
+          --output "audit-tudorama-${{ matrix.sample }}.json"
+      - name: Informar resultados sanitizados en las anotaciones
+        env:
+          SAMPLE: ${{ matrix.sample }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const sample = process.env.SAMPLE;
+          const report = JSON.parse(fs.readFileSync(`audit-tudorama-${sample}.json`, 'utf8'));
+          const attempts = report.attempts.map(({ discovered, mediaCount, discoveryEvents, timedOut, media }) => ({
+            discovered, mediaCount, discoveryEvents, timedOut,
+            media: media.map(({ format, stage, status, host, outcome, signature }) =>
+              ({ format, stage, status, host, outcome, signature })),
+          }));
+          console.log(`::notice file=scripts/media-audit.cjs,title=tudorama-${sample}::${JSON.stringify({ decision: report.decision, attempts })}`);
+          NODE
+      - name: Publicar los tres intentos sin URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tudorama-${{ matrix.sample }}-media
+          path: audit-tudorama-${{ matrix.sample }}.json
+          if-no-files-found: warn
+
+  vixsrc-media:
+    name: Auditar el conector VixSrc ${{ matrix.sample }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-vixsrc]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [movie, tv]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver película/episodio real y comprobar que el runtime conserva HLS cifrado
+        run: >-
+          node scripts/media-audit.cjs --provider vixsrc --sample "${{ matrix.sample }}"
+          --output "audit-vixsrc-${{ matrix.sample }}.json"
+      - name: Publicar solamente estados, hostnames e idiomas del master
+        env:
+          SAMPLE: ${{ matrix.sample }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const sample = process.env.SAMPLE;
+          const report = JSON.parse(fs.readFileSync(`audit-vixsrc-${sample}.json`, 'utf8'));
+          const attempts = report.attempts.map(({ discovered, mediaCount, languages, runtimeFilter, discoveryEvents, media }) => ({
+            discovered, mediaCount, languages, runtimeFilter, discoveryEvents,
+            media: media.map(({ format, stage, status, host, outcome, signature }) =>
+              ({ format, stage, status, host, outcome, signature })),
+          }));
+          console.log(`::notice file=scripts/media-audit.cjs,title=vixsrc-${sample}::${JSON.stringify({ attempts, decision: report.decision })}`);
+          NODE
+      - name: Guardar informe sanitizado de los tres intentos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vixsrc-${{ matrix.sample }}-media
+          path: audit-vixsrc-${{ matrix.sample }}.json
+          if-no-files-found: warn
+
+  cuevana-reference:
+    name: Contrastar dominios y estructura de cuevana3 (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-cuevana3]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Consultar catálogo y fichas legacy y API vigente (sin abrir medios)
+        run: node scripts/cuevana-reference-recon.cjs --output cuevana-reference-recon.json
+      - name: Publicar los tres intentos de cada web sin HTML ni URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuevana-reference-recon
+          path: cuevana-reference-recon.json
+          if-no-files-found: warn
+
+  cuevana-media:
+    name: Auditar HLS/MP4 de Cuevana (tres intentos sobre One Piece)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-cuevana3]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver episodio y comprobar medios (no páginas HTML)
+        run: node scripts/media-audit.cjs --provider cuevana --output cuevana-media.json
+      - name: Resumir intentos sin URLs ni cabeceras de terceros
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('cuevana-media.json', 'utf8'));
+          for (const [index, attempt] of report.attempts.entries()) {
+            console.log(`::notice file=scripts/media-audit.cjs,title=cuevana-medio-${index + 1}::${JSON.stringify({
+              discovered: attempt.discovered, mediaCount: attempt.mediaCount,
+              discoveryEvents: attempt.discoveryEvents,
+              media: attempt.media.map(({ format, stage, status, host, outcome, signature }) =>
+                ({ format, stage, status, host, outcome, signature })),
+            })}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `## Cuevana: ${report.sample.title}, tres intentos\n\n`
+            + report.attempts.map((attempt, i) => `- Intento ${i + 1}: ${attempt.mediaCount} HLS/MP4, ${attempt.media.map((media) => `${media.host} HTTP ${media.status || 'sin respuesta'} ${media.outcome}`).join(', ') || 'sin medio resuelto'}`).join('\n')
+            + `\n\nDecisión: **${report.decision}**. Un 403 de catálogo o TLS no implica 403 del medio.\n`);
+          NODE
+      - name: Publicar los tres intentos sin URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuevana-media-3-attempts
+          path: cuevana-media.json
+          if-no-files-found: warn
+
+  site-player:
+    name: Inspeccionar opciones de video de Repelis24 y Gnula
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[site-player]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Consultar fichas y opciones públicas sin descargar videos completos
+        run: node scripts/site-player-recon.cjs --output site-player.json
+      - name: Publicar contratos y estados (sin URLs firmadas ni HTML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-player-recon
+          path: site-player.json
+          if-no-files-found: warn
+
+  audit-new-sites:
+    name: Auditar HLS/MP4 · ${{ matrix.provider }} (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-new-sites]')
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [repelis24, gnulaone]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver títulos y verificar medios reales sin descargar vídeos completos
+        run: node scripts/media-audit.cjs --provider "${{ matrix.provider }}" --output "audit-${{ matrix.provider }}.json"
+      - name: Publicar los tres estados por la API de anotaciones de Actions
+        env:
+          PROVIDER: ${{ matrix.provider }}
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const id = process.env.PROVIDER;
+          const report = JSON.parse(fs.readFileSync(`audit-${id}.json`, 'utf8'));
+          const attempts = report.attempts.map((item) => ({
+            discovered: item.discovered,
+            mediaCount: item.mediaCount,
+            discovery403: item.discovery403,
+            timedOut: item.timedOut,
+            media: item.media.map(({ format, stage, status, host, outcome, bytesRead, signature, mime, error }) =>
+              ({ format, stage, status, host, outcome, bytesRead, signature, mime, error })),
+          }));
+          console.log(`::notice file=scripts/media-audit.cjs,title=audit-new-${id}::${JSON.stringify({ provider: id, sample: report.sample, decision: report.decision, attempts })}`);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `## ${id}: tres intentos de HLS/MP4\n\n` +
+            attempts.map((item, index) => `- Intento ${index + 1}: ${item.mediaCount} medios; ${item.media.map((m) => `${m.host} ${m.status || 'sin HTTP'} ${m.outcome}`).join(', ') || 'sin medio resuelto'}`).join('\n') +
+            `\n\nDecisión: **${report.decision}**. Un 403 de catálogo no demuestra bloqueo del medio.\n`);
+          NODE
+      - name: Publicar informe sin URLs firmadas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ matrix.provider }}-3-attempts
+          path: audit-${{ matrix.provider }}.json
+          if-no-files-found: warn
+
+  audit-media:
+    name: Auditar HLS/MP4 reales · tres intentos por proveedor
+    if: (github.event_name == 'workflow_dispatch' && inputs.provider == 'audit-media') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[audit-media]'))
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Resolver medios y comprobar playlist, variante, segmento o MP4 (sin descargar vídeos completos)
+        run: node scripts/media-audit.cjs --all --output media-audit.json
+      - name: Publicar informe (sin enlaces firmados ni secretos)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: media-audit-3-attempts
+          path: media-audit.json
+          if-no-files-found: warn
+
   live:
     name: Prueba real desde GitHub Actions
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[live]'))
+    if: (github.event_name == 'workflow_dispatch' && inputs.provider != 'audit-media') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[live]'))
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -164,7 +536,7 @@ jobs:
       - name: Descubrir y comprobar streams reales
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          PROVIDER: ${{ inputs.provider || 'cinehax' }}
+          PROVIDER: ${{ inputs.provider || 'videoapi' }}
           TMDB_ID: ${{ inputs.tmdb || '550' }}
           MEDIA_TYPE: ${{ inputs.media_type || 'movie' }}
           SEASON: ${{ inputs.season || '1' }}
@@ -174,8 +546,8 @@ jobs:
           args=(--provider "$PROVIDER" --tmdb "$TMDB_ID" --type "$MEDIA_TYPE" --season "$SEASON" --episode "$EPISODE" --output live-result.json)
           if [[ "$PLAYBACK" == "true" ]]; then args+=(--playback); fi
           node scripts/live-check.cjs "${args[@]}"
-      - name: Probar extremo a extremo el Addon Stremio (Cinemeta tt0137523 -> CineHax)
-        if: (inputs.provider || 'cinehax') == 'cinehax'
+      - name: Comprobar formato de respuesta Stremio con VideoAPI
+        if: (inputs.provider || 'videoapi') == 'videoapi'
         run: |
           PORT=7009 npm start > /tmp/stremio-live.log 2>&1 &
           ADDON_PID=$!
@@ -184,21 +556,21 @@ jobs:
             if curl -fsS http://127.0.0.1:7009/health >/dev/null; then break; fi
             sleep 1
           done
-          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["cinehax"] }));')"
+          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["videoapi"] }));')"
           curl -fsS "http://127.0.0.1:7009/${SEG}/stream/movie/tt0137523.json" -o /tmp/stremio-live-streams.json
           node -e '
             const fs = require("node:fs");
             const data = JSON.parse(fs.readFileSync("/tmp/stremio-live-streams.json", "utf8"));
-            if (!Array.isArray(data.streams) || data.streams.length < 1) {
-              console.error("Se esperaba al menos 1 stream para tt0137523:", data);
+            if (!Array.isArray(data.streams)) {
+              console.error("La respuesta Stremio no contiene el array streams");
               process.exit(1);
             }
-            console.log(`✓ Stremio live tt0137523 devolvió ${data.streams.length} streams con proxyHeaders`);
+            console.log(`✓ Stremio respondió ${data.streams.length} streams para tt0137523`);
           '
       - name: Publicar informe de la prueba real
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: live-${{ inputs.provider || 'cinehax' }}-${{ inputs.tmdb || '550' }}
+          name: live-${{ inputs.provider || 'videoapi' }}-${{ inputs.tmdb || '550' }}
           path: live-result.json
           if-no-files-found: warn

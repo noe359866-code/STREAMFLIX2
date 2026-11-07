@@ -1,18 +1,27 @@
-import { anchors, attributes, absoluteUrl, stripTags, tags, yearOf } from './text.js';
+import { anchors, attributes, absoluteUrl, normalizeTitle, stripTags, tags, yearOf } from './text.js';
 
 export function cardsFromAnchors(html, base, options = {}) {
-  const seen = new Set();
+  const seen = new Map();
   const output = [];
   for (const anchor of anchors(html)) {
     const url = absoluteUrl(anchor.href, base);
-    if (!url || (options.path && !options.path.test(url)) || seen.has(url)) continue;
+    if (!url || (options.path && !options.path.test(url))) continue;
     const title = anchor.imageAlt || anchor.anchorTitle || anchor.title;
     if (!title || title.length > 300) continue;
     const type = /\/(?:serie|series|anime|dorama|tvshows?)(?:\/|$)/i.test(url) ? 'tv'
       : /\/(?:pelicula|peliculas|movie|movies)(?:\/|$)/i.test(url) ? 'movie' : '';
     if (options.mediaType === 'movie' && type === 'tv') continue;
     if (options.mediaType === 'tv' && type === 'movie') continue;
-    seen.add(url);
+    const index = seen.get(url);
+    if (index !== undefined) {
+      // Las tarjetas WordPress suelen enlazar primero «Película» y después
+      // el nombre del mismo título: no descartar ese enlace más informativo.
+      if (!normalizeTitle(output[index].title) && normalizeTitle(title)) {
+        output[index] = { ...output[index], title, year: output[index].year || yearOf(anchor.raw), raw: anchor.raw };
+      }
+      continue;
+    }
+    seen.set(url, output.length);
     output.push({ url, title, year: yearOf(anchor.raw), type, raw: anchor.raw });
   }
   return output;

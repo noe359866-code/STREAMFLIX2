@@ -1,0 +1,346 @@
+#!/usr/bin/env node
+'use strict';
+
+/**
+ * Auditoría de reproducción desde GitHub Actions, no prueba del catálogo.
+ * Uso: node scripts/media-audit.cjs --all --output media-audit.json
+ *      node scripts/media-audit.cjs --provider poseidonhd2 --output resultado.json
+ *
+ * Por seguridad los informes NO incluyen URLs firmadas, cabeceras ni tokens.
+ */
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
+const zlib = require('node:zlib');
+const { buildSync } = require('esbuild');
+const { checkMedia, classifyProvider, hostOf, discoveryStage } = require('./media-audit-lib.cjs');
+
+const ROOT = path.resolve(__dirname, '..');
+const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
+const ATTEMPTS = 3;
+const MAX_MEDIA = 6;
+const CONCURRENCY = 4;
+const ATTEMPT_TIMEOUT_MS = 65000;
+
+let runtimeFilterPromise;
+function runtimeFilter() {
+  if (!runtimeFilterPromise) {
+    // La misma fuente que se empaqueta en Nuvio: cargarla en Node para medir
+    // también qué enlaces descartaría el addon, sin exponer las URLs firmadas.
+    const source = buildSync({
+      entryPoints: [path.join(ROOT, 'src/core/media-filter.js')],
+      bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'silent',
+    }).outputFiles[0].text;
+    runtimeFilterPromise = import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+      .then((loaded) => loaded.filterUnplayableStreams);
+  }
+  return runtimeFilterPromise;
+}
+
+function arg(name) {
+  const index = process.argv.indexOf(`--${name}`);
+  return index < 0 ? '' : process.argv[index + 1] || '';
+}
+
+// Metadatos de títulos conocidos; permiten probar los proveedores sin guardar
+// una clave TMDB en el artefacto. El ID numérico se usa en los adaptadores
+// directos, y el resto realiza una búsqueda real por título.
+const MOVIE = {
+  id: '550', mediaType: 'movie', title: 'Fight Club', originalTitle: 'El club de la lucha',
+  titles: ['Fight Club', 'El club de la lucha'], imdbId: 'tt0137523', year: '1999',
+};
+const ANIME = {
+  id: '37854', mediaType: 'tv', title: 'One Piece', originalTitle: 'One Piece',
+  titles: ['One Piece'], imdbId: 'tt0388629', year: '1999',
+};
+const SERIES = {
+  id: '1396', mediaType: 'tv', title: 'Breaking Bad', originalTitle: 'Breaking Bad',
+  titles: ['Breaking Bad'], imdbId: 'tt0903747', year: '2008',
+};
+const CARTOON = {
+  id: '456', mediaType: 'tv', title: 'The Simpsons', originalTitle: 'Los Simpson',
+  titles: ['The Simpsons', 'Los Simpson'], imdbId: 'tt0096697', year: '1989',
+};
+const DORAMA = {
+  id: 'tt10850932', mediaType: 'tv', title: 'Crash Landing on You',
+  originalTitle: 'Crash Landing on You', titles: ['Crash Landing on You', 'Aterrizaje de emergencia en tu corazón'],
+  imdbId: 'tt10850932', year: '2019',
+};
+const WEAPONS = {
+  id: 'weapons', mediaType: 'movie', title: 'Weapons', originalTitle: 'La hora de la desaparición',
+  titles: ['Weapons', 'La hora de la desaparición'], imdbId: '', year: '2025',
+};
+const MONEY_FIGHT = {
+  id: 'money-fight', mediaType: 'movie', title: 'Money Fight', originalTitle: 'Money Fight',
+  titles: ['Money Fight'], imdbId: '', year: '2021',
+};
+const BRAM_VAN_HELSING = {
+  id: 'bram-stokers-van-helsing', mediaType: 'movie', title: "Bram Stoker's Van Helsing",
+  originalTitle: "Bram Stoker's Van Helsing", titles: ["Bram Stoker's Van Helsing"], imdbId: '', year: '2021',
+};
+const TURKISH = {
+  id: 'kara-sevda', mediaType: 'tv', title: 'Kara Sevda', originalTitle: 'Amor eterno',
+  titles: ['Kara Sevda', 'Amor eterno'], imdbId: '', year: '2015',
+};
+const TUDORAMA_MOVIE = {
+  id: 'minamahal', mediaType: 'movie', title: 'Minamahal', originalTitle: 'Minamahal',
+  titles: ['Minamahal'], imdbId: '', year: '',
+};
+const TUDORAMA_TV = {
+  id: 'el-precio-de-una-confesion', mediaType: 'tv', title: 'El precio de una confesión',
+  originalTitle: 'El precio de una confesión', titles: ['El precio de una confesión'], imdbId: '', year: '',
+};
+
+function sampleFor(scraper) {
+  const id = scraper.id;
+  if (id === 'tudorama') return arg('sample') === 'tv' ? TUDORAMA_TV : TUDORAMA_MOVIE;
+  if (id === 'vixsrc') return arg('sample') === 'tv' ? SERIES : MOVIE;
+  // Cuevana.gs redirige a cuevanas3.pro; su búsqueda de Joker devolvió
+  // `animes` (3/3). Fight Club daba 0 fuentes en la muestra de película.
+  if (['animeav1', 'animeonlineninja', 'jkanime', 'latanime', 'tioanime', 'cuevana'].includes(id)) return ANIME;
+  if (['danimados', 'lacartoons'].includes(id)) return CARTOON;
+  if (id === 'doramasflix') return DORAMA;
+  if (id === 'seriesturcas') return TURKISH;
+  if (['seriesflix'].includes(id)) return SERIES;
+  if (id === 'repelis24') return BRAM_VAN_HELSING;
+  if (id === 'gnulaone') return MONEY_FIGHT;
+  if (['hdfull', 'pelisgo'].includes(id)) return WEAPONS;
+  if (!scraper.supportedTypes.includes('movie')) return SERIES;
+  return MOVIE;
+}
+
+function writeJson(filename, object) {
+  fs.mkdirSync(path.dirname(path.resolve(filename)), { recursive: true });
+  fs.writeFileSync(filename, `${JSON.stringify(object, null, 2)}\n`);
+}
+
+async function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function auditOne(scraper) {
+  const sample = sampleFor(scraper);
+  const plugin = require(path.join(ROOT, scraper.filename));
+  const rawFetch = globalThis.fetch;
+  let phase = 'descubrimiento';
+  let controller;
+  let discovery403;
+  let discoveryEvents;
+  function recordDiscovery(url, status, error) {
+    if (phase !== 'descubrimiento') return;
+    const host = hostOf(url);
+    const stage = discoveryStage(url);
+    const entry = discoveryEvents.find((item) => item.host === host && item.stage === stage
+      && item.status === status && item.error === error);
+    if (entry) entry.count += 1;
+    else if (discoveryEvents.length < 24) discoveryEvents.push({ host, stage, status, error, count: 1 });
+  }
+  globalThis.__STREAMFLIX_METADATA_HOOK = async () => ({ ...sample });
+  globalThis.fetch = async (input, init = {}) => {
+    const signals = [AbortSignal.timeout(10000)];
+    if (controller) signals.push(controller.signal);
+    if (init.signal) signals.push(init.signal);
+    const url = typeof input === 'string' ? input : input?.url || String(input);
+    let response;
+    try { response = await rawFetch(input, { ...init, signal: AbortSignal.any(signals) }); }
+    catch (error) {
+      recordDiscovery(url, null, error?.name === 'TimeoutError' ? 'timeout'
+        : error?.name === 'AbortError' ? 'abort' : 'red');
+      throw error;
+    }
+    recordDiscovery(url, response.status, '');
+    if (phase === 'descubrimiento' && response.status === 403 && discovery403.length < 12) {
+      discovery403.push(hostOf(response.url || url));
+    }
+    return response;
+  };
+  const originalWarn = console.warn;
+  const previousAuditMode = globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA;
+  // El filtro del runtime omite enlaces claramente malos, pero la auditoría
+  // necesita observarlos para clasificar los HLS/MP4 originales en tres intentos.
+  globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA = true;
+  let warnings = 0;
+  // providerGuard escribe la URL original en sus avisos. No publicarla en CI.
+  console.warn = () => { warnings += 1; };
+  const attempts = [];
+  try {
+    for (let i = 1; i <= ATTEMPTS; i += 1) {
+      if (i > 1) await wait(1200);
+      controller = new AbortController();
+      discovery403 = [];
+      discoveryEvents = [];
+      warnings = 0;
+      phase = 'descubrimiento';
+      const deadline = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+      const started = Date.now();
+      try {
+        let streams = [];
+        try {
+          streams = await plugin.getStreams(sample.id, sample.mediaType, 1, 1);
+        } catch (_) { /* un error de catálogo NO es un resultado de media */ }
+        const candidates = streams.filter((stream) => ['hls', 'mp4'].includes(String(stream.type).toLowerCase()));
+        const attempt = {
+          number: i,
+          discovered: streams.length,
+          mediaCount: candidates.length,
+          otherFormats: streams.length - candidates.length,
+          languages: [...new Set(streams.map((stream) => stream.language || 'und'))].slice(0, 8),
+          discovery403: [...new Set(discovery403)],
+          discoveryEvents,
+          warnings,
+          media: [],
+          runtimeFilter: { tested: 0, discarded: 0, hosts: [] },
+        };
+        phase = 'medio';
+        if (candidates.length && !controller.signal.aborted) {
+          try {
+            const filter = await runtimeFilter();
+            const selected = candidates.slice(0, MAX_MEDIA);
+            const remaining = await filter(selected);
+            attempt.runtimeFilter = {
+              tested: selected.length,
+              discarded: selected.length - remaining.length,
+              hosts: [...new Set(selected.filter((stream) => !remaining.includes(stream)).map((stream) => hostOf(stream.url)))],
+            };
+          } catch (_) { /* sin muestra de filtro: la auditoría cruda sigue */ }
+        }
+        for (const stream of candidates.slice(0, MAX_MEDIA)) {
+          if (controller.signal.aborted) break;
+          try {
+            attempt.media.push(await checkMedia(stream, { signal: controller.signal }));
+          } catch (_) {
+            attempt.media.push({ format: String(stream.type), outcome: 'otro', stage: 'error', host: hostOf(stream.url), status: null });
+          }
+        }
+        attempt.elapsedMs = Date.now() - started;
+        attempt.timedOut = controller.signal.aborted;
+        attempts.push(attempt);
+      } finally {
+        clearTimeout(deadline);
+        controller = null;
+      }
+    }
+  } finally {
+    console.warn = originalWarn;
+    globalThis.fetch = rawFetch;
+    if (previousAuditMode === undefined) delete globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA;
+    else globalThis.__STREAMFLIX_AUDIT_RAW_MEDIA = previousAuditMode;
+    delete globalThis.__STREAMFLIX_METADATA_HOOK;
+  }
+  return {
+    provider: scraper.id,
+    sample: { title: sample.title, mediaType: sample.mediaType, season: sample.mediaType === 'tv' ? 1 : null, episode: sample.mediaType === 'tv' ? 1 : null },
+    attempts,
+    decision: classifyProvider(attempts, ATTEMPTS),
+  };
+}
+
+function runChild(id, output) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [__filename, '--provider', id, '--output', output], {
+      cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    // No repetir avisos del proveedor ni URLs firmadas en el log del workflow.
+    child.stdout.resume();
+    child.stderr.resume();
+    const deadline = setTimeout(() => child.kill('SIGKILL'), ATTEMPTS * (ATTEMPT_TIMEOUT_MS + 5000) + 20000);
+    child.on('error', () => { /* se registra como no concluyente */ });
+    child.on('close', () => {
+      clearTimeout(deadline);
+      try { resolve(JSON.parse(fs.readFileSync(output, 'utf8'))); }
+      catch (_) { resolve({ provider: id, attempts: [], decision: 'no-concluyente', error: 'worker-no-finalizo' }); }
+    });
+  });
+}
+
+function annotateResults(results, proposedRemoval) {
+  if (process.env.GITHUB_ACTIONS !== 'true') return;
+  // GitHub solo expone las primeras 10 anotaciones de un step. Comprimimos la
+  // evidencia sanitizada en pocos fragmentos, accesibles por su API de checks
+  // aunque el almacenamiento externo de artefactos/logs no esté disponible.
+  const evidence = results.map((item) => ({
+    provider: item.provider,
+    decision: item.decision,
+    ...(item.error ? { error: item.error } : {}),
+    attempts: item.attempts.map((attempt) => ({
+      discovered: attempt.discovered,
+      mediaCount: attempt.mediaCount,
+      otherFormats: attempt.otherFormats,
+      discovery403: attempt.discovery403,
+      discoveryEvents: attempt.discoveryEvents,
+      timedOut: attempt.timedOut,
+      runtimeFilter: attempt.runtimeFilter,
+      media: attempt.media.map((media) => ({ format: media.format, stage: media.stage, status: media.status, host: media.host,
+        outcome: media.outcome, bytesRead: media.bytesRead, signature: media.signature, mime: media.mime, error: media.error })),
+    })),
+  }));
+  const encoded = zlib.gzipSync(JSON.stringify(evidence)).toString('base64');
+  const chunks = encoded.match(/.{1,4000}/g) || [];
+  console.log(`::notice file=scripts/media-audit.cjs,title=media-resumen::${JSON.stringify({ audited: results.length, attempts: ATTEMPTS, proposedRemoval, encoding: 'gzip+base64', parts: chunks.length })}`);
+  for (let i = 0; i < chunks.length; i += 1) {
+    console.log(`::notice file=scripts/media-audit.cjs,title=media-datos-${i + 1}-de-${chunks.length}::${chunks[i]}`);
+  }
+}
+
+function appendSummary(results, output) {
+  if (!process.env.GITHUB_STEP_SUMMARY) return;
+  const lines = [
+    '## Auditoría de medios HLS/MP4 · 3 intentos por proveedor',
+    '',
+    'Se prueban URLs recién resueltas, variantes y segmentos HLS o el inicio del MP4. Un 403 de catálogo, un título ausente o un timeout **NO** justifican retirar un proveedor. Un 403 persistente se atribuye solamente a la red de GitHub Actions.',
+    '',
+    '| Proveedor | Intentos con medio | 403 en medios | Otros/OK | Descartes del filtro (hasta 6/intento) | Decisión |',
+    '| - | -: | -: | -: | -: | - |',
+  ];
+  for (const item of results) {
+    const media = item.attempts.flatMap((entry) => entry.media || []);
+    lines.push(`| ${item.provider} | ${item.attempts.filter((entry) => entry.mediaCount).length}/${ATTEMPTS} | ${media.filter((entry) => entry.outcome === 'http403').length} | ${media.filter((entry) => entry.outcome !== 'http403').length} | ${item.attempts.reduce((count, entry) => count + (entry.runtimeFilter?.discarded || 0), 0)} | ${item.decision} |`);
+  }
+  lines.push('', `Informe detallado sin URLs firmadas: \`${path.basename(output)}\`.`, '');
+  fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+}
+
+async function auditAll(output) {
+  const active = manifest.scrapers.filter((entry) => entry.enabled);
+  const results = new Array(active.length);
+  let next = 0;
+  const temp = path.join(ROOT, '.tmp', 'media-audit');
+  fs.mkdirSync(temp, { recursive: true });
+  await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
+    while (next < active.length) {
+      const index = next++;
+      const id = active[index].id;
+      results[index] = await runChild(id, path.join(temp, `${id}.json`));
+      const found = results[index].attempts.map((attempt) => attempt.mediaCount || 0).join('/');
+      console.log(`${id}: ${results[index].decision} (medios por intento: ${found || 'sin informe'})`);
+    }
+  }));
+  const report = {
+    createdAt: new Date().toISOString(),
+    commit: process.env.GITHUB_SHA || '',
+    attemptsPerProvider: ATTEMPTS,
+    note: 'Solo un 403 persistente en TODOS los medios HLS/MP4 encontrados en los tres intentos propone retirada; las IP de Actions pueden diferir de las del usuario.',
+    providers: results,
+    proposedRemoval: results.filter((item) => item.decision === 'retirar-403').map((item) => item.provider),
+  };
+  writeJson(output, report);
+  appendSummary(results, output);
+  annotateResults(results, report.proposedRemoval);
+  console.log(`Informe: ${output}; propuestos para retirada: ${report.proposedRemoval.join(', ') || 'ninguno'}`);
+}
+
+(async () => {
+  const output = arg('output') || path.join(ROOT, '.tmp', 'media-audit.json');
+  if (process.argv.includes('--all')) {
+    await auditAll(output);
+    return;
+  }
+  const id = arg('provider');
+  const scraper = manifest.scrapers.find((entry) => entry.id === id
+    && (entry.enabled || process.argv.includes('--probe-disabled')));
+  if (!scraper) throw new Error('Usa --all o --provider con un ID activo (o --probe-disabled para diagnóstico)');
+  const result = await auditOne(scraper);
+  writeJson(output, result);
+  console.log(`${id}: ${result.decision} (medios por intento: ${result.attempts.map((item) => item.mediaCount).join('/')})`);
+})().catch((error) => {
+  console.error(`Auditoría no completada: ${error.name || 'error'}`);
+  process.exitCode = 1;
+});

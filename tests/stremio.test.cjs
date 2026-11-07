@@ -23,7 +23,7 @@ const {
   clearResultCache,
 } = require('../stremio/addon.cjs');
 const { createAddonServer } = require('../stremio/server.cjs');
-const { ROOT, fixture, response } = require('./helpers.cjs');
+const { ROOT, fixture, response, loadSource } = require('./helpers.cjs');
 
 test('Stremio manifest pasa stremio-addon-linter (validación check-deploy de Beamup) sin errores ni avisos', () => {
   const defaultManifest = buildManifest({}, { baseUrl: 'https://7e2a912be9c9-streamflix2.baby-beamup.club' });
@@ -35,9 +35,17 @@ test('Stremio manifest pasa stremio-addon-linter (validación check-deploy de Be
   assert.deepEqual(defaultManifest.types, ['movie', 'series']);
   assert.equal(defaultManifest.behaviorHints.configurable, true);
   assert.equal(defaultManifest.behaviorHints.configurationRequired, false);
+  assert.match(defaultManifest.description, /33 proveedores activos/);
+  assert.ok(ACTIVE_IDS.includes('gnulaone'));
+  assert.ok(ACTIVE_IDS.includes('repelis24'));
+  assert.ok(!ACTIVE_IDS.includes('tukiplay'));
+  assert.ok(!ACTIVE_IDS.includes('cinehax'));
+  assert.ok(ACTIVE_IDS.includes('tudorama'));
+  assert.ok(ACTIVE_IDS.includes('vixsrc'));
+  assert.ok(!ACTIVE_IDS.includes('warezcdn'));
 
   const customManifest = buildManifest({
-    providers: ['cinehax', 'cuevana'],
+    providers: ['videoapi', 'cuevana'],
     lang: 'only-es-LAT',
     tmdbKey: 'secret-tmdb-key',
   });
@@ -52,7 +60,7 @@ test('Stremio manifest pasa stremio-addon-linter (validación check-deploy de Be
 test('encodeConfig y decodeConfig preservan ajustes en formato URL-safe cfg_<base64url>', () => {
   assert.equal(encodeConfig({}), '');
   const input = {
-    providers: ['cinehax', 'cuevana', 'sololatino'],
+    providers: ['videoapi', 'cuevana', 'sololatino'],
     lang: 'only-es-LAT',
     tmdbKey: 'tmdb_abc123',
     timeoutSec: 14,
@@ -60,13 +68,13 @@ test('encodeConfig y decodeConfig preservan ajustes en formato URL-safe cfg_<bas
   const seg = encodeConfig(input);
   assert.match(seg, /^cfg_[A-Za-z0-9_-]+$/);
   const decoded = decodeConfig(seg, {});
-  assert.deepEqual(decoded.providers, ['cinehax', 'cuevana', 'sololatino']);
+  assert.deepEqual(decoded.providers, ['videoapi', 'cuevana', 'sololatino']);
   assert.equal(decoded.lang, 'only-es-LAT');
   assert.equal(decoded.tmdbKey, 'tmdb_abc123');
   assert.equal(decoded.timeoutSec, 14);
 
-  const fromQuery = decodeConfig('providers=cinehax,cuevana&lang=prefer-es-ES', {});
-  assert.deepEqual(fromQuery.providers, ['cinehax', 'cuevana']);
+  const fromQuery = decodeConfig('providers=videoapi,cuevana&lang=prefer-es-ES', {});
+  assert.deepEqual(fromQuery.providers, ['videoapi', 'cuevana']);
   assert.equal(fromQuery.lang, 'prefer-es-ES');
   assert.equal(decodeConfig('corrupt_segment_xyz', {}).providers.length, ACTIVE_IDS.length);
 });
@@ -90,7 +98,7 @@ test('parseStremioId admite IMDb, TMDB y dos puntos codificados (%3A)', () => {
   assert.equal(parseStremioId('channel', 'tt0137523'), null);
 });
 
-test('fallback Cinemeta sin TMDB_API_KEY alimenta tanto CineHax (moviedb_id) como proveedores de búsqueda', async () => {
+test('fallback Cinemeta sin TMDB_API_KEY alimenta tanto VideoAPI (moviedb_id) como proveedores de búsqueda', async () => {
   clearMetadataCache();
   const originalFetch = global.fetch;
   const calls = [];
@@ -108,14 +116,11 @@ test('fallback Cinemeta sin TMDB_API_KEY alimenta tanto CineHax (moviedb_id) com
         },
       }, url);
     }
-    if (url.includes('api.moviemaster.lat/e/movie/550')) {
-      return response('<script>window.PM_UI = "ui-demo";</script>', url);
+    if (url.includes('videoapi.la/api/v1/public/exists/movie/550')) {
+      return response({ exists: true, path: '/e/movie/550' }, url);
     }
-    if (url.includes('api.moviemaster.lat/servers?')) {
-      return response({ servers: [{ id: 'lat-1', lang: 'LAT' }] }, url);
-    }
-    if (url.includes('api.moviemaster.lat/video?')) {
-      return response({ url: 'https://cdn.example/fightclub/master.m3u8?token=a%2Bb' }, url);
+    if (url.includes('videoapi.la/e/movie/550')) {
+      return response('<script>const source = { file: "https://cdn.example/fightclub/master.m3u8?token=a%2Bb", type: "application/x-mpegURL" };</script>', url);
     }
     if (url.includes('cuevana.gs/wp-api/v1/search?')) {
       return response({
@@ -144,7 +149,7 @@ test('fallback Cinemeta sin TMDB_API_KEY alimenta tanto CineHax (moviedb_id) com
       type: 'movie',
       id: 'tt0137523',
       config: {
-        providers: ['cinehax', 'cuevana'],
+        providers: ['videoapi', 'cuevana'],
       },
       env: {},
       useMetadataCache: false,
@@ -154,15 +159,58 @@ test('fallback Cinemeta sin TMDB_API_KEY alimenta tanto CineHax (moviedb_id) com
     assert.equal(calls.filter((u) => u.includes('v3-cinemeta.strem.io')).length, 1);
     assert.equal(calls.filter((u) => u.includes('api.themoviedb.org')).length, 0);
 
-    // 2 streams ordenados (es-LAT antes de es-ES) con behaviorHints.proxyHeaders
+    // Ambos proveedores reciben el TMDB ID y conservan proxyHeaders, sin
+    // depender de la disponibilidad actual de los sitios reales.
     assert.equal(result.streams.length, 2);
-    assert.equal(result.streams[0].url, 'https://cdn.example/fightclub/master.m3u8?token=a%2Bb');
-    assert.equal(result.streams[0].behaviorHints.notWebReady, true);
-    assert.equal(result.streams[0].behaviorHints.proxyHeaders.request.Referer, 'https://api.moviemaster.lat/');
-    assert.equal(result.streams[1].url, 'https://cdn.example/video/playlist.m3u8');
-    assert.equal(result.streams[1].behaviorHints.notWebReady, true);
+    const direct = result.streams.find((stream) => stream.url.includes('/fightclub/master.m3u8'));
+    const searched = result.streams.find((stream) => stream.url.includes('/video/playlist.m3u8'));
+    assert.ok(direct && searched);
+    assert.equal(direct.url, 'https://cdn.example/fightclub/master.m3u8?token=a%2Bb');
+    assert.equal(direct.behaviorHints.notWebReady, true);
+    assert.equal(direct.behaviorHints.proxyHeaders.request.Referer, 'https://videoapi.la/e/movie/550');
+    assert.equal(searched.behaviorHints.notWebReady, true);
   } finally {
     global.fetch = originalFetch;
+    clearMetadataCache();
+  }
+});
+
+test('el addon Stremio no publica el MP4 HTML que el plugin filtró y conserva otro medio válido', async () => {
+  clearResultCache();
+  clearMetadataCache();
+  const originalFetch = global.fetch;
+  const { providerGuard, makeStream } = loadSource('src/core/streams.js');
+  const calls = [];
+  global.fetch = async (input, init = {}) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.includes('v3-cinemeta.strem.io/meta/movie/tt0137523.json')) {
+      return response({ meta: { id: 'tt0137523', moviedb_id: 550, name: 'Fight Club', releaseInfo: '1999' } }, url);
+    }
+    if (url === 'https://cdn.example/bad.mp4') {
+      return new Response('<html>No es vídeo</html>', { headers: { 'Content-Type': 'text/html' } });
+    }
+    if (url === 'https://cdn.example/good.mp4') {
+      return new Response(Buffer.from([0, 0, 0, 16, 102, 116, 121, 112, 105, 115, 111, 109]), { status: 206 });
+    }
+    throw new Error(`Petición inesperada: ${url}`);
+  };
+  const testProvider = { getStreams: providerGuard('VideoAPI', async () => [
+    makeStream('VideoAPI', 'https://cdn.example/bad.mp4', { providerId: 'videoapi' }),
+    makeStream('VideoAPI', 'https://cdn.example/good.mp4', { providerId: 'videoapi' }),
+  ]) };
+  try {
+    const params = {
+      type: 'movie', id: 'tt0137523', config: { providers: ['videoapi'] },
+      env: { PROXY_SCRAPING: 'off' }, providerLoader: () => testProvider, useMetadataCache: false,
+    };
+    const result = await getStremioStreams(params);
+    assert.deepEqual(result.streams.map((item) => item.url), ['https://cdn.example/good.mp4']);
+    assert.ok(calls.some((item) => item.url.endsWith('/bad.mp4') && item.init.headers?.Range));
+    assert.equal((await getStremioStreams(params)).streams.length, 1, 'no cachear el medio inválido');
+  } finally {
+    global.fetch = originalFetch;
+    clearResultCache();
     clearMetadataCache();
   }
 });
@@ -289,14 +337,14 @@ test('servidor HTTP Stremio sirve manifest, configure sin filtrar secretos, stre
       { id: 'cuevana-sub-1', url: 'https://cdn.example/subs/es.vtt', lang: 'spa' },
     ]);
 
-    // 5. Coexistencia con Nuvio bajo /nuvio/manifest.json y /nuvio/providers/cinehax.js
+    // 5. Coexistencia con Nuvio bajo /nuvio/manifest.json y /nuvio/providers/videoapi.js
     const nuvioRes = await originalFetch(`${base}/nuvio/manifest.json`);
     assert.equal(nuvioRes.status, 200);
     const nuvioJson = await nuvioRes.json();
     const diskNuvio = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
     assert.deepEqual(nuvioJson, diskNuvio);
 
-    const bundleRes = await originalFetch(`${base}/nuvio/providers/cinehax.js`);
+    const bundleRes = await originalFetch(`${base}/nuvio/providers/videoapi.js`);
     assert.equal(bundleRes.status, 200);
     assert.match(await bundleRes.text(), /getStreams/);
 
@@ -342,16 +390,16 @@ test('plazo duro: responde con resultados parciales y luego entrega el completo 
     async getStreams() {
       await new Promise((resolve) => setTimeout(resolve, 250));
       return [{
-        name: 'Lento', provider: 'cinehax', url: 'https://cdn.example/slow/master.m3u8',
+        name: 'Lento', provider: 'videoapi', url: 'https://cdn.example/slow/master.m3u8',
         quality: '1080p', language: 'es-LAT', type: 'hls',
       }];
     },
   };
-  const providerLoader = (id) => (id === 'cinehax' ? slow : fast);
+  const providerLoader = (id) => (id === 'videoapi' ? slow : fast);
   const params = {
     type: 'movie',
     id: 'tt1111111',
-    config: { providers: ['cinehax', 'cuevana'] },
+    config: { providers: ['videoapi', 'cuevana'] },
     env: {},
     providerLoader,
     useMetadataCache: false,

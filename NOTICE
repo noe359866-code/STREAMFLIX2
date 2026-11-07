@@ -9,12 +9,24 @@ Este producto adapta lógica de Streamflix Reborn 2:
   https://github.com/theonlyhausofai-design/streamflix-reborn
   Commit: ff970d39374acc6cbd5b482a50f5ff2867e60bf4
 
+  Consulta de los extractores actuales (6 de noviembre de 2026):
+  https://git.gay/streamflix-reborn2/streamflix/src/branch/main/app/src/main/java/com/streamflixreborn/streamflix/extractors
+  MaxstreamExtractor.kt, MovieMasterExtractor.kt, ZillaExtractor.kt y VidHideExtractor.kt
+  Espejo auxiliar de inventario (12 de octubre de 2026, no refleja todo lo posterior):
+  https://github.com/sigmax711-collab/streamFlix (commit 5b1591a)
+  Decisiones y límites del porte: docs/porte-streamflix-reborn2.md
+
 La variante F7 de Voe se contrastó con VoeExtractor.kt del proyecto Apache-2.0:
   https://github.com/Kohi-den/extensions-source/tree/main/lib/voe-extractor
 
 Para PelisGo se consultó únicamente como referencia del contrato público de
 búsqueda/servidores este snapshot, sin incorporar sus rutas de descarga:
   https://github.com/adrianjael/pluggin-latino/blob/66209d1549ec624ba922d628b701a86892b50e0b/providers/pelisgo.js
+
+También se revisaron los metadatos públicos de CNCVerse Cloud Stream Extension:
+  https://github.com/NivinCNC/CNCVerse-Cloud-Stream-Extension
+  Comparación y exclusiones: docs/revision-cncverse-cloudstream.md
+No se incorpora código, binarios .cs3 ni medios de CNCVerse o de CNCVerse Bridge.
 
 La implementación JavaScript, los adaptadores del runtime y las pruebas son una
 conversión independiente para Nuvio. No se incluye código Android/Kotlin compilado,
@@ -24,7 +36,7 @@ La referencia de compatibilidad QuickJS/CommonJS se comprobó en el proyecto Nuv
   https://github.com/MMUU6699/nuvio
 
 Nuvio proporciona crypto-js en su runtime para los conectores que necesitan
-SHA-256/AES. crypto-js se declara como dependencia de desarrollo únicamente para
-reproducir esas pruebas en Node.js; se mantiene externo en los bundles.
+SHA-256/AES. crypto-js se declara como dependencia para reproducir las
+pruebas en Node.js; se mantiene externo en los bundles destinados a Nuvio.
 
 El texto completo de la licencia Apache 2.0 se encuentra en LICENSE.

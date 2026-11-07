@@ -65,15 +65,28 @@ export function bestTitleMatch(candidates, metadata, mediaType, minimum = 60) {
 }
 
 export function absoluteUrl(value, base) {
-  let url = decodeHtml(value).trim().replace(/&amp;/g, '&');
+  const url = decodeHtml(value).trim();
   if (!url || /^(about:|javascript:|data:|#)/i.test(url)) return '';
   if (/^https?:\/\//i.test(url)) return url;
   if (url.startsWith('//')) return `https:${url}`;
-  const originMatch = String(base || '').match(/^(https?:\/\/[^/]+)/i);
+  const originMatch = String(base || '').match(/^(https?:\/\/[^/?#]+)/i);
   if (!originMatch) return url;
-  if (url.startsWith('/')) return originMatch[1] + url;
-  const directory = String(base || '').split('?')[0].replace(/\/[^/]*$/, '/');
-  return directory + url;
+  const origin = originMatch[1];
+  if (url.startsWith('/')) return origin + url;
+  const page = String(base).split(/[?#]/)[0];
+  if (url.startsWith('?')) return page + url;
+  // Una base sin barra final (https://host) también tiene un directorio raíz.
+  const directory = page === origin ? `${origin}/` : page.replace(/\/[^/]*$/, '/');
+  const match = url.match(/^([^?#]*)([\s\S]*)$/);
+  const path = `${directory.slice(origin.length)}${match[1]}`;
+  const segments = [];
+  for (const segment of path.split('/')) {
+    if (segment === '.') continue;
+    if (segment === '..') { if (segments.length > 1) segments.pop(); }
+    else segments.push(segment);
+  }
+  if (/\/(?:\.|\.\.)$/.test(path)) segments.push('');
+  return origin + segments.join('/') + match[2];
 }
 
 export function hostName(url) {

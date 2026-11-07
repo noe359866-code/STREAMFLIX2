@@ -15,11 +15,14 @@ const CATEGORY_MAP = {
   tioanime: 'anime',
   animebum: 'anime',
   doramasflix: 'doramas',
+  tudorama: 'doramas',
   danimados: 'series',
   lacartoons: 'series',
   seriesflix: 'series',
   seriesturcas: 'series',
   hdfull: 'movies',
+  gnulaone: 'movies',
+  repelis24: 'movies',
   verpeliculasonline: 'movies',
 };
 

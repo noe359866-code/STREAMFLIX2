@@ -39,10 +39,10 @@ function contentUrls(html, base) {
   const slug = base.match(/\/peliculas\/([^/?#]+)/i)?.[1] || '';
   return unique(output.filter((url) => {
     if (!isPlayableUrl(url) || /cdn\.zss90\.pl\/vod-video\.mp4/i.test(url)) return false;
-    const path = url.match(/^https?:\/\/[^/]+(\/[^?#]*)/i)?.[1] || '';
-    // Solo la fuente declarada para esta ficha; nunca el video genérico del player publicitario.
-    return new URL(url).hostname === 'hdfull.company'
-      && path === `/vod-movie/v1/${slug}.mp4`;
+    // Solo el HTTPS del propio sitio y la fuente declarada para esta ficha;
+    // evitar URL (no garantizado por todos los runtimes QuickJS de Nuvio).
+    const path = url.match(/^https:\/\/hdfull\.company(\/[^?#]*)/i)?.[1] || '';
+    return path === `/vod-movie/v1/${slug}.mp4`;
   }));
 }
 

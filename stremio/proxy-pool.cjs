@@ -3,7 +3,7 @@
 /**
  * Pool de proxies HTTP(S) para el raspado del lado del servidor.
  *
- * Problema que resuelve: los 31 proveedores se ejecutan en el contenedor de
+ * Problema que resuelve: los proveedores activos se ejecutan en el contenedor de
  * Beamup (IP de datacenter), y muchos de los sitios los rechazan con 403/Cloudflare.
  * Nuvio no lo sufre porque ejecuta los proveedores en el dispositivo del usuario.
  *
@@ -666,7 +666,8 @@ async function proxyFetch(input, init = {}, proxy, options = {}) {
     }
 
     const location = result.headers.Location || result.headers.location;
-    const redirectable = [301, 302, 303, 307, 308].includes(result.status) && location && redirects < maxRedirects;
+    const redirectable = init.redirect !== 'manual' && [301, 302, 303, 307, 308].includes(result.status)
+      && location && redirects < maxRedirects;
     if (!redirectable) {
       const responseBody = (result.status === 204 || result.status === 304) ? null : result.body;
       return new Response(responseBody, {
@@ -690,9 +691,15 @@ function runWithProxy(proxy, fn) {
   return proxyContext.run(proxy, fn);
 }
 
+// El proxy de scraping lee respuestas completas: no hacer sondas de MP4/HLS
+// a través de él si un hoster ignora Range. AsyncLocalStorage evita mezclar
+// el estado de dos peticiones concurrentes al addon.
+const mediaProbeAllowed = () => !proxyContext.getStore();
+
 function installProxyFetchHook() {
   if (hookInstalled) return;
   if (typeof globalThis.fetch !== 'function') return;
+  globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED = mediaProbeAllowed;
   previousFetch = globalThis.fetch.bind(globalThis);
   proxyAwareFetch = function (input, init) {
     const proxy = proxyContext.getStore();
@@ -713,6 +720,9 @@ function uninstallProxyFetchHook() {
   }
   proxyAwareFetch = null;
   hookInstalled = false;
+  if (globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED === mediaProbeAllowed) {
+    delete globalThis.__STREAMFLIX_MEDIA_PROBE_ALLOWED;
+  }
 }
 
 module.exports = {
