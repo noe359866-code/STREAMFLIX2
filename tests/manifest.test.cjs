@@ -9,9 +9,10 @@ const { ACTIVE_IDS } = require('../stremio/config.cjs');
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
 const ids = manifest.scrapers.map((item) => item.id);
 
-test('el manifiesto tiene 35 IDs únicos y rutas de bundle válidas', () => {
-  assert.equal(manifest.scrapers.length, 35);
-  assert.equal(new Set(ids).size, 35);
+test('el manifiesto no registra los dos proveedores retirados y conserva bundles válidos', () => {
+  assert.equal(manifest.scrapers.length, 33);
+  assert.equal(new Set(ids).size, 33);
+  assert.ok(!ids.includes('cinehax') && !ids.includes('tukiplay'));
   assert.ok(manifest.name && manifest.version);
   for (const scraper of manifest.scrapers) {
     assert.ok(scraper.id && scraper.name && scraper.version && scraper.filename);
@@ -23,7 +24,7 @@ test('el manifiesto tiene 35 IDs únicos y rutas de bundle válidas', () => {
 });
 
 test('los proveedores solo de series y los inactivos están marcados correctamente', () => {
-  for (const id of ['animeav1', 'danimados', 'lacartoons', 'seriesflix', 'seriesturcas']) {
+  for (const id of ['animeav1', 'danimados', 'lacartoons', 'seriesflix', 'seriesturcas', 'tudorama']) {
     assert.deepEqual(manifest.scrapers.find((item) => item.id === id).supportedTypes, ['tv']);
   }
   for (const id of ['hdfull', 'gnulaone', 'repelis24', 'verpeliculasonline']) {
@@ -32,11 +33,11 @@ test('los proveedores solo de series y los inactivos están marcados correctamen
   for (const id of ['pelisforte', 'pelisgo']) {
     assert.deepEqual(manifest.scrapers.find((item) => item.id === id).supportedTypes, ['movie', 'tv']);
   }
-  for (const id of ['animebum', 'tukiplay', 'tudorama']) {
+  for (const id of ['animebum']) {
     assert.equal(manifest.scrapers.find((item) => item.id === id).enabled, false);
     assert.ok(!ACTIVE_IDS.includes(id), `${id} no debe aparecer en la configuración de Stremio`);
   }
-  for (const id of ['gnulaone', 'repelis24']) {
+  for (const id of ['gnulaone', 'repelis24', 'tudorama']) {
     assert.equal(manifest.scrapers.find((item) => item.id === id).enabled, true);
     assert.ok(ACTIVE_IDS.includes(id), `${id} debe estar disponible en Stremio`);
   }

@@ -19,24 +19,7 @@ function assertStream(result, count = 1) {
   }
 }
 
-test('CineHax: PM_UI, servidores y vídeo MovieMaster', async () => {
-  const result = await run('cinehax', {
-    contentId: '550', mediaType: 'movie',
-    routes: [
-      ['api.moviemaster.lat/e/movie/550', '<script>window.PM_UI = "ui-demo";</script>'],
-      ['api.moviemaster.lat/servers?', { servers: [{ id: 'lat-1', lang: 'LAT' }] }],
-      ['api.moviemaster.lat/video?', { url: HLS }],
-    ],
-  });
-  assertStream(result);
-  assert.equal(result.streams[0].language, 'es-LAT');
-  const movieMasterCalls = result.calls.filter((call) => call.url.startsWith('https://api.moviemaster.lat/'));
-  assert.equal(movieMasterCalls.length, 3);
-  assert.ok(movieMasterCalls.every((call) => call.init.headers['User-Agent'] === result.streams[0].headers['User-Agent']),
-    'embed, /servers, /video y HLS deben usar el mismo User-Agent');
-  assert.match(result.streams[0].headers['User-Agent'], /Chrome\/120\./);
-  assert.equal(result.streams[0].headers.Referer, 'https://api.moviemaster.lat/');
-});
+
 
 test('AnimeAV1: índices Svelte SUB/DUB y episodio solicitado', async () => {
   const result = await run('animeav1', {
@@ -515,17 +498,7 @@ test('Embed69: IMDb de TMDB, dataLink y resolución a un medio directo', async (
   assert.equal(result.streams[0].language, 'es-LAT');
 });
 
-test('TukiPlay: usa el endpoint público de embed y solo entrega el hoster resuelto', async () => {
-  const result = await run('tukiplay', {
-    mediaType: 'movie',
-    routes: [
-      ['tukiplay.com/embed/movie/123', '<iframe data-src="https://sw.example/e/demo"></iframe>'],
-    ],
-  });
-  assertStream(result);
-  assert.ok(result.calls.some((call) => call.url === 'https://tukiplay.com/embed/movie/123'));
-  assert.ok(!result.streams.some((stream) => /tukiplay\.com\/embed/.test(stream.url)));
-});
+
 
 test('VideoAPI: consulta exists, valida la ruta interna y extrae solo el stream', async () => {
   const result = await run('videoapi', {

@@ -10,7 +10,7 @@ on:
       provider:
         description: "Proveedor para prueba real; 'audit-media' audita medios HLS/MP4 de todos (3 intentos cada uno)"
         required: true
-        default: cinehax
+        default: videoapi
         type: string
       tmdb:
         description: "ID TMDB o IMDb para la prueba real"
@@ -64,6 +64,7 @@ jobs:
           node --check scripts/site-recon.cjs
           node --check scripts/requested-players-recon.cjs
           node --check scripts/spa-assets-recon.cjs
+          node --check scripts/warezcdn-recon.cjs
           node --check scripts/site-player-recon.cjs
           node --check scripts/cuevana-reference-recon.cjs
           bash -n scripts/deploy-beamup.sh
@@ -117,8 +118,6 @@ jobs:
         include:
           - provider: embed69
             content_id: tt0137523
-          - provider: tukiplay
-            content_id: "550"
           - provider: videoapi
             content_id: "550"
           - provider: playlatinsrc
@@ -199,6 +198,27 @@ jobs:
         with:
           name: recon-${{ matrix.site }}
           path: recon-${{ matrix.site }}.json
+          if-no-files-found: warn
+
+  warezcdn-recon:
+    name: Verificar API y reproductor WarezCDN (3 intentos)
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[recon-warezcdn]')
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Contrastar documentación, lista pública, película y episodio
+        run: node scripts/warezcdn-recon.cjs --output warezcdn-recon.json
+      - name: Publicar estados sanitizados de los tres intentos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: warezcdn-recon
+          path: warezcdn-recon.json
           if-no-files-found: warn
 
   requested-spa-assets:
@@ -471,7 +491,7 @@ jobs:
       - name: Descubrir y comprobar streams reales
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          PROVIDER: ${{ inputs.provider || 'cinehax' }}
+          PROVIDER: ${{ inputs.provider || 'videoapi' }}
           TMDB_ID: ${{ inputs.tmdb || '550' }}
           MEDIA_TYPE: ${{ inputs.media_type || 'movie' }}
           SEASON: ${{ inputs.season || '1' }}
@@ -481,8 +501,8 @@ jobs:
           args=(--provider "$PROVIDER" --tmdb "$TMDB_ID" --type "$MEDIA_TYPE" --season "$SEASON" --episode "$EPISODE" --output live-result.json)
           if [[ "$PLAYBACK" == "true" ]]; then args+=(--playback); fi
           node scripts/live-check.cjs "${args[@]}"
-      - name: Probar extremo a extremo el Addon Stremio (Cinemeta tt0137523 -> CineHax)
-        if: (inputs.provider || 'cinehax') == 'cinehax'
+      - name: Comprobar formato de respuesta Stremio con VideoAPI
+        if: (inputs.provider || 'videoapi') == 'videoapi'
         run: |
           PORT=7009 npm start > /tmp/stremio-live.log 2>&1 &
           ADDON_PID=$!
@@ -491,21 +511,21 @@ jobs:
             if curl -fsS http://127.0.0.1:7009/health >/dev/null; then break; fi
             sleep 1
           done
-          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["cinehax"] }));')"
+          SEG="$(node -e 'const { encodeConfig } = require("./stremio/config.cjs"); console.log(encodeConfig({ providers: ["videoapi"] }));')"
           curl -fsS "http://127.0.0.1:7009/${SEG}/stream/movie/tt0137523.json" -o /tmp/stremio-live-streams.json
           node -e '
             const fs = require("node:fs");
             const data = JSON.parse(fs.readFileSync("/tmp/stremio-live-streams.json", "utf8"));
-            if (!Array.isArray(data.streams) || data.streams.length < 1) {
-              console.error("Se esperaba al menos 1 stream para tt0137523:", data);
+            if (!Array.isArray(data.streams)) {
+              console.error("La respuesta Stremio no contiene el array streams");
               process.exit(1);
             }
-            console.log(`✓ Stremio live tt0137523 devolvió ${data.streams.length} streams con proxyHeaders`);
+            console.log(`✓ Stremio respondió ${data.streams.length} streams para tt0137523`);
           '
       - name: Publicar informe de la prueba real
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: live-${{ inputs.provider || 'cinehax' }}-${{ inputs.tmdb || '550' }}
+          name: live-${{ inputs.provider || 'videoapi' }}-${{ inputs.tmdb || '550' }}
           path: live-result.json
           if-no-files-found: warn

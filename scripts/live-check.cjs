@@ -25,7 +25,7 @@ if (!providerId || !tmdbId || !['movie', 'tv'].includes(mediaType)) {
   return;
 }
 const imdbId = /^tt\d+$/i.test(String(tmdbId || '')) ? String(tmdbId) : '';
-const metadataKeyOptional = new Set(['cinehax', 'tukiplay', 'videoapi']).has(providerId);
+const metadataKeyOptional = new Set(['videoapi', 'vixsrc', 'warezcdn']).has(providerId);
 if (!metadataKeyOptional && !process.env.TMDB_API_KEY && !imdbId) {
   console.error('Falta TMDB_API_KEY. Alternativamente, pasa un IMDb ID (tt...) para resolver metadatos con Cinemeta.');
   process.exitCode = 2;

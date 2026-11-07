@@ -5,6 +5,7 @@
 // nonces, tokens y URL firmadas se usan solo en memoria: nunca se serializan.
 const fs = require('node:fs');
 const path = require('node:path');
+const { checkHls } = require('./media-audit-lib.cjs');
 const BASES = { tudorama: 'https://tudorama.com', vixsrc: 'https://vixsrc.to' };
 const site = process.argv[process.argv.indexOf('--site') + 1];
 if (!BASES[site]) throw new Error('Use --site tudorama|vixsrc');
@@ -166,8 +167,21 @@ async function vixsrc() {
           }
           const langs = (kind) => [...content.matchAll(new RegExp(`^#EXT-X-MEDIA:TYPE=${kind}[^\\r\\n]*LANGUAGE=["']([^"']+)`, 'gim'))]
             .map((m) => scrub(m[1])).slice(0, 12);
+          const audio = langs('AUDIO');
+          const subtitles = langs('SUBTITLES');
           entry.playlist = { status: res.status, host: new URL(res.url).hostname, hls: content.startsWith('#EXTM3U'),
-            audio: langs('AUDIO'), subtitles: langs('SUBTITLES') };
+            audio, subtitles, spanishAudio: audio.some((lang) => /^(?:spa|es(?:-|$)|spanish)/i.test(lang)),
+            spanishSubtitles: subtitles.some((lang) => /^(?:spa|es(?:-|$)|spanish)/i.test(lang)) };
+          if (entry.playlist.hls) {
+            const sample = await checkHls(playlistUrl.href, { headers: {
+              'User-Agent': UA, Referer: target.href, Origin: BASE,
+              'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+            } });
+            // Se publica únicamente host, estado y firma de unos KB del primer
+            // segmento; la URL con firma caduca y jamás sale del proceso.
+            entry.segment = { outcome: sample.outcome, stage: sample.stage,
+              status: sample.status, host: sample.host, signature: sample.signature };
+          }
         } catch (error) { entry.playlist = { error: error?.cause?.code || error?.name || 'red' }; }
       }
     }

@@ -88,25 +88,6 @@
       ]
     },
     {
-      "id": "cinehax",
-      "name": "CineHax / MovieMaster",
-      "description": "Acceso directo por TMDB a la API MovieMaster; conserva cabeceras HLS.",
-      "version": "1.0.0",
-      "filename": "providers/cinehax.js",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "enabled": true,
-      "contentLanguage": [
-        "es"
-      ],
-      "supportedFormats": [
-        "hls",
-        "mp4"
-      ]
-    },
-    {
       "id": "cuevana",
       "name": "Cuevana 3",
       "description": "Películas y episodios mediante wp-api/v1 en cuevana.gs.",
@@ -623,15 +604,14 @@
     },
     {
       "id": "tudorama",
-      "name": "TuDorama (en evaluación)",
-      "description": "Fichas/episodios y servidores AJAX contrastados; pendiente confirmar HLS/MP4 de los hosters para activarlo.",
+      "name": "TuDorama",
+      "description": "Series: ficha, episodio exacto y servidores AJAX. Segmentos HLS válidos en 3/3 pruebas; películas aún no verificadas.",
       "version": "1.0.0",
       "filename": "providers/tudorama.js",
       "supportedTypes": [
-        "movie",
         "tv"
       ],
-      "enabled": false,
+      "enabled": true,
       "contentLanguage": [
         "es",
         "en"
@@ -639,27 +619,6 @@
       "supportedFormats": [
         "hls",
         "mp4"
-      ]
-    },
-    {
-      "id": "tukiplay",
-      "name": "TukiPlay",
-      "description": "Inactivo: su HLS devolvió 403 en tres intentos de GitHub Actions (run 42168396452).",
-      "version": "1.0.0",
-      "filename": "providers/tukiplay.js",
-      "supportedTypes": [
-        "movie",
-        "tv"
-      ],
-      "enabled": false,
-      "contentLanguage": [
-        "es"
-      ],
-      "supportedFormats": [
-        "hls",
-        "mp4",
-        "mkv",
-        "webm"
       ]
     },
     {

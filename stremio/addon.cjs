@@ -633,8 +633,9 @@ function resolveEligibleScrapers(config, parsed, metadata, numericTmdbId) {
   return ACTIVE_SCRAPERS.filter((scraper) => {
     if (!selectedSet.has(scraper.id)) return false;
     if (!scraper.supportedTypes.includes(parsed.mediaType)) return false;
-    if (scraper.id === 'cinehax' && !numericTmdbId) return false;
-    if (!metadata && scraper.id !== 'cinehax') return false;
+    // Los proveedores por ID TMDB pueden trabajar incluso sin título de
+    // Cinemeta/TMDB; los de búsqueda necesitan metadatos para cotejar la ficha.
+    if (!metadata && !(numericTmdbId && ['videoapi', 'vixsrc', 'warezcdn'].includes(scraper.id))) return false;
     return true;
   });
 }
